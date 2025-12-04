@@ -39,21 +39,12 @@ const CURRENCIES = [
 ];
 
 // --- FIREBASE SETUP ---
-const firebaseConfig = {
-  apiKey: "AIzaSyAlQRefnCVD-pxd1yZC5QwpyOlAESKLUWQ",
-  authDomain: "comptes-clars.firebaseapp.com",
-  projectId: "comptes-clars",
-  storageBucket: "comptes-clars.firebasestorage.app",
-  messagingSenderId: "331219366768",
-  appId: "1:331219366768:web:2f69ce8d66338071ef95b5",
-  measurementId: "G-0FYBLE49JM"
-};
-
+// Substitueix això per la teva configuració real de Firebase si no la tens posada
+const firebaseConfig = JSON.parse(__firebase_config); 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-// Pots posar un nom fix per la teva app
-const appId = 'comptes-clars-v1';
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
 // --- COMPONENTS UI ---
 
@@ -100,7 +91,6 @@ const Modal = ({ isOpen, onClose, title, children }) => {
 // --- GRÀFIC CIRCULAR (DONUT) SVG ---
 const DonutChart = ({ data }) => {
   if (!data || data.length === 0) return null;
-  
   const size = 100;
   const strokeWidth = 15;
   const radius = (size - strokeWidth) / 2;
@@ -114,34 +104,20 @@ const DonutChart = ({ data }) => {
           const dashArray = (item.percentage / 100) * circumference;
           const currentOffset = offset;
           offset += dashArray;
-          
           const colorMap = {
             'bg-orange-500': '#f97316', 'bg-blue-500': '#3b82f6', 'bg-indigo-500': '#6366f1',
             'bg-purple-500': '#a855f7', 'bg-sky-500': '#0ea5e9', 'bg-pink-500': '#ec4899',
             'bg-rose-500': '#f43f5e', 'bg-teal-500': '#14b8a6', 'bg-emerald-500': '#10b981', 'bg-slate-500': '#64748b', 'bg-slate-400': '#94a3b8'
           };
-          
           return (
-            <circle
-              key={item.id}
-              cx={size / 2} cy={size / 2} r={radius}
-              fill="transparent"
-              stroke={colorMap[item.barColor] || '#ccc'}
-              strokeWidth={strokeWidth}
-              strokeDasharray={`${dashArray} ${circumference}`}
-              strokeDashoffset={-currentOffset}
-              className="transition-all duration-1000 ease-out"
-            />
+            <circle key={item.id} cx={size / 2} cy={size / 2} r={radius} fill="transparent" stroke={colorMap[item.barColor] || '#ccc'} strokeWidth={strokeWidth} strokeDasharray={`${dashArray} ${circumference}`} strokeDashoffset={-currentOffset} className="transition-all duration-1000 ease-out" />
           );
         })}
       </svg>
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <PieChartIcon className="text-slate-300" size={24} />
-      </div>
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><PieChartIcon className="text-slate-300" size={24} /></div>
     </div>
   );
 };
-
 
 // --- APP PRINCIPAL ---
 
@@ -149,13 +125,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [tripId, setTripId] = useState(null);
   
-  const [tripData, setTripData] = useState({
-    name: '',
-    users: [],
-    expenses: [],
-    currency: CURRENCIES[0],
-    createdAt: null
-  });
+  const [tripData, setTripData] = useState({ name: '', users: [], expenses: [], currency: CURRENCIES[0], createdAt: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -178,14 +148,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!user || !tripId) {
-      setLoading(false);
-      return;
-    }
-
+    if (!user || !tripId) { setLoading(false); return; }
     setLoading(true);
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
-
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -203,12 +168,7 @@ export default function App() {
         window.localStorage.removeItem('cc-last-trip-id');
         setLoading(false);
       }
-    }, (err) => {
-      console.error("Error:", err);
-      if (err.code !== 'permission-denied') setError("Error de connexió.");
-      setLoading(false);
-    });
-
+    }, (err) => { console.error("Error:", err); if (err.code !== 'permission-denied') setError("Error de connexió."); setLoading(false); });
     return () => unsubscribe();
   }, [user, tripId]);
 
@@ -216,16 +176,7 @@ export default function App() {
     if (!user) return;
     const newId = Math.random().toString(36).substring(2, 9);
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${newId}`);
-    
-    await setDoc(docRef, {
-      id: newId,
-      name: tripName,
-      users: [creatorName],
-      expenses: [],
-      currency: CURRENCIES[0],
-      createdAt: new Date().toISOString()
-    });
-
+    await setDoc(docRef, { id: newId, name: tripName, users: [creatorName], expenses: [], currency: CURRENCIES[0], createdAt: new Date().toISOString() });
     window.localStorage.setItem('cc-last-trip-id', newId);
     setTripId(newId);
   };
@@ -243,20 +194,14 @@ export default function App() {
     await updateDoc(docRef, newData);
   };
 
-  if (!tripId) {
-    return <LandingScreen onCreate={createTrip} onJoin={joinTrip} error={error} loading={loading && user} />;
-  }
+  if (!tripId) return <LandingScreen onCreate={createTrip} onJoin={joinTrip} error={error} loading={loading && user} />;
 
   return (
     <MainApp 
       tripData={tripData} 
       tripId={tripId} 
       onUpdate={updateTripData} 
-      onExit={() => {
-        setTripId(null);
-        window.localStorage.removeItem('cc-last-trip-id');
-        setTripData({ name: '', users: [], expenses: [], currency: CURRENCIES[0], createdAt: null });
-      }}
+      onExit={() => { setTripId(null); window.localStorage.removeItem('cc-last-trip-id'); setTripData({ name: '', users: [], expenses: [], currency: CURRENCIES[0], createdAt: null }); }}
       loadingData={loading}
     />
   );
@@ -326,17 +271,24 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   
-  const [newExpense, setNewExpense] = useState({ title: '', amount: '', payer: '', category: 'food', involved: [] });
+  // ESTAT ACTUALITZAT: Inclou el camp 'date'
+  const [newExpense, setNewExpense] = useState({ title: '', amount: '', payer: '', category: 'food', involved: [], date: '' });
   const [newUserName, setNewUserName] = useState('');
   const [editingUser, setEditingUser] = useState(null);
 
   const [editTripName, setEditTripName] = useState(name);
-  const [editTripDate, setEditTripDate] = useState(''); // NEW STATE FOR DATE EDIT
+  const [editTripDate, setEditTripDate] = useState('');
   const [copied, setCopied] = useState(false);
 
   // --- HELPERS ---
   const formatCurrency = (amount) => new Intl.NumberFormat(currency?.locale || 'ca-ES', { style: 'currency', currency: currency?.code || 'EUR' }).format(amount);
   const getCategory = (id) => CATEGORIES.find(c => c.id === id) || CATEGORIES[9];
+  // Helper per mostrar la data bonica a la targeta (Ex: 4 des.)
+  const formatDateDisplay = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' });
+  };
   
   const copyCode = () => {
     const textArea = document.createElement("textarea");
@@ -355,7 +307,6 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
 
   const openSettings = () => {
     setEditTripName(name);
-    // Format date for input YYYY-MM-DD
     setEditTripDate(createdAt ? new Date(createdAt).toISOString().split('T')[0] : '');
     setSettingsModalOpen(true);
   };
@@ -393,12 +344,10 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
     const stats = {};
     const total = expenses.filter(e => e.category !== 'transfer').reduce((acc, curr) => acc + curr.amount, 0);
     if (total === 0) return [];
-    
     expenses.filter(e => e.category !== 'transfer').forEach(exp => {
       if (!stats[exp.category]) stats[exp.category] = 0;
       stats[exp.category] += exp.amount;
     });
-    
     return Object.entries(stats).map(([id, amount]) => ({
       id, amount, ...CATEGORIES.find(c => c.id === id), percentage: (amount / total) * 100
     })).sort((a, b) => b.amount - a.amount);
@@ -428,6 +377,17 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
   const handleSaveExpense = async (e) => {
     e.preventDefault();
     if (!newExpense.title || !newExpense.amount) return;
+    
+    // Si l'usuari no tria data, fem servir "ara mateix" (ISO), si tria data, la convertim a ISO (migdia per evitar errors de zona)
+    let finalDate;
+    if (newExpense.date) {
+        const d = new Date(newExpense.date);
+        d.setHours(12, 0, 0, 0); // Set to noon
+        finalDate = d.toISOString();
+    } else {
+        finalDate = new Date().toISOString();
+    }
+
     const expenseData = {
       id: editingId || Date.now(),
       title: newExpense.title,
@@ -435,7 +395,7 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
       payer: newExpense.payer || users[0],
       category: newExpense.category,
       involved: newExpense.involved.length > 0 ? newExpense.involved : users,
-      date: new Date().toISOString()
+      date: finalDate // Use user date or current
     };
     const newExpensesList = editingId ? expenses.map(exp => exp.id === editingId ? expenseData : exp) : [expenseData, ...expenses];
     await onUpdate({ expenses: newExpensesList });
@@ -488,19 +448,10 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
   const handleDeleteUser = (userName) => {
     const hasExpenses = expenses.some(e => e.payer === userName || e.involved.includes(userName));
     if (hasExpenses) { 
-      setConfirmAction({
-        type: 'info',
-        title: 'Acció no permesa',
-        message: "No pots eliminar aquest usuari perquè té despeses o deutes assignats. Primer elimina'ls o edita'ls."
-      });
+      setConfirmAction({ type: 'info', title: 'Acció no permesa', message: "No pots eliminar aquest usuari perquè té despeses o deutes assignats. Primer elimina'ls o edita'ls." });
       return; 
     }
-    setConfirmAction({
-      type: 'delete_user',
-      id: userName,
-      title: 'Eliminar Participant',
-      message: `Segur que vols eliminar a ${userName} del grup?`
-    });
+    setConfirmAction({ type: 'delete_user', id: userName, title: 'Eliminar Participant', message: `Segur que vols eliminar a ${userName} del grup?` });
   };
 
   const handleRenameUser = async (e) => {
@@ -520,7 +471,6 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
   const handleUpdateSettings = async () => {
     let newDateISO = createdAt;
     if (editTripDate) {
-        // Set date to 12:00 to avoid timezone shifts when displaying date only
         const d = new Date(editTripDate);
         d.setHours(12, 0, 0, 0);
         newDateISO = d.toISOString();
@@ -529,8 +479,19 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
     setSettingsModalOpen(false);
   };
 
-  const closeModal = () => { setIsModalOpen(false); setEditingId(null); setNewExpense({ title: '', amount: '', payer: users[0], category: 'food', involved: [] }); };
-  const openEditModal = (expense) => { setNewExpense({ ...expense }); setEditingId(expense.id); setIsModalOpen(true); };
+  const closeModal = () => { 
+      setIsModalOpen(false); 
+      setEditingId(null); 
+      setNewExpense({ title: '', amount: '', payer: users[0], category: 'food', involved: [], date: '' }); 
+  };
+  
+  const openEditModal = (expense) => { 
+      // Convert ISO date to YYYY-MM-DD for input
+      const dateForInput = expense.date ? new Date(expense.date).toISOString().split('T')[0] : '';
+      setNewExpense({ ...expense, date: dateForInput }); 
+      setEditingId(expense.id); 
+      setIsModalOpen(true); 
+  };
 
   if (loadingData) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600"/></div>;
 
@@ -558,7 +519,6 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
             <h1 className="text-2xl font-bold tracking-tight truncate max-w-[200px] sm:max-w-md cursor-pointer hover:opacity-90" onClick={openSettings}>
               {name} <Edit2 size={16} className="inline opacity-50"/>
             </h1>
-            {/* Display Creation Date */}
             {createdAt && (
               <p className="text-indigo-200 text-xs mt-1 flex items-center gap-1 opacity-80 cursor-pointer hover:underline" onClick={openSettings}>
                 <Calendar size={12} /> {new Date(createdAt).toLocaleDateString('ca-ES', { dateStyle: 'long' })}
@@ -638,7 +598,13 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
                            {isTransfer ? <ArrowRightLeft size={20}/> : <category.icon size={22} />}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h4 className={`font-bold truncate ${isTransfer ? 'text-slate-600 italic' : 'text-slate-800'}`}>{expense.title}</h4>
+                          <div className="flex justify-between items-start">
+                             <h4 className={`font-bold truncate ${isTransfer ? 'text-slate-600 italic' : 'text-slate-800'}`}>{expense.title}</h4>
+                             {/* Display Date on Card */}
+                             <span className="text-xs text-slate-400 font-medium bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-100 ml-2 whitespace-nowrap">
+                               {formatDateDisplay(expense.date)}
+                             </span>
+                          </div>
                           <div className="flex items-center gap-2 mt-0.5">
                             <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">{expense.payer}</span>
                             <span className="text-xs text-slate-500">{isTransfer ? '→' : '•'} {isTransfer ? expense.involved[0] : `${expense.involved.length} pers.`}</span>
@@ -815,11 +781,15 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
                  value={newExpense.title} onChange={(e) => setNewExpense({...newExpense, title: e.target.value})} />
              </div>
              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Data</label>
+                <input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={newExpense.date} onChange={(e) => setNewExpense({...newExpense, date: e.target.value})} />
+             </div>
+          </div>
+          <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Categoria</label>
                 <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={newExpense.category} onChange={(e) => setNewExpense({...newExpense, category: e.target.value})}>
                    {CATEGORIES.filter(c => c.id !== 'all').map(c => (<option key={c.id} value={c.id}>{c.label}</option>))}
                 </select>
-             </div>
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Pagador</label>
