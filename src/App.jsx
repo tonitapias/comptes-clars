@@ -1,23 +1,21 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
-  Plus, Users, Receipt, ArrowRightLeft, Trash2, X, 
+  Plus, Users, Receipt, ArrowRightLeft, Trash2, Wallet, X, 
   CheckCircle2, ChevronRight, Utensils, Car, Home, Beer, 
   Plane, ShoppingBag, Music, HelpCircle, Search, Filter, 
-  Edit2, Settings, Share2, LogOut, Loader2, Cloud, Banknote, Check, Copy, Calendar, Ticket, AlertTriangle, Info
+  Edit2, Download, Upload, PieChart as PieChartIcon, Info, Settings, DollarSign,
+  Share2, LogOut, Loader2, Cloud, Banknote, Check, Copy, Calendar, Ticket, AlertTriangle
 } from 'lucide-react';
 
 // Importacions de Firebase
 import { initializeApp } from 'firebase/app';
 import { 
   getFirestore, doc, onSnapshot, setDoc, updateDoc, 
-  getDoc, collection 
+  arrayUnion, arrayRemove, getDoc, collection 
 } from 'firebase/firestore';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 
-// ============================================================================
-// --- CONFIGURACIÓ DE CATEGORIES I MONEDES ---
-// ============================================================================
-
+// --- CONFIGURACIÓ ---
 const CATEGORIES = [
   { id: 'all', label: 'Totes', icon: Filter, color: 'bg-slate-100 text-slate-600', barColor: 'bg-slate-400' },
   { id: 'food', label: 'Menjar', icon: Utensils, color: 'bg-orange-100 text-orange-600', barColor: 'bg-orange-500' },
@@ -40,22 +38,10 @@ const CURRENCIES = [
   { code: 'MXN', symbol: '$', locale: 'es-MX' },
 ];
 
-// ============================================================================
-// --- FIREBASE SETUP (HÍBRID: LOCAL + CHAT) ---
-// ============================================================================
-
-let firebaseConfig = null;
-let appId = 'comptes-clars-v1';
-
-// Detecció intel·ligent: Si estem al xat, fa servir la màgia. Si estem al PC, usa les teves claus.
-if (typeof __firebase_config !== 'undefined') {
-  firebaseConfig = JSON.parse(__firebase_config);
-  if (typeof __app_id !== 'undefined') appId = __app_id;
-} else {
-  // --- ZONA EDITABLE: POSA LES TEVES CLAUS AQUÍ ---
-  // Si estàs al teu ordinador, has d'omplir això:
-  firebaseConfig = {
-    apiKey: "AIzaSyAlQRefnCVD-pxd1yZC5QwpyOlAESKLUWQ",
+// --- FIREBASE SETUP ---
+// ⚠️ ATENCIÓ: ENGANXA AQUÍ SOTA LES TEVES CLAUS REALS DE FIREBASE ⚠️
+const firebaseConfig = {
+  apiKey: "AIzaSyAlQRefnCVD-pxd1yZC5QwpyOlAESKLUWQ",
   authDomain: "comptes-clars.firebaseapp.com",
   projectId: "comptes-clars",
   storageBucket: "comptes-clars.firebasestorage.app",
@@ -63,30 +49,13 @@ if (typeof __firebase_config !== 'undefined') {
   appId: "1:331219366768:web:2f69ce8d66338071ef95b5",
   measurementId: "G-0FYBLE49JM"
 };
+// Inicialització de Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = 'comptes-clars-v1';
 
-}
-
-// Inicialització segura
-let app, auth, db;
-let initError = null;
-
-try {
-  // Comprovem si les claus estan posades (si no comencen per "POSA_AQUI")
-  if (!firebaseConfig?.apiKey || firebaseConfig.apiKey.includes("POSA_AQUI")) {
-    console.warn("Falten les claus de Firebase");
-  } else {
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
-  }
-} catch (e) {
-  console.error("Error init Firebase:", e);
-  initError = e.message;
-}
-
-// ============================================================================
-// --- COMPONENTS UI REUTILITZABLES ---
-// ============================================================================
+// --- COMPONENTS UI ---
 
 const Card = ({ children, className = "", onClick }) => (
   <div onClick={onClick} className={`bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden ${className}`}>
@@ -103,6 +72,7 @@ const Button = ({ children, onClick, variant = "primary", className = "", icon: 
     ghost: "text-slate-500 hover:bg-slate-100 hover:text-slate-800",
     success: "bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-200"
   };
+  
   return (
     <button onClick={onClick} disabled={disabled || loading} className={`${baseStyle} ${variants[variant]} ${className}`}>
       {loading ? <Loader2 size={18} className="animate-spin" /> : (Icon && <Icon size={18} />)}
@@ -111,7 +81,7 @@ const Button = ({ children, onClick, variant = "primary", className = "", icon: 
   );
 };
 
-// Modal definit FORA de l'App per evitar pèrdua de focus al teclat
+// --- MODALS HELPER ---
 const Modal = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
   return (
@@ -127,17 +97,30 @@ const Modal = ({ isOpen, onClose, title, children }) => {
   );
 };
 
+// --- GRÀFIC CIRCULAR (DONUT) SVG ---
 const DonutChart = ({ data }) => {
   if (!data || data.length === 0) return null;
-  const size = 100; const strokeWidth = 15; const radius = (size - strokeWidth) / 2; const circumference = 2 * Math.PI * radius; let offset = 0;
+  const size = 100;
+  const strokeWidth = 15;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
+
   return (
     <div className="relative w-32 h-32 mx-auto">
       <svg width="100%" height="100%" viewBox={`0 0 ${size} ${size}`} className="transform -rotate-90">
-        {data.map((item) => {
+        {data.map((item, i) => {
           const dashArray = (item.percentage / 100) * circumference;
-          const currentOffset = offset; offset += dashArray;
-          const colorMap = { 'bg-orange-500': '#f97316', 'bg-blue-500': '#3b82f6', 'bg-indigo-500': '#6366f1', 'bg-purple-500': '#a855f7', 'bg-sky-500': '#0ea5e9', 'bg-rose-500': '#f43f5e', 'bg-pink-500': '#ec4899', 'bg-teal-500': '#14b8a6', 'bg-emerald-500': '#10b981', 'bg-slate-500': '#64748b', 'bg-slate-400': '#94a3b8' };
-          return <circle key={item.id} cx={size / 2} cy={size / 2} r={radius} fill="transparent" stroke={colorMap[item.barColor] || '#ccc'} strokeWidth={strokeWidth} strokeDasharray={`${dashArray} ${circumference}`} strokeDashoffset={-currentOffset} className="transition-all duration-1000 ease-out" />;
+          const currentOffset = offset;
+          offset += dashArray;
+          const colorMap = {
+            'bg-orange-500': '#f97316', 'bg-blue-500': '#3b82f6', 'bg-indigo-500': '#6366f1',
+            'bg-purple-500': '#a855f7', 'bg-sky-500': '#0ea5e9', 'bg-pink-500': '#ec4899',
+            'bg-rose-500': '#f43f5e', 'bg-teal-500': '#14b8a6', 'bg-emerald-500': '#10b981', 'bg-slate-500': '#64748b', 'bg-slate-400': '#94a3b8'
+          };
+          return (
+            <circle key={item.id} cx={size / 2} cy={size / 2} r={radius} fill="transparent" stroke={colorMap[item.barColor] || '#ccc'} strokeWidth={strokeWidth} strokeDasharray={`${dashArray} ${circumference}`} strokeDashoffset={-currentOffset} className="transition-all duration-1000 ease-out" />
+          );
         })}
       </svg>
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><PieChartIcon className="text-slate-300" size={24} /></div>
@@ -145,139 +128,152 @@ const DonutChart = ({ data }) => {
   );
 };
 
-// ============================================================================
-// --- LOGICA PRINCIPAL DE L'APP ---
-// ============================================================================
+// --- APP PRINCIPAL ---
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [tripId, setTripId] = useState(null);
+  
   const [tripData, setTripData] = useState({ name: '', users: [], expenses: [], currency: CURRENCIES[0], createdAt: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Inicialitzar Autenticació
   useEffect(() => {
-    if (!auth) { setLoading(false); return; } // Si no hi ha claus, no fem res
+    // Si la clau encara és la de text d'exemple, no intentem connectar
+    if (!firebaseConfig.apiKey || firebaseConfig.apiKey.includes("POSA_AQUI")) {
+      setLoading(false);
+      return;
+    }
 
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
+        await signInAnonymously(auth);
       } catch (e) {
-        console.error("Auth Error:", e);
-        setError("Error d'autenticació. Revisa la consola.");
+        console.error("Error auth", e);
+        setError("Error d'autenticació. Revisa la configuració.");
       }
     };
     initAuth();
-    
     const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      if (!tripId) setLoading(false);
+        setUser(u);
+        if (!tripId) setLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
-  // Recuperar viatge guardat
   useEffect(() => {
     const savedTripId = window.localStorage.getItem('cc-last-trip-id');
     if (savedTripId) setTripId(savedTripId);
   }, []);
 
-  // Sincronitzar dades del viatge
   useEffect(() => {
-    if (!user || !tripId || !db) { if(!tripId) setLoading(false); return; }
+    if (!user || !tripId) { setLoading(false); return; }
     setLoading(true);
-    
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
     
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setTripData({
-          name: data.name || 'Viatge',
+          name: data.name || 'Viatge Sense Nom',
           users: data.users || [],
           expenses: data.expenses || [],
           currency: data.currency || CURRENCIES[0],
           createdAt: data.createdAt || null
         });
+        setError(null);
         setLoading(false);
       } else {
-        setError("Viatge no trobat.");
+        setError("Aquest viatge no existeix o ha estat eliminat.");
         setTripId(null);
+        window.localStorage.removeItem('cc-last-trip-id');
         setLoading(false);
       }
-    }, (err) => {
-      console.error("Firestore Error:", err);
-      if (err.code !== 'permission-denied') setError("Error de connexió.");
-      setLoading(false);
+    }, (err) => { 
+        console.error("Error Snapshot:", err); 
+        if (err.code === 'permission-denied') {
+            setError("Permís denegat. Revisa les 'Rules' de Firestore a la consola de Firebase.");
+        } else {
+            setError("Error de connexió: " + err.message); 
+        }
+        setLoading(false); 
     });
-
     return () => unsubscribe();
   }, [user, tripId]);
 
-  // Accions de Base de Dades
   const createTrip = async (tripName, creatorName) => {
-    if (!user || !db) return;
+    if (!user) {
+        alert("Error: No estàs connectat als servidors de Google. Revisa la consola (F12) per veure errors d'autenticació.");
+        return;
+    }
+    
     try {
-      const newId = Math.random().toString(36).substring(2, 9);
-      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${newId}`);
-      await setDoc(docRef, { 
-        id: newId, 
-        name: tripName, 
-        users: [creatorName], 
-        expenses: [], 
-        currency: CURRENCIES[0], 
-        createdAt: new Date().toISOString() 
-      });
-      window.localStorage.setItem('cc-last-trip-id', newId);
-      setTripId(newId);
+        const newId = Math.random().toString(36).substring(2, 9);
+        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${newId}`);
+        
+        await setDoc(docRef, { 
+            id: newId, 
+            name: tripName, 
+            users: [creatorName], 
+            expenses: [], 
+            currency: CURRENCIES[0], 
+            createdAt: new Date().toISOString() 
+        });
+        
+        window.localStorage.setItem('cc-last-trip-id', newId);
+        setTripId(newId);
     } catch (e) {
-      alert("Error creant viatge: " + e.message);
+        console.error("Error creant viatge:", e);
+        if (e.code === 'permission-denied') {
+            alert("Error de Permisos: No pots escriure a la base de dades. \n\nVes a Firebase Console > Firestore > Rules i canvia 'allow read, write: if false;' per 'if true;'.");
+        } else {
+            alert("Error creant el viatge: " + e.message);
+        }
     }
   };
 
   const joinTrip = (code) => {
+    if (code.length < 3) return;
     window.localStorage.setItem('cc-last-trip-id', code);
     setTripId(code);
     setError(null);
   };
 
   const updateTripData = async (newData) => {
-    if (!user || !tripId || !db) return;
+    if (!user || !tripId) return;
     try {
-      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
-      await updateDoc(docRef, newData);
+        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
+        await updateDoc(docRef, newData);
     } catch (e) {
-      alert("Error guardant: " + e.message);
+        console.error("Error actualitzant:", e);
+        alert("No s'ha pogut guardar el canvi: " + e.message);
     }
   };
 
-  // --- RENDERITZAT CONDICIONAL ---
-
-  // 1. Si falten claus
-  if (!auth) {
+  // PANTALLA D'AVÍS SI NO HI HA CLAUS
+  if (!firebaseConfig.apiKey || firebaseConfig.apiKey.includes("POSA_AQUI")) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center bg-slate-50">
-        <div className="bg-red-100 text-red-600 p-6 rounded-2xl mb-4 shadow-sm max-w-sm">
-          <AlertTriangle size={48} className="mx-auto mb-2"/>
-          <h2 className="text-xl font-bold">Falta Configuració</h2>
-          <p className="text-sm mt-2">No s'han trobat les claus de Firebase al codi.</p>
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center text-slate-600 font-sans">
+        <div className="bg-red-100 text-red-600 p-6 rounded-2xl mb-6 shadow-sm max-w-sm">
+          <Info size={48} className="mx-auto mb-4"/>
+          <h2 className="text-xl font-bold mb-2">Falta configurar Firebase</h2>
+          <p className="text-sm opacity-90">L'aplicació necessita les claus per connectar-se a la base de dades.</p>
         </div>
-        <p className="text-sm text-slate-500">Obre <code>src/App.jsx</code> i afegeix la teva <code>firebaseConfig</code>.</p>
+        <div className="max-w-md text-left bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <h3 className="font-bold text-slate-800 mb-2">Què has de fer?</h3>
+          <ol className="list-decimal pl-5 space-y-2 text-sm">
+            <li>Obre el fitxer <code>src/App.jsx</code>.</li>
+            <li>Busca la variable <code>firebaseConfig</code> (línia 40 aprox).</li>
+            <li>Enganxa-hi les teves claus reals de Firebase.</li>
+            <li>Guarda el fitxer i recarrega.</li>
+          </ol>
+        </div>
       </div>
     );
   }
 
-  // 2. Si estem carregant o login
-  if (!tripId) {
-    return <LandingScreen onCreate={createTrip} onJoin={joinTrip} error={error} loading={loading} user={user} />;
-  }
+  if (!tripId) return <LandingScreen onCreate={createTrip} onJoin={joinTrip} error={error} loading={loading && !user && !error} userStatus={user} />;
 
-  // 3. App Principal
   return (
     <MainApp 
       tripData={tripData} 
@@ -289,17 +285,14 @@ export default function App() {
   );
 }
 
-// ============================================================================
-// --- PANTALLA DE BENVINGUDA ---
-// ============================================================================
-
-function LandingScreen({ onCreate, onJoin, error, loading, user }) {
+// --- LANDING SCREEN ---
+function LandingScreen({ onCreate, onJoin, error, loading, userStatus }) {
   const [mode, setMode] = useState('menu');
   const [inputName, setInputName] = useState('');
   const [creatorName, setCreatorName] = useState('');
   const [inputCode, setInputCode] = useState('');
 
-  if (loading && !user && !error) return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-indigo-600"><Loader2 size={48} className="animate-spin" /></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-indigo-600"><Loader2 size={48} className="animate-spin" /></div>;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 relative overflow-hidden">
@@ -311,16 +304,16 @@ function LandingScreen({ onCreate, onJoin, error, loading, user }) {
           </div>
           <h1 className="text-4xl font-black text-slate-800 mb-2">Comptes Clars</h1>
           <p className="text-slate-500 font-medium">Gestiona les despeses en grup.</p>
-          {!user && !error && <span className="inline-block mt-4 px-3 py-1 bg-white/50 rounded-full text-xs font-bold text-slate-600 animate-pulse">Connectant...</span>}
+          {!userStatus && !error && <span className="inline-block mt-4 px-3 py-1 bg-white/50 rounded-full text-xs font-bold text-slate-600 animate-pulse">Connectant...</span>}
         </div>
         
         <Card className="p-8 shadow-xl border-0">
-          {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-4 flex items-center gap-2"><Info size={16}/> {error}</div>}
+          {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-4 flex items-center gap-2"><AlertTriangle size={16}/> {error}</div>}
           
           {mode === 'menu' && (
             <div className="space-y-4">
-              <Button onClick={() => setMode('create')} className="w-full py-4 text-lg" disabled={!user}>Crear nou viatge</Button>
-              <Button variant="secondary" onClick={() => setMode('join')} className="w-full py-4 text-lg" disabled={!user}>Tinc un codi</Button>
+              <Button onClick={() => setMode('create')} className="w-full py-4 text-lg">Crear nou viatge</Button>
+              <Button variant="secondary" onClick={() => setMode('join')} className="w-full py-4 text-lg">Tinc un codi</Button>
             </div>
           )}
 
@@ -379,7 +372,7 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
 
   // --- HELPERS ---
   const formatCurrency = (amount) => new Intl.NumberFormat(currency?.locale || 'ca-ES', { style: 'currency', currency: currency?.code || 'EUR' }).format(amount);
-  const getCategory = (id) => CATEGORIES.find(c => c.id === id) || CATEGORIES[9];
+  const getCategory = (id) => CATEGORIES.find(c => c.id === id) || CATEGORIES[10]; // Fallback to 'other'
   const formatDateDisplay = (d) => d ? new Date(d).toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' }) : '';
   
   const copyCode = () => {
@@ -390,6 +383,12 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
         const ta = document.createElement("textarea"); ta.value = tripId; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta);
         setCopied(true); setTimeout(() => setCopied(false), 2000);
     });
+  };
+
+  const openSettings = () => {
+    setEditTripName(name);
+    setEditTripDate(createdAt ? new Date(createdAt).toISOString().split('T')[0] : '');
+    setSettingsModalOpen(true);
   };
 
   // --- LOGIC ---
@@ -404,11 +403,18 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
   const balances = useMemo(() => {
     const balanceMap = {}; users.forEach(u => balanceMap[u] = 0);
     expenses.forEach(exp => {
+      // SAFEGUARD: Si el pagador no existeix a la llista d'usuaris, l'ignorem per evitar crash
       if (balanceMap[exp.payer] !== undefined) balanceMap[exp.payer] += exp.amount;
-      const splitCount = exp.involved?.length || users.length;
-      const splitAmount = splitCount > 0 ? exp.amount / splitCount : 0;
-      const participants = exp.involved?.length > 0 ? exp.involved : users;
-      participants.forEach(p => { if (balanceMap[p] !== undefined) balanceMap[p] -= splitAmount; });
+      
+      if (exp.category === 'transfer') {
+         // En transfer, involved és un array d'un sol element normalment
+         exp.involved.forEach(p => { if (balanceMap[p] !== undefined) balanceMap[p] -= exp.amount; });
+      } else {
+         const splitCount = exp.involved?.length || users.length;
+         const splitAmount = splitCount > 0 ? exp.amount / splitCount : 0;
+         const participants = exp.involved?.length > 0 ? exp.involved : users;
+         participants.forEach(p => { if (balanceMap[p] !== undefined) balanceMap[p] -= splitAmount; });
+      }
     });
     return users.map(user => ({ user, balance: balanceMap[user] })).sort((a, b) => b.balance - a.balance);
   }, [users, expenses]);
@@ -418,12 +424,22 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
     const total = expenses.filter(e => e.category !== 'transfer').reduce((acc, curr) => acc + curr.amount, 0);
     if (total === 0) return [];
     expenses.filter(e => e.category !== 'transfer').forEach(exp => {
-      if (!stats[exp.category]) stats[exp.category] = 0;
-      stats[exp.category] += exp.amount;
+      // SAFEGUARD: Si la categoria no existeix, l'agrupem a 'other'
+      const catKey = exp.category || 'other';
+      if (!stats[catKey]) stats[catKey] = 0;
+      stats[catKey] += exp.amount;
     });
-    return Object.entries(stats).map(([id, amount]) => ({
-      id, amount, ...CATEGORIES.find(c => c.id === id), percentage: (amount / total) * 100
-    })).sort((a, b) => b.amount - a.amount);
+    
+    return Object.entries(stats).map(([id, amount]) => {
+      // SAFEGUARD: Busquem la info de la categoria, si no existeix, usem 'other'
+      const catInfo = CATEGORIES.find(c => c.id === id) || CATEGORIES[10]; // 10 is 'other'
+      return {
+        id, 
+        amount, 
+        ...catInfo, 
+        percentage: (amount / total) * 100
+      };
+    }).sort((a, b) => b.amount - a.amount);
   }, [expenses]);
 
   const settlements = useMemo(() => {
@@ -594,7 +610,7 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
         {activeTab === 'balances' && (
            <div className="space-y-6 animate-fade-in">
              {categoryStats.length > 0 && <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-6"><DonutChart data={categoryStats} /><div className="flex-1 space-y-2">{categoryStats.slice(0, 3).map(stat => (<div key={stat.id} className="flex justify-between items-center text-sm"><span className="flex items-center gap-2 font-medium text-slate-600"><div className={`w-3 h-3 rounded-full ${stat.barColor}`}></div>{stat.label}</span><span className="font-bold text-slate-800">{Math.round(stat.percentage)}%</span></div>))}</div></div>}
-             <div className="grid gap-3">{balances.map((b) => <Card key={b.user} className="p-0 overflow-hidden" onClick={() => setUserDetailModalOpen(b.user)}><div className="p-5 relative z-10"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white shadow-sm ${b.balance >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}>{b.user.charAt(0)}</div><div><p className="font-bold text-slate-800">{b.user}</p><p className={`text-xs font-bold uppercase ${b.balance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{b.balance >= 0 ? 'Recupera' : 'Ha de pagar'}</p></div></div><span className={`text-xl font-black ${b.balance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{b.balance >= 0 ? '+' : ''}{formatCurrency(b.balance)}</span></div></div></Card>)}</div>
+             <div className="grid gap-3">{balances.map((b) => <Card key={b.user} className="p-0 overflow-hidden" onClick={() => setUserDetailModalOpen(b.user)}><div className="p-5 relative z-10"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white shadow-sm ${b.balance >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}>{(b.user || '?').charAt(0)}</div><div><p className="font-bold text-slate-800">{b.user}</p><p className={`text-xs font-bold uppercase ${b.balance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{b.balance >= 0 ? 'Recupera' : 'Ha de pagar'}</p></div></div><span className={`text-xl font-black ${b.balance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{b.balance >= 0 ? '+' : ''}{formatCurrency(b.balance)}</span></div></div></Card>)}</div>
            </div>
         )}
 
