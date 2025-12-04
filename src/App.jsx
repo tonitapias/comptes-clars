@@ -63,7 +63,7 @@ const Card = ({ children, className = "", onClick }) => (
   </div>
 );
 
-const Button = ({ children, onClick, variant = "primary", className = "", icon: Icon, disabled = false, loading = false }) => {
+const Button = ({ children, onClick, variant = "primary", className = "", icon: Icon, disabled = false, loading = false, type = "button" }) => {
   const baseStyle = "px-4 py-3 rounded-xl font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 disabled:scale-100 disabled:cursor-not-allowed";
   const variants = {
     primary: "bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-200",
@@ -74,7 +74,7 @@ const Button = ({ children, onClick, variant = "primary", className = "", icon: 
   };
   
   return (
-    <button onClick={onClick} disabled={disabled || loading} className={`${baseStyle} ${variants[variant]} ${className}`}>
+    <button type={type} onClick={onClick} disabled={disabled || loading} className={`${baseStyle} ${variants[variant]} ${className}`}>
       {loading ? <Loader2 size={18} className="animate-spin" /> : (Icon && <Icon size={18} />)}
       {children}
     </button>
@@ -480,11 +480,27 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
     closeModal();
   };
 
+  const deleteExpense = (id, e) => {
+    e.stopPropagation();
+    setConfirmAction({
+      type: 'delete_expense',
+      id: id,
+      title: 'Eliminar Despesa',
+      message: 'Estàs segur que vols eliminar aquesta despesa permanentment?'
+    });
+  };
+
   const executeConfirmation = async () => {
     if (!confirmAction) return;
-    if (confirmAction.type === 'delete_expense') await onUpdate({ expenses: expenses.filter(exp => exp.id !== confirmAction.id) });
-    if (confirmAction.type === 'delete_user') await onUpdate({ users: users.filter(u => u !== confirmAction.id) });
+    if (confirmAction.type === 'delete_expense') {
+      const newExpensesList = expenses.filter(exp => exp.id !== confirmAction.id);
+      await onUpdate({ expenses: newExpensesList });
+    } else if (confirmAction.type === 'delete_user') {
+      const newUsersList = users.filter(u => u !== confirmAction.id);
+      await onUpdate({ users: newUsersList });
+    }
     setConfirmAction(null);
+    closeModal(); // Also close edit modal if open
   };
 
   const handleSettleDebt = async () => {
@@ -597,7 +613,13 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
                           <div className="flex justify-between items-start"><h4 className={`font-bold truncate ${isTransfer ? 'text-slate-600 italic' : 'text-slate-800'}`}>{expense.title}</h4><span className="text-xs text-slate-400 font-medium bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-100 ml-2 whitespace-nowrap">{formatDateDisplay(expense.date)}</span></div>
                           <div className="flex items-center gap-2 mt-0.5"><span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">{expense.payer}</span><span className="text-xs text-slate-500">{isTransfer ? '→' : '•'} {isTransfer ? expense.involved[0] : `${expense.involved.length} pers.`}</span></div>
                         </div>
-                        <div className="flex flex-col items-end pl-2"><span className={`font-bold text-lg ${isTransfer ? 'text-slate-500' : 'text-slate-800'}`}>{formatCurrency(expense.amount)}</span><div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity"><button className="text-slate-300 hover:text-red-500 p-1" onClick={(e) => deleteExpense(expense.id, e)}><Trash2 size={14} /></button></div></div>
+                        <div className="flex flex-col items-end pl-2">
+                          <span className={`font-bold text-lg ${isTransfer ? 'text-slate-500' : 'text-slate-800'}`}>{formatCurrency(expense.amount)}</span>
+                          {/* Botó visible sempre per evitar errors al mòbil */}
+                          <div className="flex items-center gap-1 mt-1 transition-opacity">
+                            <button className="text-slate-300 hover:text-red-500 p-1" onClick={(e) => deleteExpense(expense.id, e)}><Trash2 size={14} /></button>
+                          </div>
+                        </div>
                       </div>
                     </Card>
                   );
@@ -654,7 +676,10 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
           <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Data</label><input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={newExpense.date} onChange={(e) => setNewExpense({...newExpense, date: e.target.value})} /></div>
           <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Pagador</label><div className="flex flex-wrap gap-2">{users.map(u => (<button type="button" key={u} onClick={() => setNewExpense({...newExpense, payer: u})} className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${newExpense.payer === u ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-200'}`}>{u}</button>))}</div></div>
           {newExpense.category !== 'transfer' && <div className="bg-slate-50 p-4 rounded-xl border border-slate-100"><div className="flex justify-between mb-2"><label className="block text-xs font-bold text-slate-500 uppercase">Participants</label><button type="button" onClick={() => setNewExpense({...newExpense, involved: newExpense.involved.length === users.length ? [] : users})} className="text-xs font-bold text-indigo-600">{newExpense.involved.length === users.length ? 'Desmarcar' : 'Tothom'}</button></div><div className="grid grid-cols-2 gap-2">{users.map(u => { const isSelected = newExpense.involved.length === 0 || newExpense.involved.includes(u); return (<button type="button" key={u} onClick={() => { const current = newExpense.involved.length === 0 ? [...users] : newExpense.involved; const updated = current.includes(u) ? current.filter(i => i !== u) : [...current, u]; setNewExpense({...newExpense, involved: updated}); }} className={`flex items-center gap-2 p-2 rounded-lg text-sm font-medium transition-all ${isSelected ? 'bg-white text-indigo-700 shadow-sm border border-indigo-200' : 'text-slate-400 opacity-50'}`}><div className={`w-4 h-4 rounded border ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}></div> {u}</button>) })}</div></div>}
-          <Button className="w-full text-lg py-4" onClick={handleSaveExpense} disabled={!newExpense.amount || !newExpense.title}>{editingId ? "Guardar" : "Afegir"}</Button>
+          <div className="flex gap-2">
+            {editingId && <Button variant="danger" className="w-16" icon={Trash2} onClick={() => deleteExpense(editingId, { stopPropagation: () => {} })}></Button>}
+            <Button className="flex-1 text-lg py-4" onClick={handleSaveExpense} disabled={!newExpense.amount || !newExpense.title}>{editingId ? "Guardar" : "Afegir"}</Button>
+          </div>
         </form>
       </Modal>
 
