@@ -39,12 +39,37 @@ const CURRENCIES = [
 ];
 
 // --- FIREBASE SETUP ---
-// Substitueix això per la teva configuració real de Firebase si no la tens posada
-const firebaseConfig = JSON.parse(__firebase_config); 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+// Aquest bloc detecta si estem al xat o al teu ordinador
+let firebaseConfig;
+let appId = 'comptes-clars-v1';
+
+if (typeof __firebase_config !== 'undefined') {
+  // CONFIGURACIÓ AUTOMÀTICA (PER AL XAT)
+  firebaseConfig = JSON.parse(__firebase_config);
+  appId = typeof __app_id !== 'undefined' ? __app_id : appId;
+} else {
+  // CONFIGURACIÓ MANUAL (PER AL TEU ORDINADOR / VERCEL)
+  // ⚠️ Has d'omplir això amb les dades de la consola de Firebase quan ho baixis
+  const firebaseConfig = {
+  apiKey: "AIzaSyD_ExampleKey123456",
+  authDomain: "el-teu-projecte.firebaseapp.com",
+  projectId: "el-teu-projecte",
+  storageBucket: "el-teu-projecte.firebasestorage.app",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abcdef"
+};
+
+}
+
+// Inicialització segura
+let app, auth, db;
+try {
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+} catch (e) {
+  console.error("Error inicialitzant Firebase. Revisa les claus.", e);
+}
 
 // --- COMPONENTS UI ---
 
@@ -131,6 +156,12 @@ export default function App() {
 
   useEffect(() => {
     const initAuth = async () => {
+      // Si estem en entorn local i no hi ha API Key, no fem res
+      if (!firebaseConfig.apiKey || firebaseConfig.apiKey.includes("POSA_AQUI")) {
+        setLoading(false);
+        return;
+      }
+
       if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
         await signInWithCustomToken(auth, __initial_auth_token);
       } else {
@@ -138,8 +169,10 @@ export default function App() {
       }
     };
     initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
-    return () => unsubscribe();
+    if(auth) {
+        const unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
+        return () => unsubscribe();
+    }
   }, []);
 
   useEffect(() => {
@@ -148,7 +181,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!user || !tripId) { setLoading(false); return; }
+    if (!user || !tripId || !db) { setLoading(false); return; }
     setLoading(true);
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
@@ -173,7 +206,7 @@ export default function App() {
   }, [user, tripId]);
 
   const createTrip = async (tripName, creatorName) => {
-    if (!user) return;
+    if (!user || !db) return;
     const newId = Math.random().toString(36).substring(2, 9);
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${newId}`);
     await setDoc(docRef, { id: newId, name: tripName, users: [creatorName], expenses: [], currency: CURRENCIES[0], createdAt: new Date().toISOString() });
@@ -189,10 +222,18 @@ export default function App() {
   };
 
   const updateTripData = async (newData) => {
-    if (!user || !tripId) return;
+    if (!user || !tripId || !db) return;
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
     await updateDoc(docRef, newData);
   };
+
+  if (!firebaseConfig.apiKey || firebaseConfig.apiKey.includes("POSA_AQUI")) {
+    return <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center text-slate-600">
+      <div className="bg-red-100 text-red-600 p-4 rounded-xl mb-4"><Info size={32} className="mx-auto mb-2"/>Falten les claus de Firebase!</div>
+      <p>Aquest error surt perquè estàs executant l'app en local i no has posat la teva configuració.</p>
+      <p className="mt-2 text-sm">Edita el fitxer <code>App.jsx</code> i posa les teves dades a la variable <code>firebaseConfig</code>.</p>
+    </div>;
+  }
 
   if (!tripId) return <LandingScreen onCreate={createTrip} onJoin={joinTrip} error={error} loading={loading && user} />;
 
@@ -271,7 +312,6 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   
-  // ESTAT ACTUALITZAT: Inclou el camp 'date'
   const [newExpense, setNewExpense] = useState({ title: '', amount: '', payer: '', category: 'food', involved: [], date: '' });
   const [newUserName, setNewUserName] = useState('');
   const [editingUser, setEditingUser] = useState(null);
@@ -283,7 +323,7 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
   // --- HELPERS ---
   const formatCurrency = (amount) => new Intl.NumberFormat(currency?.locale || 'ca-ES', { style: 'currency', currency: currency?.code || 'EUR' }).format(amount);
   const getCategory = (id) => CATEGORIES.find(c => c.id === id) || CATEGORIES[9];
-  // Helper per mostrar la data bonica a la targeta (Ex: 4 des.)
+  
   const formatDateDisplay = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
@@ -378,11 +418,10 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
     e.preventDefault();
     if (!newExpense.title || !newExpense.amount) return;
     
-    // Si l'usuari no tria data, fem servir "ara mateix" (ISO), si tria data, la convertim a ISO (migdia per evitar errors de zona)
     let finalDate;
     if (newExpense.date) {
         const d = new Date(newExpense.date);
-        d.setHours(12, 0, 0, 0); // Set to noon
+        d.setHours(12, 0, 0, 0); 
         finalDate = d.toISOString();
     } else {
         finalDate = new Date().toISOString();
@@ -395,7 +434,7 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
       payer: newExpense.payer || users[0],
       category: newExpense.category,
       involved: newExpense.involved.length > 0 ? newExpense.involved : users,
-      date: finalDate // Use user date or current
+      date: finalDate 
     };
     const newExpensesList = editingId ? expenses.map(exp => exp.id === editingId ? expenseData : exp) : [expenseData, ...expenses];
     await onUpdate({ expenses: newExpensesList });
@@ -486,7 +525,6 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
   };
   
   const openEditModal = (expense) => { 
-      // Convert ISO date to YYYY-MM-DD for input
       const dateForInput = expense.date ? new Date(expense.date).toISOString().split('T')[0] : '';
       setNewExpense({ ...expense, date: dateForInput }); 
       setEditingId(expense.id); 
@@ -781,15 +819,15 @@ function MainApp({ tripData, tripId, onUpdate, onExit, loadingData }) {
                  value={newExpense.title} onChange={(e) => setNewExpense({...newExpense, title: e.target.value})} />
              </div>
              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Data</label>
-                <input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={newExpense.date} onChange={(e) => setNewExpense({...newExpense, date: e.target.value})} />
-             </div>
-          </div>
-          <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Categoria</label>
                 <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={newExpense.category} onChange={(e) => setNewExpense({...newExpense, category: e.target.value})}>
                    {CATEGORIES.filter(c => c.id !== 'all').map(c => (<option key={c.id} value={c.id}>{c.label}</option>))}
                 </select>
+             </div>
+          </div>
+          <div className="mb-4">
+             <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Data</label>
+             <input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={newExpense.date} onChange={(e) => setNewExpense({...newExpense, date: e.target.value})} />
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Pagador</label>
