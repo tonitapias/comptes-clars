@@ -8,7 +8,7 @@ import {
   Share2, LogOut, Loader2, Cloud, Banknote, Check, Copy, Calendar, Ticket, AlertTriangle
 } from 'lucide-react';
 
-// Components
+// Components (Assegura't de tenir-los a la carpeta components/)
 import Card from './components/Card';
 import Button from './components/Button';
 import Modal from './components/Modal';
@@ -44,6 +44,7 @@ const CURRENCIES = [
   { code: 'MXN', symbol: '$', locale: 'es-MX' },
 ];
 
+// Configuració segura amb .env
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -91,6 +92,14 @@ function LandingScreen({ user }) {
   const [creatorName, setCreatorName] = useState('');
   const [inputCode, setInputCode] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // 1. SI JA TENIM VIATGE GUARDAT, HI ANEM DIRECTES
+  useEffect(() => {
+    const savedTrip = localStorage.getItem('cc-last-trip-id');
+    if (savedTrip) {
+      navigate(`/trip/${savedTrip}`);
+    }
+  }, []);
 
   const createTrip = async () => {
     setLoading(true);
@@ -156,6 +165,13 @@ function TripPage({ user }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // 2. GUARDEM EL VIATGE A MEMÒRIA QUAN HI ENTREM
+  useEffect(() => {
+    if (tripId) {
+      localStorage.setItem('cc-last-trip-id', tripId);
+    }
+  }, [tripId]);
+
   useEffect(() => {
     setLoading(true);
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
@@ -180,10 +196,21 @@ function TripPage({ user }) {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600"/></div>;
   if (error) return <div className="min-h-screen flex flex-col items-center justify-center gap-4"><AlertTriangle className="text-red-500" size={40}/><p className="text-slate-600 font-bold">{error}</p><Button variant="secondary" onClick={() => navigate('/')}>Tornar a l'inici</Button></div>;
 
-  return <MainApp tripData={tripData} tripId={tripId} onUpdate={updateTrip} onExit={() => navigate('/')} />;
+  return (
+    <MainApp 
+      tripData={tripData} 
+      tripId={tripId} 
+      onUpdate={updateTrip} 
+      // 3. QUAN CLIQUEM A SORTIR, ESBORREM LA MEMÒRIA
+      onExit={() => { 
+        localStorage.removeItem('cc-last-trip-id'); 
+        navigate('/'); 
+      }} 
+    />
+  );
 }
 
-// --- COMPONENT PRINCIPAL DE LA UI (Igual que abans, només rep props) ---
+// --- COMPONENT PRINCIPAL DE LA UI (Pura presentació) ---
 
 function MainApp({ tripData, tripId, onUpdate, onExit }) {
   const { users, expenses, currency = CURRENCIES[0], name, createdAt } = tripData;
