@@ -1,40 +1,38 @@
 # 💸 Comptes Clars
 
-![React](https://img.shields.io/badge/React-19-blue?logo=react)
-![Vite](https://img.shields.io/badge/Vite-7.0-purple?logo=vite)
-![Firebase](https://img.shields.io/badge/Firebase-Firestore-orange?logo=firebase)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-cyan?logo=tailwindcss)
-![Llicència](https://img.shields.io/badge/license-MIT-green)
+**Comptes Clars** és una aplicació web moderna i robusta per gestionar despeses compartides en grups. Ideal per a viatges, companys de pis, regals conjunts o sopars d'amics.
 
-**Comptes Clars** és una aplicació web moderna ("Single Page Application") dissenyada per gestionar despeses compartides en grup de manera eficient, privada i en temps real.
+L'aplicació permet crear grups, afegir despeses en temps real, veure qui deu a qui i liquidar els deutes de la manera més eficient possible.
 
-A diferència d'altres aplicacions comercials, aquesta eina no requereix registre d'usuari, respecta la privacitat de les dades i utilitza un algorisme de liquidació de deutes optimitzat.
-
-🔗 **Demo:** [Afegeix aquí el teu enllaç de Vercel]
+![Comptes Clars Screenshot](https://via.placeholder.com/800x400?text=Comptes+Clars+Preview)
 
 ## ✨ Característiques Principals
 
-* **⚡ Sincronització en Temps Real:** Totes les despeses i canvis s'actualitzen instantàniament a tots els dispositius connectats (via Firestore WebSockets).
-* **🧭 Navegació Intel·ligent:** Sistema de rutes dinàmiques (`/trip/:id`) que permet compartir un viatge simplement enviant l'enllaç per WhatsApp.
-* **🔒 Seguretat i Privacitat:** Autenticació anònima i regles de seguretat estrictes a la base de dades. Les dades només són accessibles amb el codi del viatge.
-* **⚖️ Algorisme de Deutes:** Càlcul automàtic de balanços i simplificació de pagaments per minimitzar el nombre de transaccions necessàries.
-* **💾 Persistència Local:** L'aplicació recorda automàticament l'últim viatge visitat.
+* **🎯 Precisió Comptable Absoluta:** Sistema intern basat en enters (cèntims) per eliminar completament els errors d'arrodoniment de coma flotant.
+* **👥 Gestió de Grups:** Creació de grups il·limitats per a qualsevol context (viatge, pis, esdeveniment...).
+* **⚡ Temps Real i Concurrent:** Sincronització instantània amb Firebase. Ús d'`arrayUnion` per garantir la integritat de les dades quan múltiples usuaris editen alhora.
+* **📄 Exportació a PDF:** Generació d'informes professionals amb el resum de despeses, balanços i pla de liquidació.
+* **🧠 Algorisme de Liquidació:** Càlcul automàtic de "qui paga a qui" per minimitzar el nombre de transaccions necessàries.
+* **💸 Liquidació Detallada:** Registre de pagaments especificant el mètode (Bizum, Efectiu, Transferència, PayPal).
+* **📊 Estadístiques Visuals:** Gràfics de distribució de despeses per categories.
+* **📱 Disseny Responsive:** Interfície adaptada a mòbils i escriptori amb una experiència d'usuari (UX) fluida.
 
 ## 🛠️ Stack Tecnològic
 
-* **Core:** React 19 + Vite (Build ultra-ràpid).
-* **Estils:** Tailwind CSS + Lucide React (Iconografia).
-* **Backend (BaaS):** Firebase (Firestore Database + Authentication).
-* **Routing:** React Router DOM.
-* **Desplegament:** Optimitzat per a Vercel.
+* **Frontend:** [React](https://reactjs.org/) + [Vite](https://vitejs.dev/)
+* **Llenguatge:** [TypeScript](https://www.typescriptlang.org/)
+* **Estils:** [Tailwind CSS](https://tailwindcss.com/)
+* **Base de Dades:** [Firebase Firestore](https://firebase.google.com/)
+* **Generació PDF:** `jspdf` + `jspdf-autotable`
+* **Icones:** `lucide-react`
 
-## 🚀 Guia d'Instal·lació (Local)
+## 🚀 Instal·lació i Posada en Marxa
 
-Segueix aquests passos per executar el projecte al teu entorn local:
+Segueix aquests passos per executar el projecte en local:
 
 ### 1. Clonar el repositori
 ```bash
-git clone [https://github.com/tonitapias/comptes-clars.git](https://github.com/tonitapias/comptes-clars.git)
+git clone [https://github.com/el-teu-usuari/comptes-clars.git](https://github.com/el-teu-usuari/comptes-clars.git)
 cd comptes-clars
 
 ```
@@ -46,23 +44,23 @@ npm install
 
 ```
 
-### 3. Configuració de l'Entorn (CRÍTIC)
+### 3. Configuració de Firebase
 
-Aquest projecte utilitza variables d'entorn per seguretat. Crea un fitxer anomenat `.env.local` a l'arrel del projecte i afegeix-hi les teves claus de Firebase:
+Crea un fitxer `.env` o modifica `src/config/firebase.ts` amb les teves credencials de Firebase:
 
-```env
-VITE_FIREBASE_API_KEY=la_teva_api_key
-VITE_FIREBASE_AUTH_DOMAIN=el_teu_projecte.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=el_teu_project_id
-VITE_FIREBASE_STORAGE_BUCKET=el_teu_projecte.appspot.com
-VITE_FIREBASE_MESSAGING_SENDER_ID=el_teu_sender_id
-VITE_FIREBASE_APP_ID=la_teva_app_id
+```typescript
+const firebaseConfig = {
+  apiKey: "LA_TEVA_API_KEY",
+  authDomain: "EL_TEU_PROJECTE.firebaseapp.com",
+  projectId: "EL_TEU_PROJECTE",
+  storageBucket: "EL_TEU_PROJECTE.appspot.com",
+  messagingSenderId: "...",
+  appId: "..."
+};
 
 ```
 
-> **Nota:** Pots obtenir aquestes claus creant un projecte gratuït a [Firebase Console](https://console.firebase.google.com/).
-
-### 4. Executar en desenvolupament
+### 4. Executar en local
 
 ```bash
 npm run dev
@@ -71,44 +69,48 @@ npm run dev
 
 Obre `http://localhost:5173` al teu navegador.
 
-## 🛡️ Configuració de Seguretat (Firebase)
+## 🧮 Com funciona el sistema de cèntims?
 
-Per evitar que la base de dades caduqui o sigui vulnerable, és imprescindible configurar les **Firestore Rules** a la consola de Firebase amb el següent codi:
+Per evitar problemes com `10€ / 3 = 3.3333...`, l'aplicació guarda tots els imports com a **Enters (Cèntims)** a la base de dades:
 
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    // Permet accés només si l'usuari coneix l'ID exacte del document (viatge)
-    match /artifacts/comptes-clars-v1/public/data/trips/{tripId} {
-      allow read, write: if true;
-    }
-  }
-}
+* Visualització: `10,00 €`
+* Base de Dades: `1000`
+
+En dividir despeses, s'utilitza un algorisme de repartiment de residu:
+
+* *Exemple:* 1000 cèntims entre 3 persones.
+* Persona 1: 334 cèntims.
+* Persona 2: 333 cèntims.
+* Persona 3: 333 cèntims.
+* **Total:** 1000 (Exacte).
+
+## 📂 Estructura del Projecte
+
+```text
+src/
+├── components/      # Components reutilitzables (Card, Button, Modals...)
+├── config/          # Configuració de Firebase
+├── hooks/           # Lògica personalitzada (useTripCalculations)
+├── pages/           # Vistes principals (LandingPage, TripPage)
+├── types/           # Definicions de tipus TypeScript
+├── utils/           # Utilitats (exportPdf, constants)
+└── main.tsx         # Punt d'entrada
 
 ```
 
-## 📦 Desplegament a Producció
-
-La manera més senzilla de publicar l'app és utilitzant **Vercel**:
-
-1. Puja el codi al teu GitHub.
-2. Importa el repositori des de Vercel.
-3. A la configuració del projecte a Vercel (**Settings > Environment Variables**), afegeix manualment les claus que tens al fitxer `.env.local`.
-4. Fes clic a **Deploy**.
-
 ## 🤝 Contribució
 
-Les contribucions són benvingudes! Si vols millorar el codi:
+Les contribucions són benvingudes! Si trobes un error o vols proposar una millora:
 
-1. Fes un *Fork* del projecte.
-2. Crea una branca nova (`git checkout -b feature/nova-millora`).
-3. Fes *Commit* dels teus canvis.
-4. Obre un *Pull Request*.
+1. Fes un Fork del projecte.
+2. Crea una branca (`git checkout -b feature/nova-millora`).
+3. Fes Commit (`git commit -m 'Feat: Afegir nova millora'`).
+4. Fes Push (`git push origin feature/nova-millora`).
+5. Obre un Pull Request.
 
-## 📄 Llicència
+---
 
-Distribuït sota la llicència MIT. Vegeu `LICENSE` per a més informació.
+Creat amb ❤️ per gestionar els teus comptes sense mals de cap.
 
 ```
 
