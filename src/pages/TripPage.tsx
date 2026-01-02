@@ -18,7 +18,7 @@ import { db, appId } from '../config/firebase';
 import { CURRENCIES, CATEGORIES } from '../utils/constants';
 import { useTripCalculations } from '../hooks/useTripCalculations';
 import { TripData, Expense, CategoryId, Settlement } from '../types';
-import { generatePDF } from '../utils/exportPdf'; // <--- NOU IMPORT PER AL PDF
+import { generatePDF } from '../utils/exportPdf';
 
 interface TripPageProps {
   user: User | null;
@@ -42,6 +42,10 @@ export default function TripPage({ user }: TripPageProps) {
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [settleModalOpen, setSettleModalOpen] = useState<Settlement | null>(null);
+  
+  // --- NOU ESTAT: MÈTODE DE PAGAMENT ---
+  const [settleMethod, setSettleMethod] = useState('Bizum');
+
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ type: string; id?: string | number; title: string; message: string } | null>(null);
   
@@ -77,7 +81,6 @@ export default function TripPage({ user }: TripPageProps) {
   const { users, expenses, currency = CURRENCIES[0], name, createdAt } = tripData || { users: [], expenses: [] };
   const { filteredExpenses, balances, categoryStats, settlements, totalGroupSpending } = useTripCalculations(expenses || [], users || [], searchQuery, filterCategory);
 
-  // FORMAT CURRENCY: Dividim per 100 perquè treballem amb cèntims
   const formatCurrency = (amount: number) => new Intl.NumberFormat(currency?.locale || 'ca-ES', { style: 'currency', currency: currency?.code || 'EUR' }).format(amount / 100);
   
   const getCategory = (id: string) => CATEGORIES.find(c => c.id === id) || CATEGORIES[10];
@@ -87,10 +90,8 @@ export default function TripPage({ user }: TripPageProps) {
     navigator.clipboard.writeText(tripId || '').then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   };
 
-  // --- ACCIÓ EXPORTAR PDF (NOVA) ---
   const handleExportPDF = () => {
     if (!tripData) return;
-    // Passem les dades necessàries al generador
     generatePDF(name, expenses, balances, settlements, currency.symbol);
   };
 
@@ -107,11 +108,9 @@ export default function TripPage({ user }: TripPageProps) {
     const isEdit = expenses.some(e => e.id === expense.id);
 
     if (isEdit) {
-      // EDICIÓ: Substituïm la despesa a l'array local i enviem tot l'array.
       const newExpensesList = expenses.map(e => e.id === expense.id ? expense : e);
       await updateTrip({ expenses: newExpensesList });
     } else {
-      // NOVA DESPESA: Utilitzem arrayUnion per afegir-la a la cua de forma segura
       try {
         const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
         await updateDoc(tripRef, {
@@ -132,7 +131,8 @@ export default function TripPage({ user }: TripPageProps) {
     
     const repayment: Expense = { 
       id: Date.now(), 
-      title: `Pagament deute`, 
+      // --- CANVI: Incloem el mètode de pagament al títol ---
+      title: `Pagament deute (${settleMethod})`, 
       amount: settleModalOpen.amount, 
       payer: settleModalOpen.from, 
       category: 'transfer', 
@@ -149,7 +149,6 @@ export default function TripPage({ user }: TripPageProps) {
     }
   };
 
-  // Gestió d'Usuaris
   const handleAddUser = async (name: string) => await updateTrip({ users: [...users, name] });
   const handleRenameUser = async (oldName: string, newName: string) => {
     const newUsers = users.map(u => u === oldName ? newName : u);
@@ -177,7 +176,6 @@ export default function TripPage({ user }: TripPageProps) {
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-24 md:pb-10">
       {copied && <div className="fixed top-24 left-1/2 -translate-x-1/2 bg-emerald-600 text-white px-4 py-2 rounded-full shadow-lg z-[60] flex items-center gap-2 animate-fade-in font-bold"><CheckCircle2 size={18} /> Codi copiat!</div>}
       
-      {/* HEADER */}
       <header className="bg-gradient-to-br from-indigo-800 to-indigo-600 text-white pt-8 pb-20 px-6 shadow-xl relative overflow-hidden">
         <div className="max-w-3xl mx-auto flex justify-between items-start relative z-10">
           <div>
@@ -186,7 +184,6 @@ export default function TripPage({ user }: TripPageProps) {
             {createdAt && <p className="text-indigo-200 text-xs mt-1 flex items-center gap-1 opacity-80"><Calendar size={12} /> {new Date(createdAt).toLocaleDateString('ca-ES', { dateStyle: 'long' })}</p>}
           </div>
           <div className="flex gap-2">
-            {/* BOTÓ EXPORTAR PDF */}
             <button onClick={handleExportPDF} className="bg-white/20 hover:bg-white/30 p-2.5 rounded-xl transition-colors backdrop-blur-md text-indigo-100" title="Exportar PDF">
               <Download size={20} />
             </button>
@@ -197,7 +194,6 @@ export default function TripPage({ user }: TripPageProps) {
         </div>
       </header>
 
-      {/* MAIN CONTENT */}
       <main className="max-w-3xl mx-auto px-4 -mt-14 relative z-20">
         <Card className="mb-6 bg-white shadow-xl shadow-indigo-100/50 border-0">
           <div className="p-6 flex justify-between items-center">
@@ -206,14 +202,12 @@ export default function TripPage({ user }: TripPageProps) {
           </div>
         </Card>
         
-        {/* TABS */}
         <div className="flex p-1.5 bg-white rounded-2xl mb-6 shadow-sm border border-slate-200">
           {(['expenses', 'balances', 'settle'] as const).map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all ${activeTab === tab ? 'bg-indigo-100 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>{tab === 'expenses' ? 'Despeses' : tab === 'balances' ? 'Balanç' : 'Liquidar'}</button>
           ))}
         </div>
 
-        {/* VIEW: EXPENSES */}
         {activeTab === 'expenses' && (
           <div className="space-y-4 animate-fade-in">
              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
@@ -241,7 +235,6 @@ export default function TripPage({ user }: TripPageProps) {
           </div>
         )}
 
-        {/* VIEW: BALANCES */}
         {activeTab === 'balances' && (
            <div className="space-y-6 animate-fade-in">
              {categoryStats.length > 0 && <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-6"><DonutChart data={categoryStats} /><div className="flex-1 space-y-2">{categoryStats.slice(0, 3).map(stat => (<div key={stat.id} className="flex justify-between items-center text-sm"><span className="flex items-center gap-2 font-medium text-slate-600"><div className={`w-3 h-3 rounded-full ${stat.barColor}`}></div>{stat.label}</span><span className="font-bold text-slate-800">{Math.round(stat.percentage)}%</span></div>))}</div></div>}
@@ -249,7 +242,6 @@ export default function TripPage({ user }: TripPageProps) {
            </div>
         )}
 
-        {/* VIEW: SETTLE */}
         {activeTab === 'settle' && (
           <div className="space-y-4 animate-fade-in">
              <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl mb-4 text-sm text-indigo-800 flex gap-2"><Info size={20} className="shrink-0"/> Fes clic en un deute per marcar-lo com a pagat.</div>
@@ -258,10 +250,7 @@ export default function TripPage({ user }: TripPageProps) {
         )}
       </main>
       
-      {/* FLOATING ACTION BUTTON */}
       <button onClick={() => { setEditingExpense(null); setIsExpenseModalOpen(true); }} className="fixed bottom-6 right-6 md:right-[calc(50%-350px)] bg-indigo-600 text-white p-4 rounded-2xl shadow-xl hover:bg-indigo-700 transition-all z-40 shadow-indigo-200"><Plus size={28} /></button>
-      
-      {/* --- MODALS --- */}
       
       <ExpenseModal 
         isOpen={isExpenseModalOpen} 
@@ -285,7 +274,45 @@ export default function TripPage({ user }: TripPageProps) {
 
       <Modal isOpen={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} title="Configuració del Grup"><div className="space-y-6"><div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Nom</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={editTripName} onChange={e => setEditTripName(e.target.value)} /></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Data</label><input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={editTripDate} onChange={e => setEditTripDate(e.target.value)} /></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Moneda</label><div className="grid grid-cols-2 gap-2">{CURRENCIES.map(c => (<button key={c.code} onClick={() => updateTrip({ currency: c })} className={`p-3 rounded-xl border-2 text-sm font-bold flex items-center justify-center gap-2 ${currency?.code === c.code ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 hover:border-slate-300'}`}><span>{c.symbol}</span> {c.code}</button>))}</div></div><Button onClick={async () => { let d = createdAt ? new Date(createdAt) : new Date(); if (editTripDate) d = new Date(editTripDate); d.setHours(12, 0, 0, 0); await updateTrip({ name: editTripName, createdAt: d.toISOString() }); setSettingsModalOpen(false); }}>Guardar canvis</Button></div></Modal>
       <Modal isOpen={!!confirmAction} onClose={() => setConfirmAction(null)} title={confirmAction?.title || 'Confirmació'}><div className="space-y-6 text-center"><div className="py-2"><p className="text-slate-600">{confirmAction?.message}</p></div>{confirmAction?.type === 'info' ? <Button onClick={() => setConfirmAction(null)} className="w-full">Entesos</Button> : <div className="flex gap-3"><Button variant="secondary" onClick={() => setConfirmAction(null)} className="flex-1">Cancel·lar</Button><Button variant="danger" onClick={executeConfirmation} className="flex-1" icon={Trash2}>Eliminar</Button></div>}</div></Modal>
-      <Modal isOpen={!!settleModalOpen} onClose={() => setSettleModalOpen(null)} title="Confirmar Pagament">{settleModalOpen && <div className="space-y-6 text-center"><div className="py-4"><p className="text-slate-500 text-lg">Confirmar pagament de</p><p className="text-xl font-bold text-slate-800 my-2">{settleModalOpen.from} <ArrowRightLeft className="inline mx-2" size={16}/> {settleModalOpen.to}</p><p className="text-3xl font-black text-indigo-600">{formatCurrency(settleModalOpen.amount)}</p></div><div className="flex gap-2"><Button variant="secondary" onClick={() => setSettleModalOpen(null)} className="flex-1">Cancel·lar</Button><Button variant="success" onClick={handleSettleDebt} className="flex-1" icon={CheckCircle2}>Confirmar</Button></div></div>}</Modal>
+      
+      {/* --- MODAL DE PAGAMENT AMB SELECTOR DE MÈTODE --- */}
+      <Modal isOpen={!!settleModalOpen} onClose={() => setSettleModalOpen(null)} title="Confirmar Pagament">
+        {settleModalOpen && (
+          <div className="space-y-6 text-center">
+            <div className="py-4">
+              <p className="text-slate-500 text-lg">Confirmar pagament de</p>
+              <p className="text-xl font-bold text-slate-800 my-2">
+                {settleModalOpen.from} <ArrowRightLeft className="inline mx-2" size={16}/> {settleModalOpen.to}
+              </p>
+              <p className="text-3xl font-black text-indigo-600">{formatCurrency(settleModalOpen.amount)}</p>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase mb-2">Com s'ha pagat?</p>
+              <div className="flex justify-center gap-2 flex-wrap">
+                {['Bizum', 'Efectiu', 'Transferència', 'PayPal'].map(method => (
+                  <button
+                    key={method}
+                    onClick={() => setSettleMethod(method)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-bold border-2 transition-all ${
+                      settleMethod === method 
+                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700' 
+                        : 'border-slate-100 text-slate-500 hover:border-slate-300'
+                    }`}
+                  >
+                    {method}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={() => setSettleModalOpen(null)} className="flex-1">Cancel·lar</Button>
+              <Button variant="success" onClick={handleSettleDebt} className="flex-1" icon={CheckCircle2}>Confirmar</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
       
       <style>{`@keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } .animate-fade-in { animation: fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; } .scrollbar-hide::-webkit-scrollbar { display: none; }`}</style>
     </div>
