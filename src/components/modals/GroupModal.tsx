@@ -42,7 +42,7 @@ export default function GroupModal({ isOpen, onClose, tripId, users, onAddUser, 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Gestionar Grup">
       <div className="space-y-6">
-        {/* Codi Viatge */}
+        {/* Codi Grup */}
         <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 mb-4 flex justify-between items-center">
           <span className="font-mono text-xl font-bold tracking-widest text-indigo-900">{tripId}</span>
           <button onClick={copyCode} className={`text-indigo-600 bg-white p-2 rounded-lg shadow-sm transition-all ${copied ? 'bg-emerald-100 text-emerald-600' : ''}`}>

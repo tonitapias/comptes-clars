@@ -66,20 +66,20 @@ export default function LandingPage({ user }: LandingPageProps) {
         <Card className="p-8 shadow-xl border-0">
           {mode === 'menu' && (
             <div className="space-y-4">
-              <Button onClick={() => setMode('create')} className="w-full py-4 text-lg">Crear nou viatge</Button>
+              <Button onClick={() => setMode('create')} className="w-full py-4 text-lg">Crear nou grup</Button>
               <Button variant="secondary" onClick={() => setMode('join')} className="w-full py-4 text-lg">Tinc un codi</Button>
             </div>
           )}
           {mode === 'create' && (
             <div className="space-y-4 animate-fade-in">
-              <div><label className="block text-sm font-bold text-slate-700 mb-1">Nom del viatge</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={inputName} onChange={e => setInputName(e.target.value)} /></div>
+              <div><label className="block text-sm font-bold text-slate-700 mb-1">Nom del grup</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={inputName} onChange={e => setInputName(e.target.value)} /></div>
               <div><label className="block text-sm font-bold text-slate-700 mb-1">El teu nom</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={creatorName} onChange={e => setCreatorName(e.target.value)} /></div>
               <div className="flex gap-2 pt-2"><Button variant="ghost" onClick={() => setMode('menu')}>Enrere</Button><Button className="flex-1" loading={loading} disabled={!inputName || !creatorName} onClick={createTrip}>Començar</Button></div>
             </div>
           )}
           {mode === 'join' && (
             <div className="space-y-4 animate-fade-in">
-              <div><label className="block text-sm font-bold text-slate-700 mb-1">Codi del viatge</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-mono text-center text-lg uppercase" value={inputCode} onChange={e => setInputCode(e.target.value)} /></div>
+              <div><label className="block text-sm font-bold text-slate-700 mb-1">Codi del grup</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-mono text-center text-lg uppercase" value={inputCode} onChange={e => setInputCode(e.target.value)} /></div>
               <div className="flex gap-2 pt-2"><Button variant="ghost" onClick={() => setMode('menu')}>Enrere</Button><Button className="flex-1" disabled={inputCode.length < 3} onClick={() => navigate(`/trip/${inputCode}`)}>Entrar</Button></div>
             </div>
           )}
