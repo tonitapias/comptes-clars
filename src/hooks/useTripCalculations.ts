@@ -26,39 +26,42 @@ export function useTripCalculations(
       }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || Number(b.id) - Number(a.id));
   }, [expenses, searchQuery, filterCategory]);
 
-  // 2. Balanços
+  // 2. Balanços (ARA AMB MATH ENTERA)
   const balances = useMemo(() => {
     const balanceMap: Record<string, number> = {}; 
     users.forEach(u => balanceMap[u] = 0);
     
     expenses.forEach(exp => {
-      // Sumar al pagador (qui avança els diners sempre suma)
+      // Sumar al pagador (en cèntims)
       if (balanceMap[exp.payer] !== undefined) balanceMap[exp.payer] += exp.amount;
       
-      if (exp.category === 'transfer') {
-         // --- CORRECCIÓ APLICADA ---
-         // Si és transferència, dividim l'import entre tots els receptors seleccionats.
-         // Això evita que si marques 2 persones, es resti l'import total a totes dues.
-         const splitAmount = exp.involved.length > 0 ? exp.amount / exp.involved.length : 0;
-         
-         exp.involved.forEach(p => { 
-             if (balanceMap[p] !== undefined) balanceMap[p] -= splitAmount; 
-         });
-      } else {
-         // Si és despesa normal, dividim entre els participants
-         const participants = exp.involved?.length > 0 ? exp.involved : users;
-         const splitCount = participants.length;
-         const splitAmount = splitCount > 0 ? exp.amount / splitCount : 0;
-         
-         participants.forEach(p => { if (balanceMap[p] !== undefined) balanceMap[p] -= splitAmount; });
+      const receivers = exp.involved?.length > 0 ? exp.involved : users;
+      const count = receivers.length;
+      
+      if (count > 0) {
+          // DIVISIÓ ENTERA AMB REPARTIMENT DE RESIDU
+          // Ex: 1000 / 3 = 333 (base) i sobra 1 (remainder)
+          const baseAmount = Math.floor(exp.amount / count);
+          const remainder = exp.amount % count;
+
+          receivers.forEach((p, index) => {
+             // Els primers 'remainder' usuaris paguen 1 cèntim més per quadrar
+             const amountToPay = baseAmount + (index < remainder ? 1 : 0);
+             
+             if (balanceMap[p] !== undefined) {
+                 balanceMap[p] -= amountToPay;
+             }
+          });
       }
     });
+    // Ordenem
     return users.map(user => ({ user, balance: balanceMap[user] })).sort((a, b) => b.balance - a.balance);
   }, [users, expenses]);
 
   // 3. Estadístiques
   const categoryStats = useMemo(() => {
     const stats: Record<string, number> = {};
+    // Suma en cèntims
     const total = expenses.filter(e => e.category !== 'transfer').reduce((acc, curr) => acc + curr.amount, 0);
     
     if (total === 0) return [];
@@ -70,11 +73,10 @@ export function useTripCalculations(
     });
     
     return Object.entries(stats).map(([id, amount]) => {
-      // Castegem l'ID per assegurar que coincideix amb CategoryId, si no fallback
       const catInfo = CATEGORIES.find(c => c.id === id) || CATEGORIES.find(c => c.id === 'other')!;
       return { 
         id: catInfo.id, 
-        amount, 
+        amount, // Això són cèntims, el DonutChart només vol proporcions així que està bé
         label: catInfo.label,
         icon: catInfo.icon,
         color: catInfo.color,
@@ -84,26 +86,28 @@ export function useTripCalculations(
     }).sort((a, b) => b.amount - a.amount);
   }, [expenses]);
 
-  // 4. Liquidacions (Algorisme Greedy)
+  // 4. Liquidacions (Algorisme Greedy amb Enters)
   const settlements = useMemo(() => {
     let debts: Settlement[] = [];
-    // Creem còpies per no mutar l'estat original
-    let debtors = balances.filter(b => b.balance < -0.01).map(b => ({ ...b }));
-    let creditors = balances.filter(b => b.balance > 0.01).map(b => ({ ...b }));
+    // Ja no cal filtrar per < 0.01, utilitzem 0 estricte perquè són enters
+    let debtors = balances.filter(b => b.balance < 0).map(b => ({ ...b }));
+    let creditors = balances.filter(b => b.balance > 0).map(b => ({ ...b }));
     
     let i = 0, j = 0;
     while (i < debtors.length && j < creditors.length) {
       let debtor = debtors[i]; 
       let creditor = creditors[j];
       
+      // Mínim en valor absolut
       let amount = Math.min(Math.abs(debtor.balance), creditor.balance);
       debts.push({ from: debtor.user, to: creditor.user, amount });
       
       debtor.balance += amount; 
       creditor.balance -= amount;
       
-      if (Math.abs(debtor.balance) < 0.01) i++; 
-      if (creditor.balance < 0.01) j++;
+      // Com que són enters, el 0 és 0 absolut.
+      if (debtor.balance === 0) i++; 
+      if (creditor.balance === 0) j++;
     }
     return debts;
   }, [balances]);

@@ -16,24 +16,24 @@ interface ExpenseModalProps {
 }
 
 export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, initialData, users, currency }: ExpenseModalProps) {
+  // L'estat 'amount' serà un string (el que veu l'usuari, ex: "12.50")
   const [formData, setFormData] = useState<{
     title: string; amount: string; payer: string; category: CategoryId; involved: string[]; date: string
   }>({ title: '', amount: '', payer: '', category: 'food', involved: [], date: '' });
 
-  // Reiniciar o carregar dades quan s'obre el modal
   useEffect(() => {
     if (isOpen) {
       if (initialData) {
         setFormData({
           title: initialData.title,
-          amount: initialData.amount.toString(),
+          // CONVERSIÓ: De cèntims (Dades) a Euros (Visual)
+          amount: (initialData.amount / 100).toFixed(2), 
           payer: initialData.payer,
           category: initialData.category,
           involved: initialData.involved,
           date: initialData.date ? new Date(initialData.date).toISOString().split('T')[0] : ''
         });
       } else {
-        // Valors per defecte
         setFormData({ 
           title: '', amount: '', payer: users[0] || '', category: 'food', involved: [], 
           date: new Date().toISOString().split('T')[0] 
@@ -49,13 +49,17 @@ export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, init
     let finalDate = formData.date ? new Date(formData.date) : new Date();
     finalDate.setHours(12, 0, 0, 0);
 
+    // CONVERSIÓ: D'Euros (Input) a Cèntims (Base de Dades)
+    // Math.round per evitar errors de flotant tipus 10.50 * 100 = 1050.00000004
+    const amountInCents = Math.round(parseFloat(formData.amount) * 100);
+
     const expense: Expense = {
       id: initialData?.id || Date.now(),
       title: formData.title,
-      amount: parseFloat(formData.amount),
+      amount: amountInCents, 
       payer: formData.payer,
       category: formData.category,
-      involved: formData.involved.length > 0 ? formData.involved : users, // Si està buit, implica tothom
+      involved: formData.involved.length > 0 ? formData.involved : users,
       date: finalDate.toISOString()
     };
 
@@ -107,9 +111,7 @@ export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, init
 
         {/* Pagador */}
         <div>
-          <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
-             {isTransfer ? 'Qui paga (Origen)?' : 'Pagador'}
-          </label>
+          <label className="block text-xs font-bold text-slate-500 uppercase mb-2">{isTransfer ? 'Qui paga (Origen)?' : 'Pagador'}</label>
           <div className="flex flex-wrap gap-2">
             {users.map(u => (
               <button type="button" key={u} onClick={() => setFormData({...formData, payer: u})} 
@@ -120,14 +122,10 @@ export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, init
           </div>
         </div>
 
-        {/* Involucrats / Receptors (Ara sempre visible!) */}
+        {/* Participants / Receptors */}
         <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
           <div className="flex justify-between mb-2">
-            <label className="block text-xs font-bold text-slate-500 uppercase">
-                {isTransfer ? 'Receptors (Qui rep els diners?)' : 'Participants'}
-            </label>
-            
-            {/* Si és transferència, potser no vols un botó de "Tothom" tan destacat, però el deixem per flexibilitat */}
+            <label className="block text-xs font-bold text-slate-500 uppercase">{isTransfer ? 'Receptors (Qui rep els diners?)' : 'Participants'}</label>
             <button type="button" onClick={() => setFormData({...formData, involved: isAllInvolved ? [] : users})} className="text-xs font-bold text-indigo-600">
               {isAllInvolved ? 'Desmarcar' : 'Tothom'}
             </button>
@@ -135,19 +133,10 @@ export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, init
           <div className="grid grid-cols-2 gap-2">
             {users.map(u => {
               const isSelected = formData.involved.length === 0 || formData.involved.includes(u);
-              // Evitem que el pagador es pugui seleccionar a si mateix com a receptor en una transferència
               const isSelf = isTransfer && u === formData.payer;
-              
               return (
-                <button 
-                  type="button" 
-                  key={u} 
-                  disabled={isSelf}
-                  onClick={() => !isSelf && toggleInvolved(u)} 
-                  className={`flex items-center gap-2 p-2 rounded-lg text-sm font-medium transition-all 
-                    ${isSelf ? 'opacity-30 cursor-not-allowed' : ''}
-                    ${isSelected && !isSelf ? 'bg-white text-indigo-700 shadow-sm border border-indigo-200' : 'text-slate-400 opacity-50'}
-                  `}>
+                <button type="button" key={u} disabled={isSelf} onClick={() => !isSelf && toggleInvolved(u)} 
+                  className={`flex items-center gap-2 p-2 rounded-lg text-sm font-medium transition-all ${isSelf ? 'opacity-30 cursor-not-allowed' : ''} ${isSelected && !isSelf ? 'bg-white text-indigo-700 shadow-sm border border-indigo-200' : 'text-slate-400 opacity-50'}`}>
                   <div className={`w-4 h-4 rounded border ${isSelected && !isSelf ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}></div> {u}
                 </button>
               )
@@ -156,12 +145,8 @@ export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, init
         </div>
 
         <div className="flex gap-2">
-          {initialData && onDelete && (
-            <Button variant="danger" className="w-16" icon={Trash2} onClick={(e) => { e.preventDefault(); onDelete(initialData.id); }}></Button>
-          )}
-          <Button className="flex-1 text-lg py-4" type="submit" disabled={!formData.amount || !formData.title}>
-            {initialData ? "Guardar" : "Afegir"}
-          </Button>
+          {initialData && onDelete && <Button variant="danger" className="w-16" icon={Trash2} onClick={(e) => { e.preventDefault(); onDelete(initialData.id); }}></Button>}
+          <Button className="flex-1 text-lg py-4" type="submit" disabled={!formData.amount || !formData.title}>{initialData ? "Guardar" : "Afegir"}</Button>
         </div>
       </form>
     </Modal>

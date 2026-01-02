@@ -77,7 +77,7 @@ export default function TripPage({ user }: TripPageProps) {
   const { users, expenses, currency = CURRENCIES[0], name, createdAt } = tripData || { users: [], expenses: [] };
   const { filteredExpenses, balances, categoryStats, settlements, totalGroupSpending } = useTripCalculations(expenses || [], users || [], searchQuery, filterCategory);
 
-  const formatCurrency = (amount: number) => new Intl.NumberFormat(currency?.locale || 'ca-ES', { style: 'currency', currency: currency?.code || 'EUR' }).format(amount);
+  const formatCurrency = (amount: number) => new Intl.NumberFormat(currency?.locale || 'ca-ES', { style: 'currency', currency: currency?.code || 'EUR' }).format(amount / 100);
   const getCategory = (id: string) => CATEGORIES.find(c => c.id === id) || CATEGORIES[10];
   const formatDateDisplay = (d: string) => d ? new Date(d).toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' }) : '';
   
