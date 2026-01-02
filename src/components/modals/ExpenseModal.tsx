@@ -70,6 +70,7 @@ export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, init
   };
 
   const isAllInvolved = formData.involved.length === 0 || formData.involved.length === users.length;
+  const isTransfer = formData.category === 'transfer';
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={initialData ? "Editar Despesa" : "Nova Despesa"}>
@@ -106,7 +107,9 @@ export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, init
 
         {/* Pagador */}
         <div>
-          <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Pagador</label>
+          <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+             {isTransfer ? 'Qui paga (Origen)?' : 'Pagador'}
+          </label>
           <div className="flex flex-wrap gap-2">
             {users.map(u => (
               <button type="button" key={u} onClick={() => setFormData({...formData, payer: u})} 
@@ -117,27 +120,40 @@ export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, init
           </div>
         </div>
 
-        {/* Involucrats (Només si no és transferència) */}
-        {formData.category !== 'transfer' && (
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-            <div className="flex justify-between mb-2">
-              <label className="block text-xs font-bold text-slate-500 uppercase">Participants</label>
-              <button type="button" onClick={() => setFormData({...formData, involved: isAllInvolved ? [] : users})} className="text-xs font-bold text-indigo-600">
-                {isAllInvolved ? 'Desmarcar' : 'Tothom'}
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {users.map(u => {
-                const isSelected = formData.involved.length === 0 || formData.involved.includes(u);
-                return (
-                  <button type="button" key={u} onClick={() => toggleInvolved(u)} className={`flex items-center gap-2 p-2 rounded-lg text-sm font-medium transition-all ${isSelected ? 'bg-white text-indigo-700 shadow-sm border border-indigo-200' : 'text-slate-400 opacity-50'}`}>
-                    <div className={`w-4 h-4 rounded border ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}></div> {u}
-                  </button>
-                )
-              })}
-            </div>
+        {/* Involucrats / Receptors (Ara sempre visible!) */}
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+          <div className="flex justify-between mb-2">
+            <label className="block text-xs font-bold text-slate-500 uppercase">
+                {isTransfer ? 'Receptors (Qui rep els diners?)' : 'Participants'}
+            </label>
+            
+            {/* Si és transferència, potser no vols un botó de "Tothom" tan destacat, però el deixem per flexibilitat */}
+            <button type="button" onClick={() => setFormData({...formData, involved: isAllInvolved ? [] : users})} className="text-xs font-bold text-indigo-600">
+              {isAllInvolved ? 'Desmarcar' : 'Tothom'}
+            </button>
           </div>
-        )}
+          <div className="grid grid-cols-2 gap-2">
+            {users.map(u => {
+              const isSelected = formData.involved.length === 0 || formData.involved.includes(u);
+              // Evitem que el pagador es pugui seleccionar a si mateix com a receptor en una transferència
+              const isSelf = isTransfer && u === formData.payer;
+              
+              return (
+                <button 
+                  type="button" 
+                  key={u} 
+                  disabled={isSelf}
+                  onClick={() => !isSelf && toggleInvolved(u)} 
+                  className={`flex items-center gap-2 p-2 rounded-lg text-sm font-medium transition-all 
+                    ${isSelf ? 'opacity-30 cursor-not-allowed' : ''}
+                    ${isSelected && !isSelf ? 'bg-white text-indigo-700 shadow-sm border border-indigo-200' : 'text-slate-400 opacity-50'}
+                  `}>
+                  <div className={`w-4 h-4 rounded border ${isSelected && !isSelf ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}></div> {u}
+                </button>
+              )
+            })}
+          </div>
+        </div>
 
         <div className="flex gap-2">
           {initialData && onDelete && (

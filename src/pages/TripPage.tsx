@@ -3,21 +3,22 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { 
   Plus, Users, Receipt, ArrowRightLeft, Trash2, CheckCircle2, 
   ChevronRight, Search, Edit2, Info, Settings, Share2, LogOut, 
-  Loader2, Check, Copy, Calendar, AlertTriangle 
+  Loader2, Check, Calendar, AlertTriangle 
 } from 'lucide-react';
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+// --- CORRECCIÓ: Afegit arrayUnion als imports ---
+import { doc, onSnapshot, updateDoc, arrayUnion } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 
 import Card from '../components/Card';
 import Button from '../components/Button';
 import Modal from '../components/Modal';
 import DonutChart from '../components/DonutChart';
-import ExpenseModal from '../components/modals/ExpenseModal'; // <--- NOU
-import GroupModal from '../components/modals/GroupModal';     // <--- NOU
+import ExpenseModal from '../components/modals/ExpenseModal';
+import GroupModal from '../components/modals/GroupModal';
 import { db, appId } from '../config/firebase';
 import { CURRENCIES, CATEGORIES } from '../utils/constants';
 import { useTripCalculations } from '../hooks/useTripCalculations';
-import { TripData, Expense, CategoryId, Settlement, Currency } from '../types';
+import { TripData, Expense, CategoryId, Settlement } from '../types';
 
 interface TripPageProps {
   user: User | null;
@@ -44,7 +45,7 @@ export default function TripPage({ user }: TripPageProps) {
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ type: string; id?: string | number; title: string; message: string } | null>(null);
   
-  // --- ESTATS DE SETTINGS (Temporal) ---
+  // --- ESTATS DE SETTINGS ---
   const [editTripName, setEditTripName] = useState('');
   const [editTripDate, setEditTripDate] = useState('');
 
@@ -91,10 +92,30 @@ export default function TripPage({ user }: TripPageProps) {
     catch (e: any) { alert("Error guardant: " + e.message); }
   };
 
+  // --- CORRECCIÓ APLICADA: Gestió segura de despeses ---
   const handleSaveExpense = async (expense: Expense) => {
+    if (!tripId) return;
+    
+    // Comprovem si estem editant una despesa existent
     const isEdit = expenses.some(e => e.id === expense.id);
-    const newExpensesList = isEdit ? expenses.map(e => e.id === expense.id ? expense : e) : [expense, ...expenses];
-    await updateTrip({ expenses: newExpensesList });
+
+    if (isEdit) {
+      // EDICIÓ: Substituïm la despesa a l'array local i enviem tot l'array.
+      // (Per a edicions és més complex usar arrayUnion/Remove, així que mantenim aquest mètode)
+      const newExpensesList = expenses.map(e => e.id === expense.id ? expense : e);
+      await updateTrip({ expenses: newExpensesList });
+    } else {
+      // NOVA DESPESA: Utilitzem arrayUnion per afegir-la a la cua de forma segura (Atomic Operation).
+      // Això evita que si dos usuaris guarden a la vegada, un sobreescrigui a l'altre.
+      try {
+        const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
+        await updateDoc(tripRef, {
+            expenses: arrayUnion(expense)
+        });
+      } catch (e: any) {
+        alert("Error guardant: " + e.message);
+      }
+    }
   };
 
   const handleDeleteExpense = (id: string | number) => {
@@ -102,13 +123,29 @@ export default function TripPage({ user }: TripPageProps) {
   };
 
   const handleSettleDebt = async () => {
-    if (!settleModalOpen) return;
-    const repayment: Expense = { id: Date.now(), title: `Pagament deute`, amount: settleModalOpen.amount, payer: settleModalOpen.from, category: 'transfer', involved: [settleModalOpen.to], date: new Date().toISOString() };
-    await updateTrip({ expenses: [repayment, ...expenses] }); 
-    setSettleModalOpen(null);
+    if (!settleModalOpen || !tripId) return;
+    
+    const repayment: Expense = { 
+      id: Date.now(), 
+      title: `Pagament deute`, 
+      amount: settleModalOpen.amount, 
+      payer: settleModalOpen.from, 
+      category: 'transfer', 
+      involved: [settleModalOpen.to], 
+      date: new Date().toISOString() 
+    };
+
+    // També fem servir arrayUnion per als pagaments de deutes
+    try {
+        const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
+        await updateDoc(tripRef, { expenses: arrayUnion(repayment) });
+        setSettleModalOpen(null);
+    } catch (e: any) {
+        alert("Error liquidant: " + e.message);
+    }
   };
 
-  // Gestió d'Usuaris (Passar al GroupModal)
+  // Gestió d'Usuaris
   const handleAddUser = async (name: string) => await updateTrip({ users: [...users, name] });
   const handleRenameUser = async (oldName: string, newName: string) => {
     const newUsers = users.map(u => u === oldName ? newName : u);
@@ -125,7 +162,7 @@ export default function TripPage({ user }: TripPageProps) {
     if (confirmAction.type === 'delete_expense') await updateTrip({ expenses: expenses.filter(exp => exp.id !== confirmAction.id) });
     else if (confirmAction.type === 'delete_user') await updateTrip({ users: users.filter(u => u !== confirmAction.id) });
     setConfirmAction(null); 
-    setIsExpenseModalOpen(false); // Tancar si venim del modal d'edició
+    setIsExpenseModalOpen(false);
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600"/></div>;
@@ -216,7 +253,7 @@ export default function TripPage({ user }: TripPageProps) {
       {/* FLOATING ACTION BUTTON */}
       <button onClick={() => { setEditingExpense(null); setIsExpenseModalOpen(true); }} className="fixed bottom-6 right-6 md:right-[calc(50%-350px)] bg-indigo-600 text-white p-4 rounded-2xl shadow-xl hover:bg-indigo-700 transition-all z-40 shadow-indigo-200"><Plus size={28} /></button>
       
-      {/* --- MODALS REFECTORITZATS --- */}
+      {/* --- MODALS --- */}
       
       <ExpenseModal 
         isOpen={isExpenseModalOpen} 
@@ -238,8 +275,6 @@ export default function TripPage({ user }: TripPageProps) {
         onRenameUser={handleRenameUser}
       />
 
-      {/* --- MODALS MENORS (Mantiguts aquí per simplicitat) --- */}
-      
       <Modal isOpen={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} title="Configuració Viatge"><div className="space-y-6"><div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Nom</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={editTripName} onChange={e => setEditTripName(e.target.value)} /></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Data</label><input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={editTripDate} onChange={e => setEditTripDate(e.target.value)} /></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Moneda</label><div className="grid grid-cols-2 gap-2">{CURRENCIES.map(c => (<button key={c.code} onClick={() => updateTrip({ currency: c })} className={`p-3 rounded-xl border-2 text-sm font-bold flex items-center justify-center gap-2 ${currency?.code === c.code ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 hover:border-slate-300'}`}><span>{c.symbol}</span> {c.code}</button>))}</div></div><Button onClick={async () => { let d = createdAt ? new Date(createdAt) : new Date(); if (editTripDate) d = new Date(editTripDate); d.setHours(12, 0, 0, 0); await updateTrip({ name: editTripName, createdAt: d.toISOString() }); setSettingsModalOpen(false); }}>Guardar canvis</Button></div></Modal>
       <Modal isOpen={!!confirmAction} onClose={() => setConfirmAction(null)} title={confirmAction?.title || 'Confirmació'}><div className="space-y-6 text-center"><div className="py-2"><p className="text-slate-600">{confirmAction?.message}</p></div>{confirmAction?.type === 'info' ? <Button onClick={() => setConfirmAction(null)} className="w-full">Entesos</Button> : <div className="flex gap-3"><Button variant="secondary" onClick={() => setConfirmAction(null)} className="flex-1">Cancel·lar</Button><Button variant="danger" onClick={executeConfirmation} className="flex-1" icon={Trash2}>Eliminar</Button></div>}</div></Modal>
       <Modal isOpen={!!settleModalOpen} onClose={() => setSettleModalOpen(null)} title="Confirmar Pagament">{settleModalOpen && <div className="space-y-6 text-center"><div className="py-4"><p className="text-slate-500 text-lg">Confirmar pagament de</p><p className="text-xl font-bold text-slate-800 my-2">{settleModalOpen.from} <ArrowRightLeft className="inline mx-2" size={16}/> {settleModalOpen.to}</p><p className="text-3xl font-black text-indigo-600">{formatCurrency(settleModalOpen.amount)}</p></div><div className="flex gap-2"><Button variant="secondary" onClick={() => setSettleModalOpen(null)} className="flex-1">Cancel·lar</Button><Button variant="success" onClick={handleSettleDebt} className="flex-1" icon={CheckCircle2}>Confirmar</Button></div></div>}</Modal>

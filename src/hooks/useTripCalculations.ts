@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { CATEGORIES } from '../utils/constants';
-import type { Expense, CategoryId, Balance, Settlement, CategoryStat } from '../types';
+import type { Expense, Balance, Settlement, CategoryStat } from '../types';
 
 interface CalculationsResult {
   filteredExpenses: Expense[];
@@ -32,14 +32,20 @@ export function useTripCalculations(
     users.forEach(u => balanceMap[u] = 0);
     
     expenses.forEach(exp => {
-      // Sumar al pagador
+      // Sumar al pagador (qui avança els diners sempre suma)
       if (balanceMap[exp.payer] !== undefined) balanceMap[exp.payer] += exp.amount;
       
       if (exp.category === 'transfer') {
-         // Si és transferència, restem directament al receptor
-         exp.involved.forEach(p => { if (balanceMap[p] !== undefined) balanceMap[p] -= exp.amount; });
+         // --- CORRECCIÓ APLICADA ---
+         // Si és transferència, dividim l'import entre tots els receptors seleccionats.
+         // Això evita que si marques 2 persones, es resti l'import total a totes dues.
+         const splitAmount = exp.involved.length > 0 ? exp.amount / exp.involved.length : 0;
+         
+         exp.involved.forEach(p => { 
+             if (balanceMap[p] !== undefined) balanceMap[p] -= splitAmount; 
+         });
       } else {
-         // Si és despesa normal, dividim
+         // Si és despesa normal, dividim entre els participants
          const participants = exp.involved?.length > 0 ? exp.involved : users;
          const splitCount = participants.length;
          const splitAmount = splitCount > 0 ? exp.amount / splitCount : 0;
