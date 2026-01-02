@@ -3,9 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { 
   Plus, Users, Receipt, ArrowRightLeft, Trash2, CheckCircle2, 
   ChevronRight, Search, Edit2, Info, Settings, Share2, LogOut, 
-  Loader2, Check, Calendar, AlertTriangle 
+  Loader2, Check, Calendar, AlertTriangle, Download 
 } from 'lucide-react';
-// --- CORRECCIÓ: Afegit arrayUnion als imports ---
 import { doc, onSnapshot, updateDoc, arrayUnion } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 
@@ -19,6 +18,7 @@ import { db, appId } from '../config/firebase';
 import { CURRENCIES, CATEGORIES } from '../utils/constants';
 import { useTripCalculations } from '../hooks/useTripCalculations';
 import { TripData, Expense, CategoryId, Settlement } from '../types';
+import { generatePDF } from '../utils/exportPdf'; // <--- NOU IMPORT PER AL PDF
 
 interface TripPageProps {
   user: User | null;
@@ -77,12 +77,21 @@ export default function TripPage({ user }: TripPageProps) {
   const { users, expenses, currency = CURRENCIES[0], name, createdAt } = tripData || { users: [], expenses: [] };
   const { filteredExpenses, balances, categoryStats, settlements, totalGroupSpending } = useTripCalculations(expenses || [], users || [], searchQuery, filterCategory);
 
+  // FORMAT CURRENCY: Dividim per 100 perquè treballem amb cèntims
   const formatCurrency = (amount: number) => new Intl.NumberFormat(currency?.locale || 'ca-ES', { style: 'currency', currency: currency?.code || 'EUR' }).format(amount / 100);
+  
   const getCategory = (id: string) => CATEGORIES.find(c => c.id === id) || CATEGORIES[10];
   const formatDateDisplay = (d: string) => d ? new Date(d).toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' }) : '';
   
   const copyCode = () => {
     navigator.clipboard.writeText(tripId || '').then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  };
+
+  // --- ACCIÓ EXPORTAR PDF (NOVA) ---
+  const handleExportPDF = () => {
+    if (!tripData) return;
+    // Passem les dades necessàries al generador
+    generatePDF(name, expenses, balances, settlements, currency.symbol);
   };
 
   // 3. Accions de Base de Dades
@@ -92,21 +101,17 @@ export default function TripPage({ user }: TripPageProps) {
     catch (e: any) { alert("Error guardant: " + e.message); }
   };
 
-  // --- CORRECCIÓ APLICADA: Gestió segura de despeses ---
   const handleSaveExpense = async (expense: Expense) => {
     if (!tripId) return;
     
-    // Comprovem si estem editant una despesa existent
     const isEdit = expenses.some(e => e.id === expense.id);
 
     if (isEdit) {
       // EDICIÓ: Substituïm la despesa a l'array local i enviem tot l'array.
-      // (Per a edicions és més complex usar arrayUnion/Remove, així que mantenim aquest mètode)
       const newExpensesList = expenses.map(e => e.id === expense.id ? expense : e);
       await updateTrip({ expenses: newExpensesList });
     } else {
-      // NOVA DESPESA: Utilitzem arrayUnion per afegir-la a la cua de forma segura (Atomic Operation).
-      // Això evita que si dos usuaris guarden a la vegada, un sobreescrigui a l'altre.
+      // NOVA DESPESA: Utilitzem arrayUnion per afegir-la a la cua de forma segura
       try {
         const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
         await updateDoc(tripRef, {
@@ -135,7 +140,6 @@ export default function TripPage({ user }: TripPageProps) {
       date: new Date().toISOString() 
     };
 
-    // També fem servir arrayUnion per als pagaments de deutes
     try {
         const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
         await updateDoc(tripRef, { expenses: arrayUnion(repayment) });
@@ -182,6 +186,10 @@ export default function TripPage({ user }: TripPageProps) {
             {createdAt && <p className="text-indigo-200 text-xs mt-1 flex items-center gap-1 opacity-80"><Calendar size={12} /> {new Date(createdAt).toLocaleDateString('ca-ES', { dateStyle: 'long' })}</p>}
           </div>
           <div className="flex gap-2">
+            {/* BOTÓ EXPORTAR PDF */}
+            <button onClick={handleExportPDF} className="bg-white/20 hover:bg-white/30 p-2.5 rounded-xl transition-colors backdrop-blur-md text-indigo-100" title="Exportar PDF">
+              <Download size={20} />
+            </button>
             <button onClick={() => setSettingsModalOpen(true)} className="bg-white/20 hover:bg-white/30 p-2.5 rounded-xl transition-colors backdrop-blur-md text-indigo-100"><Settings size={20} /></button>
             <button onClick={copyCode} className={`p-2.5 rounded-xl transition-all backdrop-blur-md text-indigo-100 ${copied ? 'bg-emerald-500' : 'bg-white/20 hover:bg-white/30'}`}>{copied ? <Check size={20} /> : <Share2 size={20} />}</button>
             <button onClick={() => setGroupModalOpen(true)} className="bg-white text-indigo-600 hover:bg-indigo-50 py-2 px-3 rounded-xl transition-colors shadow-lg font-bold text-sm flex items-center gap-2"><Users size={16} /> {users.length}</button>
