@@ -8,7 +8,7 @@ import {
 import { 
   doc, onSnapshot, updateDoc, arrayUnion, runTransaction, 
   collection, deleteDoc, addDoc, writeBatch 
-} from 'firebase/firestore'; 
+} from 'firebase/firestore'; //
 import { User } from 'firebase/auth';
 
 import Card from '../components/Card';
@@ -17,7 +17,7 @@ import Modal from '../components/Modal';
 import DonutChart from '../components/DonutChart';
 import ExpenseModal from '../components/modals/ExpenseModal';
 import GroupModal from '../components/modals/GroupModal';
-import { db, appId, auth } from '../config/firebase';
+import { db, appId, auth } from '../config/firebase'; //
 import { CURRENCIES, CATEGORIES } from '../utils/constants';
 import { useTripCalculations } from '../hooks/useTripCalculations';
 import { TripData, Expense, CategoryId, Settlement } from '../types';
@@ -80,7 +80,6 @@ export default function TripPage({ user }: TripPageProps) {
         setTripData(data);
         setEditTripName(data.name);
         setEditTripDate(data.createdAt ? new Date(data.createdAt).toISOString().split('T')[0] : '');
-        // Nota: Les expenses de 'data' les ignorem perquè ara venen de la subcol·lecció
         setLoading(false);
       } else {
         setError("Grup no trobat");
@@ -106,7 +105,7 @@ export default function TripPage({ user }: TripPageProps) {
     
     const unsubscribe = onSnapshot(expensesRef, (snapshot) => {
       const loadedExpenses = snapshot.docs.map(doc => ({
-        id: doc.id, // Important: Ara l'ID és l'ID del document de Firestore (string)
+        id: doc.id,
         ...doc.data()
       })) as Expense[];
       
@@ -178,7 +177,6 @@ export default function TripPage({ user }: TripPageProps) {
     if (!settleModalOpen || !tripId) return;
     
     const repayment = { 
-      // id: No cal, el posa Firestore
       title: `Pagament deute (${settleMethod})`, 
       amount: settleModalOpen.amount, 
       payer: settleModalOpen.from, 
@@ -208,7 +206,7 @@ export default function TripPage({ user }: TripPageProps) {
     }
   };
   
-  // --- REANOMENAR USUARI (COMPLEX) ---
+  // --- REANOMENAR USUARI ---
   const handleRenameUser = async (oldName: string, newName: string) => {
     if (!tripId) return;
     const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
@@ -289,43 +287,6 @@ export default function TripPage({ user }: TripPageProps) {
 
     setConfirmAction(null); 
     setIsExpenseModalOpen(false);
-  };
-
-  // --- FUNCIÓ DE MIGRACIÓ (TEMPORAL) ---
-  const handleMigration = async () => {
-    if (!tripData?.expenses || tripData.expenses.length === 0) {
-      alert("No hi ha despeses antigues per migrar.");
-      return;
-    }
-
-    if (!window.confirm(`Es mouran ${tripData.expenses.length} despeses a la nova estructura. Això arreglarà el saldo a 0. Vols continuar?`)) return;
-
-    setLoading(true);
-    try {
-      const batch = writeBatch(db);
-      const expensesRef = collection(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`, 'expenses');
-      
-      // 1. Copiem cada despesa antiga a la nova col·lecció
-      tripData.expenses.forEach(exp => {
-        // Utilitzem l'ID existent com a ID del document
-        const docRef = doc(expensesRef, String(exp.id));
-        batch.set(docRef, exp);
-      });
-
-      // 2. Esborrem la llista antiga per netejar el document principal
-      const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
-      batch.update(tripRef, { expenses: [] });
-
-      await batch.commit();
-      alert("✅ Migració completada! Les dades s'han recuperat.");
-      setSettingsModalOpen(false); // Tanquem el modal
-      
-    } catch (e: any) {
-      console.error(e);
-      alert("❌ Error durant la migració: " + e.message);
-    } finally {
-      setLoading(false);
-    }
   };
 
   const GuestWarning = () => {
@@ -503,22 +464,6 @@ export default function TripPage({ user }: TripPageProps) {
             </div>
           </div>
           <Button onClick={async () => { let d = createdAt ? new Date(createdAt) : new Date(); if (editTripDate) d = new Date(editTripDate); d.setHours(12, 0, 0, 0); await updateTrip({ name: editTripName, createdAt: d.toISOString() }); setSettingsModalOpen(false); }}>Guardar canvis</Button>
-          
-          {/* --- BOTÓ DE MIGRACIÓ --- */}
-          {tripData?.expenses && tripData.expenses.length > 0 && (
-            <div className="mt-8 pt-6 border-t border-slate-200">
-              <p className="text-xs text-slate-500 mb-2 text-center">
-                Si veus el saldo a 0€ però tens dades antigues:
-              </p>
-              <Button 
-                variant="secondary" 
-                onClick={handleMigration} 
-                className="w-full bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200"
-              >
-                ⚠️ Migrar dades a la nova versió
-              </Button>
-            </div>
-          )}
         </div>
       </Modal>
 
