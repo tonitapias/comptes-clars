@@ -5,24 +5,20 @@ import { Loader2 } from 'lucide-react';
 
 import { auth } from './config/firebase';
 import LandingPage from './pages/LandingPage';
-import TripDetails from './pages/TripDetails';
+// CORRECCIÓ AQUÍ: Importem TripPage, no TripDetails
+import TripPage from './pages/TripPage';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  
-  // NOU: Estat per recordar l'últim viatge visitat
   const [lastTripId, setLastTripId] = useState<string | null>(null);
 
   useEffect(() => {
-    // 1. Recuperem l'ID de l'últim viatge del localStorage (si existeix)
-    // Aquest valor es guarda al fitxer TripPage.tsx quan entres en un grup.
     const storedTripId = localStorage.getItem('cc-last-trip-id');
     if (storedTripId) {
       setLastTripId(storedTripId);
     }
 
-    // 2. Escolta d'autenticació de Firebase
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setAuthLoading(false);
@@ -31,7 +27,6 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  // Pantalla de càrrega
   if (authLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
@@ -44,23 +39,20 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* MODIFICACIÓ CLAU: Lògica de redirecció a la ruta arrel */}
         <Route 
           path="/" 
           element={
-            // Si tenim usuari I tenim un últim viatge guardat -> Redirigim directament
             user && lastTripId ? (
               <Navigate to={`/trip/${lastTripId}`} replace />
             ) : (
-              // Si no (o si l'usuari ha tancat sessió del grup manualment), mostrem la Landing
               <LandingPage user={user} />
             )
           } 
         />
         
-        <Route path="/trip/:tripId" element={<TripDetails user={user} />} />
+        {/* CORRECCIÓ AQUÍ: Fem servir <TripPage /> */}
+        <Route path="/trip/:tripId" element={<TripPage user={user} />} />
         
-        {/* Qualsevol ruta desconeguda torna a l'inici */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
