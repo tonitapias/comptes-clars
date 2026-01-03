@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { Loader2 } from 'lucide-react'; // Fem servir la icona de càrrega
+import { Loader2 } from 'lucide-react';
 
 import { auth } from './config/firebase';
 import LandingPage from './pages/LandingPage';
@@ -9,20 +9,29 @@ import TripDetails from './pages/TripDetails';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
-  // Aquest estat és la CLAU: comencem "carregant"
   const [authLoading, setAuthLoading] = useState(true);
+  
+  // NOU: Estat per recordar l'últim viatge visitat
+  const [lastTripId, setLastTripId] = useState<string | null>(null);
 
   useEffect(() => {
-    // Això escolta Firebase. S'executa només arrencar l'app.
+    // 1. Recuperem l'ID de l'últim viatge del localStorage (si existeix)
+    // Aquest valor es guarda al fitxer TripPage.tsx quan entres en un grup.
+    const storedTripId = localStorage.getItem('cc-last-trip-id');
+    if (storedTripId) {
+      setLastTripId(storedTripId);
+    }
+
+    // 2. Escolta d'autenticació de Firebase
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      setAuthLoading(false); // JA ESTÀ! Firebase ha respost (sigui sí o no)
+      setAuthLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  // MENTRE FIREBASE PENSA... mostrem una pantalla de càrrega blanca i neta
+  // Pantalla de càrrega
   if (authLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
@@ -32,13 +41,23 @@ function App() {
     );
   }
 
-  // UN COP FIREBASE HA ACABAT, mostrem l'app real
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<LandingPage user={user} />} />
+        {/* MODIFICACIÓ CLAU: Lògica de redirecció a la ruta arrel */}
+        <Route 
+          path="/" 
+          element={
+            // Si tenim usuari I tenim un últim viatge guardat -> Redirigim directament
+            user && lastTripId ? (
+              <Navigate to={`/trip/${lastTripId}`} replace />
+            ) : (
+              // Si no (o si l'usuari ha tancat sessió del grup manualment), mostrem la Landing
+              <LandingPage user={user} />
+            )
+          } 
+        />
         
-        {/* Rutes protegides o públiques segons necessitis */}
         <Route path="/trip/:tripId" element={<TripDetails user={user} />} />
         
         {/* Qualsevol ruta desconeguda torna a l'inici */}
