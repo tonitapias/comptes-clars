@@ -35,7 +35,7 @@ Segueix aquests passos per executar el projecte en local:
 ### 1. Clonar el repositori
 
 ```bash
-git clone [https://github.com/el-teu-usuari/comptes-clars.git](https://github.com/el-teu-usuari/comptes-clars.git)
+git clone [https://github.com/tonitapias/comptes-clars.git](https://github.com/tonitapias/comptes-clars.git)
 cd comptes-clars
 
 ```
@@ -107,30 +107,21 @@ Les contribucions són benvingudes! Si trobes un error o tens una idea per a una
 
 Aquest projecte està sota la llicència MIT. Consulta el fitxer `LICENSE` per a més detalls.
 
-```
-
-### Què inclou aquest README?
-
-1.  **Badge d'estat:** Dona un toc professional.
-2.  **Descripció clara:** Explica què fa l'app.
-3.  **Llista de funcionalitats:** Basada en el codi que hem vist (PDF, múltiples monedes, etc.).
-4.  **Stack tecnològic:** Llista les dependències clau.
-5.  **Instruccions `.env`:** Crític perquè algú altre pugui fer anar l'app, basat en el teu fitxer `firebase.ts`.
-6.  **Estructura de carpetes:** Ajuda a nous desenvolupadors a orientar-se.
-
 ---
 
 <div align="center">
-  <p>
-    Fet amb ❤️ per <a href="https://github.com/tonitapias" target="_blank"><b>Toni Tapias</b></a>
-  </p>
-  <p>
-    Calculadora de Despeses © 2025 • <a href="LICENSE">Llicència MIT</a>
-  </p>
-  <p>
-    <a href="https://github.com/tonitapias/comptes-clars/issues">Reportar un error</a> • 
-    <a href="https://github.com/tonitapias/comptes-clars/pulls">Demanar funcionalitat</a>
-  </p>
+<p>
+Fet amb ❤️ per <a href="https://www.google.com/search?q=https://github.com/tonitapias" target="_blank"><b>Toni Tapias</b></a>
+</p>
+<p>
+Calculadora de Despeses © 2025 • <a href="LICENSE">Llicència MIT</a>
+</p>
+<p>
+<a href="https://www.google.com/search?q=https://github.com/tonitapias/comptes-clars/issues">Reportar un error</a> •
+<a href="https://www.google.com/search?q=https://github.com/tonitapias/comptes-clars/pulls">Demanar funcionalitat</a>
+</p>
 </div>
+
+```
 
 ```
