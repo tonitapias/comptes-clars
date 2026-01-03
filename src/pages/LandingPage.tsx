@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Cloud, LogIn, LogOut, ChevronRight, Calendar, Loader2, Trash2 } from 'lucide-react'; // Afegit Trash2
-import { doc, setDoc, updateDoc, arrayRemove, collection, query, where, getDocs } from 'firebase/firestore'; // Afegit updateDoc i arrayRemove
-import { User, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { Cloud, LogIn, LogOut, ChevronRight, Calendar, Loader2, Trash2 } from 'lucide-react';
+import { doc, setDoc, updateDoc, arrayRemove, collection, query, where, getDocs } from 'firebase/firestore';
+// 1. AFEGIM signInWithRedirect ALS IMPORTS
+import { User, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut } from 'firebase/auth'; 
 
 import Card from '../components/Card';
 import Button from '../components/Button';
@@ -29,7 +30,6 @@ export default function LandingPage({ user }: LandingPageProps) {
 
   const isGuest = !user || user.isAnonymous;
 
-  // --- Càrrega de viatges ---
   useEffect(() => {
     async function fetchMyTrips() {
       if (!user || user.isAnonymous) {
@@ -60,9 +60,8 @@ export default function LandingPage({ user }: LandingPageProps) {
     fetchMyTrips();
   }, [user]);
 
-  // --- Nova Funció: Treure viatge de la llista ---
   const handleRemoveTrip = async (tripId: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Evita que en clicar la paperera entrem al viatge
+    e.stopPropagation();
     if (!user) return;
 
     const confirm = window.confirm("Vols treure aquest viatge de la teva llista? (No s'esborrarà per als altres participants)");
@@ -70,27 +69,27 @@ export default function LandingPage({ user }: LandingPageProps) {
 
     try {
       const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
-      
-      // Eliminem l'UID de l'usuari de la llista del document
-      await updateDoc(tripRef, {
-        memberUids: arrayRemove(user.uid)
-      });
-
-      // Actualitzem l'estat local perquè desaparegui a l'instant
+      await updateDoc(tripRef, { memberUids: arrayRemove(user.uid) });
       setMyTrips(prev => prev.filter(t => t.id !== tripId));
-
     } catch (error: any) {
       alert("Error: " + error.message);
     }
   };
 
+  // --- MODIFICACIÓ CLAU: LOGIN AMB REDIRECT ---
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
+      // Fem servir redirect en lloc de popup per evitar errors en mòbils
+      await signInWithRedirect(auth, provider);
+      // Nota: No cal fer res més aquí, la pàgina es recarregarà 
+      // i el useEffect detectarà l'usuari automàticament.
     } catch (error: any) {
+      // Aquest catch només saltarà si falla abans de redirigir
       console.error(error);
-      alert(error.message);
+      if (error.code !== 'auth/cancelled-popup-request') {
+         alert(error.message);
+      }
     }
   };
 
@@ -168,14 +167,7 @@ export default function LandingPage({ user }: LandingPageProps) {
                           <p className="text-[10px] text-slate-400 flex items-center gap-1"><Calendar size={10}/> {new Date(trip.createdAt).toLocaleDateString()}</p>
                         </div>
                         <div className="flex items-center gap-3">
-                           {/* Botó Esborrar (Paperera) */}
-                           <button 
-                             onClick={(e) => handleRemoveTrip(trip.id, e)}
-                             className="text-slate-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-full transition-all"
-                             title="Treure de la llista"
-                           >
-                             <Trash2 size={16} />
-                           </button>
+                           <button onClick={(e) => handleRemoveTrip(trip.id, e)} className="text-slate-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-full transition-all" title="Treure de la llista"><Trash2 size={16} /></button>
                            <ChevronRight size={16} className="text-slate-300 group-hover:text-indigo-400 transition"/>
                         </div>
                       </div>
