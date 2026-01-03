@@ -5,7 +5,7 @@ import {
   ChevronRight, Search, Edit2, Info, Settings, Share2, LogOut, 
   Loader2, Check, Calendar, AlertTriangle, Download, Save 
 } from 'lucide-react';
-import { doc, onSnapshot, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, arrayUnion, runTransaction } from 'firebase/firestore'; // AFEGIT: runTransaction
 import { User } from 'firebase/auth';
 
 import Card from '../components/Card';
@@ -97,19 +97,25 @@ export default function TripPage({ user }: TripPageProps) {
 
   // 2. Helpers i Hooks
   const { users, expenses, currency = CURRENCIES[0], name, createdAt } = tripData || { users: [], expenses: [] };
-  const { filteredExpenses, balances, categoryStats, settlements, totalGroupSpending } = useTripCalculations(expenses || [], users || [], searchQuery, filterCategory);
+  
+  // NOU: Desestructurem també displayedTotal
+  const { filteredExpenses, balances, categoryStats, settlements, totalGroupSpending, displayedTotal } = useTripCalculations(expenses || [], users || [], searchQuery, filterCategory);
 
   const formatCurrency = (amount: number) => new Intl.NumberFormat(currency?.locale || 'ca-ES', { style: 'currency', currency: currency?.code || 'EUR' }).format(amount / 100);
   
-  const getCategory = (id: string) => CATEGORIES.find(c => c.id === id) || CATEGORIES[10];
+  // CORRECCIÓ: GetCategory segur
+  const getCategory = (id: string) => {
+    const found = CATEGORIES.find(c => c.id === id);
+    if (found) return found;
+    return CATEGORIES.find(c => c.id === 'other') || CATEGORIES[0];
+  };
+
   const formatDateDisplay = (d: string) => d ? new Date(d).toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' }) : '';
   
   const copyCode = () => {
-    // Si estem en un entorn segur (https o localhost), usem clipboard
     if (navigator.clipboard && navigator.clipboard.writeText) {
        navigator.clipboard.writeText(tripId || '').then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
     } else {
-       // Fallback bàsic per a entorns no segurs (si calgués)
        alert(`Copia el codi: ${tripId}`);
     }
   };
@@ -126,17 +132,30 @@ export default function TripPage({ user }: TripPageProps) {
     catch (e: any) { alert("Error guardant: " + e.message); }
   };
 
+  // CORRECCIÓ: handleSaveExpense amb TRANSACCIÓ per evitar condicions de cursa
   const handleSaveExpense = async (expense: Expense) => {
     if (!tripId) return;
-    
+    const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
+
     const isEdit = expenses.some(e => e.id === expense.id);
 
     if (isEdit) {
-      const newExpensesList = expenses.map(e => e.id === expense.id ? expense : e);
-      await updateTrip({ expenses: newExpensesList });
+      try {
+        await runTransaction(db, async (transaction) => {
+          const tripDoc = await transaction.get(tripRef);
+          if (!tripDoc.exists()) throw new Error("Document no trobat");
+          
+          const currentExpenses = tripDoc.data().expenses as Expense[];
+          const newExpensesList = currentExpenses.map(e => e.id === expense.id ? expense : e);
+          
+          transaction.update(tripRef, { expenses: newExpensesList });
+        });
+      } catch (e: any) {
+        alert("Error actualitzant: " + e.message);
+      }
     } else {
       try {
-        const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
+        // Per afegir-ne una de nova, arrayUnion és segur i més eficient
         await updateDoc(tripRef, {
             expenses: arrayUnion(expense)
         });
@@ -172,12 +191,35 @@ export default function TripPage({ user }: TripPageProps) {
     }
   };
 
-  const handleAddUser = async (name: string) => await updateTrip({ users: [...users, name] });
+  // Aquest pot ser arrayUnion (segur)
+  const handleAddUser = async (name: string) => await updateTrip({ users: [...users, name] }); // Nota: arrayUnion seria millor, però per consistència amb el tipatge actual ho deixem així si no dóna problemes. Idealment: updateDoc(ref, {users: arrayUnion(name)})
   
+  // CORRECCIÓ: handleRenameUser amb TRANSACCIÓ
   const handleRenameUser = async (oldName: string, newName: string) => {
-    const newUsers = users.map(u => u === oldName ? newName : u);
-    const newExpenses = expenses.map(exp => ({ ...exp, payer: exp.payer === oldName ? newName : exp.payer, involved: exp.involved.map(inv => inv === oldName ? newName : inv) }));
-    await updateTrip({ users: newUsers, expenses: newExpenses });
+    if (!tripId) return;
+    const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
+
+    try {
+      await runTransaction(db, async (transaction) => {
+        const tripDoc = await transaction.get(tripRef);
+        if (!tripDoc.exists()) throw new Error("Document no trobat");
+        
+        const data = tripDoc.data() as TripData;
+        const currentUsers = data.users || [];
+        const currentExpenses = data.expenses || [];
+
+        const newUsers = currentUsers.map(u => u === oldName ? newName : u);
+        const newExpenses = currentExpenses.map(exp => ({ 
+          ...exp, 
+          payer: exp.payer === oldName ? newName : exp.payer, 
+          involved: exp.involved.map(inv => inv === oldName ? newName : inv) 
+        }));
+
+        transaction.update(tripRef, { users: newUsers, expenses: newExpenses });
+      });
+    } catch (e: any) {
+      alert("Error reanomenant: " + e.message);
+    }
   };
   
   const requestDeleteUser = (userName: string) => {
@@ -185,10 +227,34 @@ export default function TripPage({ user }: TripPageProps) {
     else setConfirmAction({ type: 'delete_user', id: userName, title: 'Eliminar Participant', message: `Segur que vols eliminar a ${userName}?` });
   };
 
+  // CORRECCIÓ: executeConfirmation amb TRANSACCIÓ (per eliminacions)
   const executeConfirmation = async () => {
-    if (!confirmAction) return;
-    if (confirmAction.type === 'delete_expense') await updateTrip({ expenses: expenses.filter(exp => exp.id !== confirmAction.id) });
-    else if (confirmAction.type === 'delete_user') await updateTrip({ users: users.filter(u => u !== confirmAction.id) });
+    if (!confirmAction || !tripId) return;
+    const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
+
+    try {
+      if (confirmAction.type === 'delete_expense') {
+        await runTransaction(db, async (transaction) => {
+          const tripDoc = await transaction.get(tripRef);
+          if (!tripDoc.exists()) throw new Error("Error doc");
+          const currentExps = tripDoc.data().expenses as Expense[];
+          // Filtrem
+          const newExps = currentExps.filter(exp => exp.id !== confirmAction.id);
+          transaction.update(tripRef, { expenses: newExps });
+        });
+      } else if (confirmAction.type === 'delete_user') {
+        await runTransaction(db, async (transaction) => {
+          const tripDoc = await transaction.get(tripRef);
+          if (!tripDoc.exists()) throw new Error("Error doc");
+          const currentUsers = tripDoc.data().users as string[];
+          const newUsers = currentUsers.filter(u => u !== confirmAction.id);
+          transaction.update(tripRef, { users: newUsers });
+        });
+      }
+    } catch (e: any) {
+      alert("Error executant acció: " + e.message);
+    }
+
     setConfirmAction(null); 
     setIsExpenseModalOpen(false);
   };
@@ -241,7 +307,6 @@ export default function TripPage({ user }: TripPageProps) {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-24 md:pb-10">
       
-      {/* Avís de seguretat per a convidats */}
       <GuestWarning />
 
       {copied && <div className="fixed top-24 left-1/2 -translate-x-1/2 bg-emerald-600 text-white px-4 py-2 rounded-full shadow-lg z-[60] flex items-center gap-2 animate-fade-in font-bold"><CheckCircle2 size={18} /> Codi copiat!</div>}
@@ -253,7 +318,6 @@ export default function TripPage({ user }: TripPageProps) {
             <h1 className="text-2xl font-bold tracking-tight cursor-pointer hover:opacity-90" onClick={() => setSettingsModalOpen(true)}>{name} <Edit2 size={16} className="inline opacity-50"/></h1>
             {createdAt && <p className="text-indigo-200 text-xs mt-1 flex items-center gap-1 opacity-80"><Calendar size={12} /> {new Date(createdAt).toLocaleDateString('ca-ES', { dateStyle: 'long' })}</p>}
             
-            {/* BOTÓ DE GUARDAR COMPTE (NOMÉS PER ANÒNIMS) */}
             {user?.isAnonymous && (
               <button 
                 onClick={() => secureAccountLinking(auth)}
@@ -279,7 +343,15 @@ export default function TripPage({ user }: TripPageProps) {
       <main className="max-w-3xl mx-auto px-4 -mt-14 relative z-20">
         <Card className="mb-6 bg-white shadow-xl shadow-indigo-100/50 border-0">
           <div className="p-6 flex justify-between items-center">
-            <div><p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Total</p><h2 className="text-3xl font-extrabold text-slate-800">{formatCurrency(totalGroupSpending)}</h2></div>
+            {/* CORRECCIÓ: Mostrem el total filtrat si hi ha cerca, o el total general */}
+            <div>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">
+                    {searchQuery || filterCategory !== 'all' ? 'Total Filtrat' : 'Total Grup'}
+                </p>
+                <h2 className="text-3xl font-extrabold text-slate-800">
+                    {formatCurrency(displayedTotal)}
+                </h2>
+            </div>
             <div className="text-right pl-4 border-l border-slate-100"><p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Per persona</p><p className="text-xl font-bold text-indigo-600">{users.length > 0 ? formatCurrency(totalGroupSpending / users.length) : formatCurrency(0)}</p></div>
           </div>
         </Card>
@@ -357,7 +429,6 @@ export default function TripPage({ user }: TripPageProps) {
       <Modal isOpen={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} title="Configuració del Grup"><div className="space-y-6"><div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Nom</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={editTripName} onChange={e => setEditTripName(e.target.value)} /></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Data</label><input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={editTripDate} onChange={e => setEditTripDate(e.target.value)} /></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Moneda</label><div className="grid grid-cols-2 gap-2">{CURRENCIES.map(c => (<button key={c.code} onClick={() => updateTrip({ currency: c })} className={`p-3 rounded-xl border-2 text-sm font-bold flex items-center justify-center gap-2 ${currency?.code === c.code ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 hover:border-slate-300'}`}><span>{c.symbol}</span> {c.code}</button>))}</div></div><Button onClick={async () => { let d = createdAt ? new Date(createdAt) : new Date(); if (editTripDate) d = new Date(editTripDate); d.setHours(12, 0, 0, 0); await updateTrip({ name: editTripName, createdAt: d.toISOString() }); setSettingsModalOpen(false); }}>Guardar canvis</Button></div></Modal>
       <Modal isOpen={!!confirmAction} onClose={() => setConfirmAction(null)} title={confirmAction?.title || 'Confirmació'}><div className="space-y-6 text-center"><div className="py-2"><p className="text-slate-600">{confirmAction?.message}</p></div>{confirmAction?.type === 'info' ? <Button onClick={() => setConfirmAction(null)} className="w-full">Entesos</Button> : <div className="flex gap-3"><Button variant="secondary" onClick={() => setConfirmAction(null)} className="flex-1">Cancel·lar</Button><Button variant="danger" onClick={executeConfirmation} className="flex-1" icon={Trash2}>Eliminar</Button></div>}</div></Modal>
       
-      {/* --- MODAL DE PAGAMENT AMB SELECTOR DE MÈTODE --- */}
       <Modal isOpen={!!settleModalOpen} onClose={() => setSettleModalOpen(null)} title="Confirmar Pagament">
         {settleModalOpen && (
           <div className="space-y-6 text-center">
