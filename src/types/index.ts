@@ -35,6 +35,8 @@ export interface TripData {
   expenses: Expense[];
   currency: Currency;
   createdAt: string;
+  // --- NOU CAMP ---
+  memberUids?: string[]; // Llista d'IDs d'usuaris de Google vinculats a aquest viatge
 }
 
 export interface Balance {

@@ -3,9 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { 
   Plus, Users, Receipt, ArrowRightLeft, Trash2, CheckCircle2, 
   ChevronRight, Search, Edit2, Info, Settings, Share2, LogOut, 
-  Loader2, Check, Calendar, AlertTriangle, Download 
+  Loader2, Check, Calendar, AlertTriangle, Download, Save 
 } from 'lucide-react';
-import { doc, onSnapshot, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, arrayUnion } from 'firebase/firestore'; // Afegit arrayUnion
 import { User } from 'firebase/auth';
 
 import Card from '../components/Card';
@@ -14,11 +14,12 @@ import Modal from '../components/Modal';
 import DonutChart from '../components/DonutChart';
 import ExpenseModal from '../components/modals/ExpenseModal';
 import GroupModal from '../components/modals/GroupModal';
-import { db, appId } from '../config/firebase';
+import { db, appId, auth } from '../config/firebase';
 import { CURRENCIES, CATEGORIES } from '../utils/constants';
 import { useTripCalculations } from '../hooks/useTripCalculations';
 import { TripData, Expense, CategoryId, Settlement } from '../types';
 import { generatePDF } from '../utils/exportPdf';
+import { secureAccountLinking } from '../utils/authUtils';
 
 interface TripPageProps {
   user: User | null;
@@ -43,7 +44,7 @@ export default function TripPage({ user }: TripPageProps) {
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [settleModalOpen, setSettleModalOpen] = useState<Settlement | null>(null);
   
-  // --- NOU ESTAT: MÈTODE DE PAGAMENT ---
+  // --- ESTAT: MÈTODE DE PAGAMENT ---
   const [settleMethod, setSettleMethod] = useState('Bizum');
 
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -76,6 +77,25 @@ export default function TripPage({ user }: TripPageProps) {
     }, (err) => { console.error(err); setError(err.message); setLoading(false); });
     return () => unsubscribe();
   }, [tripId]);
+
+  // --- NOU: AUTO-VINCULACIÓ D'USUARI ---
+  // Si l'usuari està loguejat i entra al viatge, el vinculem automàticament a la seva llista "Els meus viatges"
+  useEffect(() => {
+    if (user && tripData && tripId) {
+      const userUid = user.uid;
+      // Comprovem si l'UID de l'usuari ja està a la llista memberUids del viatge
+      const currentMembers = tripData.memberUids || [];
+
+      if (!currentMembers.includes(userUid)) {
+        // Si no hi és, l'afegim a la base de dades
+        const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
+        updateDoc(tripRef, { 
+          memberUids: arrayUnion(userUid) 
+        }).catch(err => console.error("Error auto-vinculant usuari:", err));
+      }
+    }
+  }, [user, tripData, tripId]);
+
 
   // 2. Helpers i Hooks
   const { users, expenses, currency = CURRENCIES[0], name, createdAt } = tripData || { users: [], expenses: [] };
@@ -131,7 +151,6 @@ export default function TripPage({ user }: TripPageProps) {
     
     const repayment: Expense = { 
       id: Date.now(), 
-      // --- CANVI: Incloem el mètode de pagament al títol ---
       title: `Pagament deute (${settleMethod})`, 
       amount: settleModalOpen.amount, 
       payer: settleModalOpen.from, 
@@ -182,6 +201,18 @@ export default function TripPage({ user }: TripPageProps) {
             <div className="flex items-center gap-2 mb-2"><button className="bg-white/20 p-1.5 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors" onClick={() => { localStorage.removeItem('cc-last-trip-id'); navigate('/'); }}><LogOut className="text-indigo-100" size={16} /></button><span className="text-indigo-200 text-xs font-bold tracking-wider uppercase">En línia • {tripId}</span></div>
             <h1 className="text-2xl font-bold tracking-tight cursor-pointer hover:opacity-90" onClick={() => setSettingsModalOpen(true)}>{name} <Edit2 size={16} className="inline opacity-50"/></h1>
             {createdAt && <p className="text-indigo-200 text-xs mt-1 flex items-center gap-1 opacity-80"><Calendar size={12} /> {new Date(createdAt).toLocaleDateString('ca-ES', { dateStyle: 'long' })}</p>}
+            
+            {/* BOTÓ DE GUARDAR COMPTE (NOMÉS PER ANÒNIMS) */}
+            {user?.isAnonymous && (
+              <button 
+                onClick={() => secureAccountLinking(auth)}
+                className="mt-3 text-xs font-bold bg-amber-500/20 text-amber-100 border border-amber-400/40 px-3 py-1.5 rounded-lg flex items-center gap-2 hover:bg-amber-500/30 transition-all animate-fade-in"
+              >
+                <Save size={14} />
+                Guardar compte (evitar pèrdua de dades)
+              </button>
+            )}
+            
           </div>
           <div className="flex gap-2">
             <button onClick={handleExportPDF} className="bg-white/20 hover:bg-white/30 p-2.5 rounded-xl transition-colors backdrop-blur-md text-indigo-100" title="Exportar PDF">
