@@ -5,7 +5,7 @@ import {
   ChevronRight, Search, Edit2, Info, Settings, Share2, LogOut, 
   Loader2, Check, Calendar, AlertTriangle, Download, Save 
 } from 'lucide-react';
-import { doc, onSnapshot, updateDoc, arrayUnion } from 'firebase/firestore'; // Afegit arrayUnion
+import { doc, onSnapshot, updateDoc, arrayUnion } from 'firebase/firestore';
 import { User } from 'firebase/auth';
 
 import Card from '../components/Card';
@@ -61,6 +61,10 @@ export default function TripPage({ user }: TripPageProps) {
 
   useEffect(() => {
     if (!tripId) return;
+    
+    // DEBUG: Diagnòstic de connexió per veure a la consola si l'error persisteix
+    console.log("🔍 Connectant a viatge:", tripId, "Projecte:", auth.app.options.projectId);
+
     setLoading(true);
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
@@ -79,15 +83,12 @@ export default function TripPage({ user }: TripPageProps) {
   }, [tripId]);
 
   // --- NOU: AUTO-VINCULACIÓ D'USUARI ---
-  // Si l'usuari està loguejat i entra al viatge, el vinculem automàticament a la seva llista "Els meus viatges"
   useEffect(() => {
     if (user && tripData && tripId) {
       const userUid = user.uid;
-      // Comprovem si l'UID de l'usuari ja està a la llista memberUids del viatge
       const currentMembers = tripData.memberUids || [];
 
       if (!currentMembers.includes(userUid)) {
-        // Si no hi és, l'afegim a la base de dades
         const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
         updateDoc(tripRef, { 
           memberUids: arrayUnion(userUid) 
@@ -169,11 +170,13 @@ export default function TripPage({ user }: TripPageProps) {
   };
 
   const handleAddUser = async (name: string) => await updateTrip({ users: [...users, name] });
+  
   const handleRenameUser = async (oldName: string, newName: string) => {
     const newUsers = users.map(u => u === oldName ? newName : u);
     const newExpenses = expenses.map(exp => ({ ...exp, payer: exp.payer === oldName ? newName : exp.payer, involved: exp.involved.map(inv => inv === oldName ? newName : inv) }));
     await updateTrip({ users: newUsers, expenses: newExpenses });
   };
+  
   const requestDeleteUser = (userName: string) => {
     if (expenses.some(e => e.payer === userName || e.involved.includes(userName))) setConfirmAction({ type: 'info', title: 'Acció no permesa', message: "Aquest usuari té despeses assignades." });
     else setConfirmAction({ type: 'delete_user', id: userName, title: 'Eliminar Participant', message: `Segur que vols eliminar a ${userName}?` });
@@ -188,7 +191,17 @@ export default function TripPage({ user }: TripPageProps) {
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600"/></div>;
-  if (error) return <div className="min-h-screen flex flex-col items-center justify-center gap-4"><AlertTriangle className="text-red-500" size={40}/><p className="text-slate-600 font-bold">{error}</p><Button variant="secondary" onClick={() => { localStorage.removeItem('cc-last-trip-id'); navigate('/'); }}>Tornar a l'inici</Button></div>;
+  
+  if (error) return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+        <AlertTriangle className="text-red-500" size={40}/>
+        <p className="text-slate-600 font-bold">{error}</p>
+        <Button variant="secondary" onClick={() => { localStorage.removeItem('cc-last-trip-id'); navigate('/'); }}>
+            Tornar a l'inici
+        </Button>
+    </div>
+  );
+  
   if (!tripData) return null;
 
   return (

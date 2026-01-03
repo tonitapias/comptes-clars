@@ -2,28 +2,22 @@ import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
-
 import { auth } from './config/firebase';
 import LandingPage from './pages/LandingPage';
-// CORRECCIÓ AQUÍ: Importem TripPage, no TripDetails
 import TripPage from './pages/TripPage';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [lastTripId, setLastTripId] = useState<string | null>(null);
+  
+  // Eliminem l'estat lastTripId d'aquí per evitar redireccions automàtiques
+  // El gestionarem dins de LandingPage o simplement deixarem que l'usuari navegui.
 
   useEffect(() => {
-    const storedTripId = localStorage.getItem('cc-last-trip-id');
-    if (storedTripId) {
-      setLastTripId(storedTripId);
-    }
-
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setAuthLoading(false);
     });
-
     return () => unsubscribe();
   }, []);
 
@@ -39,18 +33,9 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route 
-          path="/" 
-          element={
-            user && lastTripId ? (
-              <Navigate to={`/trip/${lastTripId}`} replace />
-            ) : (
-              <LandingPage user={user} />
-            )
-          } 
-        />
+        {/* CANVI CRÍTIC: Eliminada la redirecció automàtica */}
+        <Route path="/" element={<LandingPage user={user} />} />
         
-        {/* CORRECCIÓ AQUÍ: Fem servir <TripPage /> */}
         <Route path="/trip/:tripId" element={<TripPage user={user} />} />
         
         <Route path="*" element={<Navigate to="/" replace />} />

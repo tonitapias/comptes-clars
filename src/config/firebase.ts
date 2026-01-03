@@ -1,5 +1,4 @@
 import { initializeApp } from "firebase/app";
-// 1. IMPORTEM 'setPersistence' i 'browserLocalPersistence'
 import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
@@ -15,16 +14,17 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
-// 2. AFEGIM AQUEST BLOC: Això força que la sessió es guardi al disc del mòbil
+// Configuració de persistència simplificada i robusta per evitar problemes de sessió
 setPersistence(auth, browserLocalPersistence)
   .then(() => {
-     // Persistència configurada correctament
-     console.log("Sessió configurada per recordar l'usuari.");
+     console.log("✅ Sessió configurada: LOCAL");
   })
   .catch((error) => {
-     console.error("Error configurant la persistència:", error);
+     console.error("❌ Error persistència:", error);
   });
 
 export const db = getFirestore(app);
-// Assegura't que l'appId és correcte (el nom de la col·lecció a Firestore)
-export const appId = "comptes-clars";
+
+// --- CORRECCIÓ CLAU AQUÍ ---
+// Canviem 'comptes-clars' per 'comptes-clars-v1' perquè coincideixi amb la teva BD real.
+export const appId = "comptes-clars-v1";
