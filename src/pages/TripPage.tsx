@@ -62,9 +62,6 @@ export default function TripPage({ user }: TripPageProps) {
   useEffect(() => {
     if (!tripId) return;
     
-    // DEBUG: Diagnòstic de connexió per veure a la consola si l'error persisteix
-    console.log("🔍 Connectant a viatge:", tripId, "Projecte:", auth.app.options.projectId);
-
     setLoading(true);
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
@@ -82,7 +79,7 @@ export default function TripPage({ user }: TripPageProps) {
     return () => unsubscribe();
   }, [tripId]);
 
-  // --- NOU: AUTO-VINCULACIÓ D'USUARI ---
+  // --- AUTO-VINCULACIÓ D'USUARI ---
   useEffect(() => {
     if (user && tripData && tripId) {
       const userUid = user.uid;
@@ -108,7 +105,13 @@ export default function TripPage({ user }: TripPageProps) {
   const formatDateDisplay = (d: string) => d ? new Date(d).toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' }) : '';
   
   const copyCode = () => {
-    navigator.clipboard.writeText(tripId || '').then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+    // Si estem en un entorn segur (https o localhost), usem clipboard
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+       navigator.clipboard.writeText(tripId || '').then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+    } else {
+       // Fallback bàsic per a entorns no segurs (si calgués)
+       alert(`Copia el codi: ${tripId}`);
+    }
   };
 
   const handleExportPDF = () => {
@@ -190,6 +193,37 @@ export default function TripPage({ user }: TripPageProps) {
     setIsExpenseModalOpen(false);
   };
 
+  // --- COMPONENT INTERN: AVÍS CONVIDAT ---
+  const GuestWarning = () => {
+    if (!user || !user.isAnonymous) return null;
+    return (
+      <div className="bg-amber-50 border-b border-amber-100 p-3 flex flex-col md:flex-row items-center justify-between gap-3 text-sm animate-fade-in relative z-30">
+        <div className="flex items-center gap-2 text-amber-800">
+          <AlertTriangle size={16} className="shrink-0" />
+          <span>
+            <strong>Mode Convidat:</strong> Si tanques el navegador, podries perdre l'accés.
+          </span>
+        </div>
+        <div className="flex gap-2 w-full md:w-auto">
+           <button 
+             onClick={copyCode} 
+             className="flex-1 md:flex-none bg-white border border-amber-200 text-amber-900 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-amber-100 transition flex items-center justify-center gap-2"
+           >
+             {copied ? <Check size={14}/> : <Share2 size={14}/>}
+             Copiar Enllaç
+           </button>
+           <button 
+             onClick={() => secureAccountLinking(auth)}
+             className="flex-1 md:flex-none bg-amber-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-amber-700 transition flex items-center justify-center gap-2 shadow-sm"
+           >
+             <Save size={14}/>
+             Guardar Grup
+           </button>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600"/></div>;
   
   if (error) return (
@@ -206,6 +240,10 @@ export default function TripPage({ user }: TripPageProps) {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-24 md:pb-10">
+      
+      {/* Avís de seguretat per a convidats */}
+      <GuestWarning />
+
       {copied && <div className="fixed top-24 left-1/2 -translate-x-1/2 bg-emerald-600 text-white px-4 py-2 rounded-full shadow-lg z-[60] flex items-center gap-2 animate-fade-in font-bold"><CheckCircle2 size={18} /> Codi copiat!</div>}
       
       <header className="bg-gradient-to-br from-indigo-800 to-indigo-600 text-white pt-8 pb-20 px-6 shadow-xl relative overflow-hidden">
@@ -222,7 +260,7 @@ export default function TripPage({ user }: TripPageProps) {
                 className="mt-3 text-xs font-bold bg-amber-500/20 text-amber-100 border border-amber-400/40 px-3 py-1.5 rounded-lg flex items-center gap-2 hover:bg-amber-500/30 transition-all animate-fade-in"
               >
                 <Save size={14} />
-                Guardar compte (evitar pèrdua de dades)
+                Connectar amb Google (Guardar dades)
               </button>
             )}
             
