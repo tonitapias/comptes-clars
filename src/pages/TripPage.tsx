@@ -5,7 +5,10 @@ import {
   ChevronRight, Search, Edit2, Info, Settings, Share2, LogOut, 
   Loader2, Check, Calendar, AlertTriangle, Download, Save 
 } from 'lucide-react';
-import { doc, onSnapshot, updateDoc, arrayUnion, runTransaction } from 'firebase/firestore'; 
+import { 
+  doc, onSnapshot, updateDoc, arrayUnion, runTransaction, 
+  collection, deleteDoc, addDoc, writeBatch 
+} from 'firebase/firestore'; //
 import { User } from 'firebase/auth';
 
 import Card from '../components/Card';
@@ -14,7 +17,7 @@ import Modal from '../components/Modal';
 import DonutChart from '../components/DonutChart';
 import ExpenseModal from '../components/modals/ExpenseModal';
 import GroupModal from '../components/modals/GroupModal';
-import { db, appId, auth } from '../config/firebase';
+import { db, appId, auth } from '../config/firebase'; //
 import { CURRENCIES, CATEGORIES } from '../utils/constants';
 import { useTripCalculations } from '../hooks/useTripCalculations';
 import { TripData, Expense, CategoryId, Settlement } from '../types';
@@ -28,7 +31,13 @@ interface TripPageProps {
 export default function TripPage({ user }: TripPageProps) {
   const { tripId } = useParams<{ tripId: string }>();
   const navigate = useNavigate();
+  
+  // Dades principals del document del viatge (Configuració i Usuaris)
   const [tripData, setTripData] = useState<TripData | null>(null);
+  
+  // NOVA LLISTA: Les despeses es carreguen des de la subcol·lecció
+  const [expensesList, setExpensesList] = useState<Expense[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,7 +63,7 @@ export default function TripPage({ user }: TripPageProps) {
   const [editTripName, setEditTripName] = useState('');
   const [editTripDate, setEditTripDate] = useState('');
 
-  // 1. Càrrega de dades
+  // 1. Càrrega de dades del VIATGE (Sense despeses)
   useEffect(() => {
     if (tripId) localStorage.setItem('cc-last-trip-id', tripId);
   }, [tripId]);
@@ -71,6 +80,7 @@ export default function TripPage({ user }: TripPageProps) {
         setTripData(data);
         setEditTripName(data.name);
         setEditTripDate(data.createdAt ? new Date(data.createdAt).toISOString().split('T')[0] : '');
+        // Nota: Les expenses de 'data' les ignorem perquè ara venen de la subcol·lecció
         setLoading(false);
       } else {
         setError("Grup no trobat");
@@ -78,7 +88,6 @@ export default function TripPage({ user }: TripPageProps) {
       }
     }, (err) => { 
       console.error(err); 
-      // CORRECCIÓ: Missatge d'error amigable per permisos
       if (err.code === 'permission-denied') {
           setError("⛔ No tens accés a aquest grup. Demana a algú de dins que t'afegeixi primer.");
       } else {
@@ -86,6 +95,26 @@ export default function TripPage({ user }: TripPageProps) {
       }
       setLoading(false); 
     });
+    return () => unsubscribe();
+  }, [tripId]);
+
+  // 2. NOVA CÀRREGA: Subcol·lecció 'expenses'
+  useEffect(() => {
+    if (!tripId) return;
+
+    const expensesRef = collection(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`, 'expenses');
+    
+    const unsubscribe = onSnapshot(expensesRef, (snapshot) => {
+      const loadedExpenses = snapshot.docs.map(doc => ({
+        id: doc.id, // Important: Ara l'ID és l'ID del document de Firestore (string)
+        ...doc.data()
+      })) as Expense[];
+      
+      setExpensesList(loadedExpenses);
+    }, (err) => {
+      console.error("Error carregant despeses:", err);
+    });
+
     return () => unsubscribe();
   }, [tripId]);
 
@@ -105,10 +134,11 @@ export default function TripPage({ user }: TripPageProps) {
   }, [user, tripData, tripId]);
 
 
-  // 2. Helpers i Hooks
-  const { users, expenses, currency = CURRENCIES[0], name, createdAt } = tripData || { users: [], expenses: [] };
+  // 3. Helpers i Hooks
+  // Ara passem 'expensesList' (de la subcol·lecció) al hook de càlculs
+  const { users, currency = CURRENCIES[0], name, createdAt } = tripData || { users: [], expenses: [] };
   
-  const { filteredExpenses, balances, categoryStats, settlements, totalGroupSpending, displayedTotal } = useTripCalculations(expenses || [], users || [], searchQuery, filterCategory);
+  const { filteredExpenses, balances, categoryStats, settlements, totalGroupSpending, displayedTotal } = useTripCalculations(expensesList, users || [], searchQuery, filterCategory);
 
   const formatCurrency = (amount: number) => new Intl.NumberFormat(currency?.locale || 'ca-ES', { style: 'currency', currency: currency?.code || 'EUR' }).format(amount / 100);
   
@@ -130,7 +160,7 @@ export default function TripPage({ user }: TripPageProps) {
 
   const handleExportPDF = () => {
     if (!tripData) return;
-    generatePDF(name, expenses, balances, settlements, currency.symbol);
+    generatePDF(name, expensesList, balances, settlements, currency.symbol);
   };
 
   const updateTrip = async (newData: Partial<TripData>) => {
@@ -139,47 +169,18 @@ export default function TripPage({ user }: TripPageProps) {
     catch (e: any) { alert("Error guardant: " + e.message); }
   };
 
-  const handleSaveExpense = async (expense: Expense) => {
-    if (!tripId) return;
-    const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
-
-    const isEdit = expenses.some(e => e.id === expense.id);
-
-    if (isEdit) {
-      try {
-        await runTransaction(db, async (transaction) => {
-          const tripDoc = await transaction.get(tripRef);
-          if (!tripDoc.exists()) throw new Error("Document no trobat");
-          
-          // CORRECCIÓ: Protecció contra array undefined
-          const currentExpenses = (tripDoc.data().expenses || []) as Expense[];
-          const newExpensesList = currentExpenses.map(e => e.id === expense.id ? expense : e);
-          
-          transaction.update(tripRef, { expenses: newExpensesList });
-        });
-      } catch (e: any) {
-        alert("Error actualitzant: " + e.message);
-      }
-    } else {
-      try {
-        await updateDoc(tripRef, {
-            expenses: arrayUnion(expense)
-        });
-      } catch (e: any) {
-        alert("Error guardant: " + e.message);
-      }
-    }
-  };
-
+  // --- ACCIONS DE DESPESES (Eliminació) ---
+  // La creació i edició es fa directament dins de ExpenseModal
   const handleDeleteExpense = (id: string | number) => {
     setConfirmAction({ type: 'delete_expense', id, title: 'Eliminar Despesa', message: 'Estàs segur?' });
   };
 
+  // --- LIQUIDACIÓ ---
   const handleSettleDebt = async () => {
     if (!settleModalOpen || !tripId) return;
     
-    const repayment: Expense = { 
-      id: Date.now(), 
+    const repayment = { 
+      // id: No cal, el posa Firestore
       title: `Pagament deute (${settleMethod})`, 
       amount: settleModalOpen.amount, 
       payer: settleModalOpen.from, 
@@ -189,56 +190,81 @@ export default function TripPage({ user }: TripPageProps) {
     };
 
     try {
-        const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
-        await updateDoc(tripRef, { expenses: arrayUnion(repayment) });
+        const expensesRef = collection(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`, 'expenses');
+        await addDoc(expensesRef, repayment);
         setSettleModalOpen(null);
     } catch (e: any) {
         alert("Error liquidant: " + e.message);
     }
   };
 
-  // CORRECCIÓ: Utilitzar arrayUnion per evitar condicions de cursa en afegir usuaris
-  const handleAddUser = async (name: string) => {
+  const handleAddUser = async (userName: string) => {
     if (!tripId) return;
     const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
     try {
       await updateDoc(tripRef, { 
-        users: arrayUnion(name) 
+        users: arrayUnion(userName) 
       });
     } catch (e: any) {
       alert("Error afegint usuari: " + e.message);
     }
   };
   
+  // --- REANOMENAR USUARI (COMPLEX) ---
   const handleRenameUser = async (oldName: string, newName: string) => {
     if (!tripId) return;
     const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
 
     try {
+      // 1. Actualitzar llista d'usuaris al document principal
       await runTransaction(db, async (transaction) => {
         const tripDoc = await transaction.get(tripRef);
         if (!tripDoc.exists()) throw new Error("Document no trobat");
         
         const data = tripDoc.data() as TripData;
         const currentUsers = data.users || [];
-        const currentExpenses = data.expenses || [];
 
         const newUsers = currentUsers.map(u => u === oldName ? newName : u);
-        const newExpenses = currentExpenses.map(exp => ({ 
-          ...exp, 
-          payer: exp.payer === oldName ? newName : exp.payer, 
-          involved: exp.involved.map(inv => inv === oldName ? newName : inv) 
-        }));
-
-        transaction.update(tripRef, { users: newUsers, expenses: newExpenses });
+        transaction.update(tripRef, { users: newUsers });
       });
+
+      // 2. Actualitzar totes les despeses on apareix l'usuari (Batch Write)
+      // Iterem sobre expensesList que ja tenim en memòria
+      const batch = writeBatch(db);
+      let operationsCount = 0;
+
+      expensesList.forEach(exp => {
+        let modified = false;
+        let newPayer = exp.payer;
+        let newInvolved = [...exp.involved];
+
+        if (exp.payer === oldName) {
+            newPayer = newName;
+            modified = true;
+        }
+        if (exp.involved.includes(oldName)) {
+            newInvolved = exp.involved.map(inv => inv === oldName ? newName : inv);
+            modified = true;
+        }
+
+        if (modified) {
+            const expRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`, 'expenses', String(exp.id));
+            batch.update(expRef, { payer: newPayer, involved: newInvolved });
+            operationsCount++;
+        }
+      });
+
+      if (operationsCount > 0) {
+          await batch.commit();
+      }
+
     } catch (e: any) {
       alert("Error reanomenant: " + e.message);
     }
   };
   
   const requestDeleteUser = (userName: string) => {
-    if (expenses.some(e => e.payer === userName || e.involved.includes(userName))) setConfirmAction({ type: 'info', title: 'Acció no permesa', message: "Aquest usuari té despeses assignades." });
+    if (expensesList.some(e => e.payer === userName || e.involved.includes(userName))) setConfirmAction({ type: 'info', title: 'Acció no permesa', message: "Aquest usuari té despeses assignades." });
     else setConfirmAction({ type: 'delete_user', id: userName, title: 'Eliminar Participant', message: `Segur que vols eliminar a ${userName}?` });
   };
 
@@ -248,13 +274,9 @@ export default function TripPage({ user }: TripPageProps) {
 
     try {
       if (confirmAction.type === 'delete_expense') {
-        await runTransaction(db, async (transaction) => {
-          const tripDoc = await transaction.get(tripRef);
-          if (!tripDoc.exists()) throw new Error("Error doc");
-          const currentExps = tripDoc.data().expenses as Expense[];
-          const newExps = currentExps.filter(exp => exp.id !== confirmAction.id);
-          transaction.update(tripRef, { expenses: newExps });
-        });
+        // --- ELIMINAR DESPESA (SUBCOL·LECCIÓ) ---
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`, 'expenses', String(confirmAction.id)));
+      
       } else if (confirmAction.type === 'delete_user') {
         await runTransaction(db, async (transaction) => {
           const tripDoc = await transaction.get(tripRef);
@@ -423,8 +445,8 @@ export default function TripPage({ user }: TripPageProps) {
         initialData={editingExpense} 
         users={users} 
         currency={currency}
-        onSubmit={handleSaveExpense}
-        onDelete={handleDeleteExpense}
+        tripId={tripId!} // PASSEM TRIP ID
+        onDelete={handleDeleteExpense} // PASSEM LA FUNCIÓ D'ELIMINAR
       />
 
       <GroupModal 

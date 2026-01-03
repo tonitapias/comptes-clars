@@ -1,24 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { Trash2 } from 'lucide-react';
+import { collection, addDoc, doc, updateDoc } from 'firebase/firestore'; //
 import Button from '../Button';
 import Modal from '../Modal';
 import { CATEGORIES } from '../../utils/constants';
 import { Expense, CategoryId, Currency } from '../../types';
+import { db, appId } from '../../config/firebase'; //
 
 interface ExpenseModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (expense: Expense) => Promise<void>;
+  // onSubmit: (expense: Expense) => Promise<void>; // ELIMINAT: Ja no ho necessitem
+  tripId: string; // NOVA PROPIETAT: Necessària per saber on guardar
   onDelete?: (id: string | number) => void;
   initialData?: Expense | null;
   users: string[];
   currency: Currency;
 }
 
-export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, initialData, users, currency }: ExpenseModalProps) {
+export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initialData, users, currency }: ExpenseModalProps) {
   const [formData, setFormData] = useState<{
     title: string; amount: string; payer: string; category: CategoryId; involved: string[]; date: string
   }>({ title: '', amount: '', payer: '', category: 'food', involved: [], date: '' });
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -34,7 +39,6 @@ export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, init
       } else {
         setFormData({ 
           title: '', amount: '', 
-          // CORRECCIÓ: Assegurar que hi ha un pagador per defecte si hi ha usuaris
           payer: users.length > 0 ? users[0] : '', 
           category: 'food', involved: [], 
           date: new Date().toISOString().split('T')[0] 
@@ -45,35 +49,53 @@ export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, init
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // CORRECCIÓ: Validar que hi ha pagador
     if (!formData.title || !formData.amount || !formData.payer) return;
     
-    // CORRECCIÓ DATA: Construir la data localment per evitar salts de zona horària
-    let finalDate;
-    if (formData.date) {
-        const [y, m, d] = formData.date.split('-').map(Number);
-        // Creem la data al migdia (12:00) hora LOCAL
-        finalDate = new Date(y, m - 1, d, 12, 0, 0);
-    } else {
-        finalDate = new Date();
+    setIsSubmitting(true);
+
+    try {
+        // 1. Construir la data (igual que abans)
+        let finalDate;
+        if (formData.date) {
+            const [y, m, d] = formData.date.split('-').map(Number);
+            finalDate = new Date(y, m - 1, d, 12, 0, 0);
+        } else {
+            finalDate = new Date();
+        }
+
+        // 2. Netejar l'import
+        const safeAmount = formData.amount.replace(',', '.');
+        const amountInCents = Math.round(parseFloat(safeAmount) * 100);
+
+        // 3. Preparar l'objecte per a Firestore (SENSE ID, l'ID el posa Firestore o el docRef)
+        const expensePayload = {
+          title: formData.title,
+          amount: amountInCents, 
+          payer: formData.payer,
+          category: formData.category,
+          involved: formData.involved.length > 0 ? formData.involved : users,
+          date: finalDate.toISOString()
+        };
+
+        if (initialData) {
+          // --- EDITAR (Subcol·lecció) ---
+          // Referència directa al document de la despesa dins la subcol·lecció
+          const expenseRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', tripId, 'expenses', String(initialData.id));
+          await updateDoc(expenseRef, expensePayload);
+        } else {
+          // --- CREAR (Subcol·lecció) ---
+          // Afegir a la col·lecció 'expenses'
+          const expensesRef = collection(db, 'artifacts', appId, 'public', 'data', 'trips', tripId, 'expenses');
+          await addDoc(expensesRef, expensePayload);
+        }
+
+        onClose();
+    } catch (error) {
+        console.error("Error guardant despesa:", error);
+        alert("Hi ha hagut un error guardant la despesa. Revisa la connexió.");
+    } finally {
+        setIsSubmitting(false);
     }
-
-    // CORRECCIÓ DECIMAL: Gestionar comes i punts
-    const safeAmount = formData.amount.replace(',', '.');
-    const amountInCents = Math.round(parseFloat(safeAmount) * 100);
-
-    const expense: Expense = {
-      id: initialData?.id || Date.now(),
-      title: formData.title,
-      amount: amountInCents, 
-      payer: formData.payer,
-      category: formData.category,
-      involved: formData.involved.length > 0 ? formData.involved : users,
-      date: finalDate.toISOString()
-    };
-
-    await onSubmit(expense);
-    onClose();
   };
 
   const toggleInvolved = (user: string) => {
@@ -126,7 +148,6 @@ export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, init
               </button>
             ))}
           </div>
-          {/* Feedback visual si no hi ha pagador */}
           {!formData.payer && users.length > 0 && <p className="text-xs text-rose-500 mt-1 font-bold">Selecciona qui ha pagat</p>}
         </div>
 
@@ -153,8 +174,9 @@ export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, init
 
         <div className="flex gap-2">
           {initialData && onDelete && <Button variant="danger" className="w-16" icon={Trash2} onClick={(e) => { e.preventDefault(); onDelete(initialData.id); }}></Button>}
-          {/* CORRECCIÓ: Deshabilitar si falta el pagador */}
-          <Button className="flex-1 text-lg py-4" type="submit" disabled={!formData.amount || !formData.title || !formData.payer}>{initialData ? "Guardar" : "Afegir"}</Button>
+          <Button className="flex-1 text-lg py-4" type="submit" disabled={!formData.amount || !formData.title || !formData.payer || isSubmitting}>
+            {isSubmitting ? 'Guardant...' : (initialData ? "Guardar" : "Afegir")}
+          </Button>
         </div>
       </form>
     </Modal>
