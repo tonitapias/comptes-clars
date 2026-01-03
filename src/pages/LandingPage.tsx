@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Plus, Users, ArrowRight, Wallet, Loader2, LogOut, History, ChevronRight, MapPin, User as UserIcon, Trash2, Sparkles 
+  Plus, Users, ArrowRight, Wallet, Loader2, LogOut, History, ChevronRight, MapPin, User as UserIcon, Trash2, Sparkles, KeyRound 
 } from 'lucide-react';
 import { collection, query, where, getDocs, doc, setDoc, updateDoc, arrayRemove } from 'firebase/firestore';
 import { GoogleAuthProvider, signInWithPopup, signOut, User } from 'firebase/auth';
@@ -76,8 +76,10 @@ export default function LandingPage({ user }: LandingPageProps) {
     if (!inputValue.trim()) return;
 
     if (actionState === 'joining') {
+        // Lògica per unir-se (serveix per a tots)
         navigate(`/trip/${inputValue}`);
     } else if (actionState === 'creating' && !isGuest) {
+        // Lògica per crear (registrats)
         const finalName = creatorName.trim() || user?.displayName?.split(' ')[0] || 'Admin';
         setIsSubmitting(true);
         try {
@@ -116,11 +118,10 @@ export default function LandingPage({ user }: LandingPageProps) {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 relative overflow-hidden font-sans selection:bg-indigo-100">
       
-      {/* FONS AMBIENTAL - Ajustat per no molestar */}
+      {/* FONS AMBIENTAL */}
       <div className="absolute top-[-10%] left-[-10%] w-[120%] h-[50%] bg-indigo-200/20 rounded-full blur-[100px] pointer-events-none"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[100%] h-[50%] bg-purple-200/20 rounded-full blur-[100px] pointer-events-none"></div>
 
-      {/* CONTENIDOR PRINCIPAL - Més ample (max-w-lg) */}
       <div className="w-full max-w-lg relative z-10 flex flex-col gap-6">
         
         {/* ENCAPÇALAMENT */}
@@ -135,7 +136,6 @@ export default function LandingPage({ user }: LandingPageProps) {
                  </div>
              )}
              
-             {/* Textos més grans */}
              <h1 className="text-3xl md:text-4xl font-black text-slate-900 leading-tight tracking-tight">
                {!isGuest ? (
                  <span className="bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700">
@@ -223,17 +223,22 @@ export default function LandingPage({ user }: LandingPageProps) {
                     <div className="flex flex-col h-full min-h-[400px]">
                         <div className="flex items-center justify-between mb-6 px-1">
                             <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Els teus grups</h3>
+                            {/* Botó per CREAR nou grup */}
                             <button onClick={() => setActionState(actionState === 'creating' ? 'idle' : 'creating')} className="group flex items-center gap-2 bg-indigo-50 hover:bg-indigo-600 text-indigo-600 hover:text-white pl-4 pr-3 py-2 rounded-full transition-all shadow-sm">
                                 <span className="text-xs font-bold">NOU</span>
                                 <div className="bg-white/20 rounded-full p-0.5"><Plus size={18} /></div>
                             </button>
                         </div>
 
+                        {/* Formulari de CREAR */}
                         {actionState === 'creating' && (
                             <form onSubmit={handleQuickAction} className="animate-fade-in mb-6 bg-slate-50 p-4 rounded-2xl border border-slate-200">
                                 <div className="space-y-4">
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1 ml-1">Nom del viatge</label>
+                                        <div className="flex justify-between items-center mb-1">
+                                            <label className="block text-xs font-bold text-slate-400 uppercase ml-1">Nom del viatge</label>
+                                            <button type="button" onClick={resetAction} className="text-xs font-bold text-slate-400 hover:text-slate-600">Cancel·lar</button>
+                                        </div>
                                         <input autoFocus type="text" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none text-base font-bold text-slate-800 focus:ring-2 focus:ring-indigo-100 transition" placeholder="Ex: Menorca" value={inputValue} onChange={e => setInputValue(e.target.value)}/>
                                     </div>
                                     
@@ -247,6 +252,32 @@ export default function LandingPage({ user }: LandingPageProps) {
                                 </div>
                             </form>
                         )}
+                        
+                        {/* Formulari de UNIR-SE (NOVA SECCIÓ PER A REGISTRATS) */}
+                        {actionState === 'joining' && (
+                            <div className="animate-fade-in mb-6 bg-white p-4 rounded-2xl border border-indigo-100 shadow-sm ring-4 ring-indigo-50">
+                                <div className="flex justify-between items-center mb-3">
+                                    <label className="text-xs font-bold text-indigo-500 uppercase tracking-wider flex items-center gap-1"><KeyRound size={14}/> Codi d'invitació</label>
+                                    <button type="button" onClick={resetAction} className="text-xs font-bold text-slate-400 hover:text-slate-600">Tancar</button>
+                                </div>
+                                <form onSubmit={handleQuickAction} className="flex gap-2">
+                                    <input 
+                                        autoFocus
+                                        type="text" 
+                                        className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition text-base font-bold text-slate-800 placeholder:font-normal uppercase tracking-widest font-mono"
+                                        placeholder="XXX-YYY"
+                                        value={inputValue}
+                                        onChange={e => setInputValue(e.target.value)}
+                                    />
+                                    <button 
+                                        disabled={!inputValue || isSubmitting} 
+                                        className="bg-indigo-600 text-white px-5 rounded-xl font-bold shadow-md hover:bg-indigo-700 transition"
+                                    >
+                                        {isSubmitting ? <Loader2 className="animate-spin" size={20}/> : <ArrowRight size={20}/>}
+                                    </button>
+                                </form>
+                            </div>
+                        )}
 
                         <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar -mr-2">
                              {loadingTrips ? (
@@ -258,9 +289,7 @@ export default function LandingPage({ user }: LandingPageProps) {
                                 <div className="space-y-4 pb-4">
                                     {myTrips.map(trip => (
                                         <div key={trip.id} onClick={() => navigate(`/trip/${trip.id}`)} className="relative overflow-hidden bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-lg hover:border-indigo-200 cursor-pointer transition-all group">
-                                            {/* Decoració de fons més gran */}
                                             <div className="absolute right-0 top-0 w-24 h-24 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-bl-[4rem] -z-0 group-hover:scale-150 transition-transform duration-500 origin-top-right"></div>
-                                            
                                             <div className="relative z-10 flex justify-between items-center">
                                                 <div>
                                                     <h4 className="font-bold text-slate-800 text-xl group-hover:text-indigo-700 transition-colors mb-1">{trip.name}</h4>
@@ -294,10 +323,20 @@ export default function LandingPage({ user }: LandingPageProps) {
                                         <Sparkles className="text-indigo-400" size={32} />
                                     </div>
                                     <p className="text-lg font-bold text-slate-600">Comencem?</p>
-                                    <p className="text-sm text-slate-400 mt-2 max-w-[200px] leading-relaxed">Crea el teu primer grup amb el botó "Nou" de dalt a la dreta.</p>
+                                    <p className="text-sm text-slate-400 mt-2 max-w-[200px] leading-relaxed">Crea el teu primer grup amb el botó "Nou".</p>
                                 </div>
                             )}
                         </div>
+
+                        {/* PEU DE PÀGINA: ENLLAÇ PER UNIR-SE (Per a registrats) */}
+                        {actionState === 'idle' && (
+                             <div className="mt-4 pt-4 border-t border-slate-100 text-center">
+                                <button onClick={() => setActionState('joining')} className="text-sm font-bold text-slate-400 hover:text-indigo-600 transition flex items-center justify-center gap-2 w-full">
+                                    <KeyRound size={16}/>
+                                    Tens un codi d'invitació?
+                                </button>
+                             </div>
+                        )}
                     </div>
                 )}
             </div>
