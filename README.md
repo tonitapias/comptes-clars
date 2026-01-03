@@ -1,62 +1,57 @@
-# 💸 Comptes Clars
+# Comptes Clars 💸
 
-**Comptes Clars** és una aplicació web moderna i robusta per gestionar despeses compartides en grups. Ideal per a viatges, companys de pis, regals conjunts o sopars d'amics.
+**Comptes Clars** és una aplicació web moderna dissenyada per gestionar i dividir despeses de viatges o esdeveniments en grup de manera senzilla i transparent.
 
-L'aplicació permet crear grups, afegir despeses en temps real, veure qui deu a qui i liquidar els deutes de la manera més eficient possible.
+L'aplicació calcula automàticament qui deu diners a qui, permetent liquidar deutes de la manera més eficient possible. Funciona com una **PWA (Progressive Web App)**, la qual cosa significa que es pot instal·lar al mòbil i utilitzar com una aplicació nativa.
 
-![Comptes Clars Screenshot](https://via.placeholder.com/800x400?text=Comptes+Clars+Preview)
+## 🚀 Característiques Principals
 
-## ✨ Característiques Principals
+- **Creació de Grups:** Crea viatges i comparteix el codi únic perquè els amics s'hi uneixin.
+- **Gestió de Despeses:** Afegeix despeses especificant qui ha pagat i qui hi participa (per categories).
+- **Càlcul de Balanços:** Algoritme automàtic per minimitzar el nombre de transferències necessàries per quadrar comptes.
+- **Núvol i Sincronització:** Tot es guarda a **Firebase (Firestore)** en temps real.
+- **Sistema d'Usuaris:**
+  - Login segur amb **Google**.
+  - Secció **"Els meus viatges"** per recuperar grups antics.
+  - Opció per abandonar/treure viatges de la llista personal.
+- **Exportació:** Genera un informe en **PDF** amb el resum de despeses.
+- **100% Instal·lable (PWA):** Disseny *mobile-first*, funciona sense connexió (memòria cau) i es pot afegir a la pantalla d'inici.
 
-* **🎯 Precisió Comptable Absoluta:** Sistema intern basat en enters (cèntims) per eliminar completament els errors d'arrodoniment de coma flotant.
-* **👥 Gestió de Grups:** Creació de grups il·limitats per a qualsevol context (viatge, pis, esdeveniment...).
-* **⚡ Temps Real i Concurrent:** Sincronització instantània amb Firebase. Ús d'`arrayUnion` per garantir la integritat de les dades quan múltiples usuaris editen alhora.
-* **📄 Exportació a PDF:** Generació d'informes professionals amb el resum de despeses, balanços i pla de liquidació.
-* **🧠 Algorisme de Liquidació:** Càlcul automàtic de "qui paga a qui" per minimitzar el nombre de transaccions necessàries.
-* **💸 Liquidació Detallada:** Registre de pagaments especificant el mètode (Bizum, Efectiu, Transferència, PayPal).
-* **📊 Estadístiques Visuals:** Gràfics de distribució de despeses per categories.
-* **📱 Disseny Responsive:** Interfície adaptada a mòbils i escriptori amb una experiència d'usuari (UX) fluida.
+## 🛠️ Tecnologies Utilitzades
 
-## 🛠️ Stack Tecnològic
+- **Frontend:** React, TypeScript, Vite.
+- **Estils:** Tailwind CSS.
+- **Base de Dades:** Firebase Firestore.
+- **Autenticació:** Firebase Auth (Google Provider).
+- **Icones:** Lucide React.
+- **PWA:** Vite Plugin PWA.
+- **Desplegament:** Vercel.
 
-* **Frontend:** [React](https://reactjs.org/) + [Vite](https://vitejs.dev/)
-* **Llenguatge:** [TypeScript](https://www.typescriptlang.org/)
-* **Estils:** [Tailwind CSS](https://tailwindcss.com/)
-* **Base de Dades:** [Firebase Firestore](https://firebase.google.com/)
-* **Generació PDF:** `jspdf` + `jspdf-autotable`
-* **Icones:** `lucide-react`
+## ⚙️ Instal·lació i Configuració Local
 
-## 🚀 Instal·lació i Posada en Marxa
+### 1. Requisits Previs
+- Tenir instal·lat [Node.js](https://nodejs.org/).
+- Tenir un projecte creat a [Firebase Console](https://console.firebase.google.com/).
 
-Segueix aquests passos per executar el projecte en local:
-
-### 1. Clonar el repositori
+### 2. Clonar i Instal·lar
 ```bash
 git clone [https://github.com/el-teu-usuari/comptes-clars.git](https://github.com/el-teu-usuari/comptes-clars.git)
 cd comptes-clars
-
-```
-
-### 2. Instal·lar dependències
-
-```bash
 npm install
 
 ```
 
-### 3. Configuració de Firebase
+### 3. Configuració de Variables d'Entorn
 
-Crea un fitxer `.env` o modifica `src/config/firebase.ts` amb les teves credencials de Firebase:
+Crea un fitxer `.env.local` a l'arrel del projecte amb les teves claus de Firebase:
 
-```typescript
-const firebaseConfig = {
-  apiKey: "LA_TEVA_API_KEY",
-  authDomain: "EL_TEU_PROJECTE.firebaseapp.com",
-  projectId: "EL_TEU_PROJECTE",
-  storageBucket: "EL_TEU_PROJECTE.appspot.com",
-  messagingSenderId: "...",
-  appId: "..."
-};
+```env
+VITE_FIREBASE_API_KEY=la_teva_api_key
+VITE_FIREBASE_AUTH_DOMAIN=el-teu-projecte.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=el-teu-projecte-id
+VITE_FIREBASE_STORAGE_BUCKET=el-teu-projecte.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=el-teu-sender-id
+VITE_FIREBASE_APP_ID=la-teva-app-id
 
 ```
 
@@ -67,50 +62,58 @@ npm run dev
 
 ```
 
-Obre `http://localhost:5173` al teu navegador.
+Obre el navegador a `http://localhost:5173`.
 
-## 🧮 Com funciona el sistema de cèntims?
+## ☁️ Configuració de Firebase
 
-Per evitar problemes com `10€ / 3 = 3.3333...`, l'aplicació guarda tots els imports com a **Enters (Cèntims)** a la base de dades:
+Perquè l'aplicació funcioni correctament, has de configurar dos serveis a la consola de Firebase:
 
-* Visualització: `10,00 €`
-* Base de Dades: `1000`
+### Authentication
 
-En dividir despeses, s'utilitza un algorisme de repartiment de residu:
+1. Activa el mètode d'inici de sessió **Google**.
+2. Afegeix el teu domini de producció (ex: `comptes-clars.vercel.app`) a **Authorized Domains** (Settings -> Authentication).
 
-* *Exemple:* 1000 cèntims entre 3 persones.
-* Persona 1: 334 cèntims.
-* Persona 2: 333 cèntims.
-* Persona 3: 333 cèntims.
-* **Total:** 1000 (Exacte).
+### Firestore Database
 
-## 📂 Estructura del Projecte
+1. Crea una base de dades.
+2. A la pestanya **Rules**, configura aquestes regles de seguretat:
 
-```text
-src/
-├── components/      # Components reutilitzables (Card, Button, Modals...)
-├── config/          # Configuració de Firebase
-├── hooks/           # Lògica personalitzada (useTripCalculations)
-├── pages/           # Vistes principals (LandingPage, TripPage)
-├── types/           # Definicions de tipus TypeScript
-├── utils/           # Utilitats (exportPdf, constants)
-└── main.tsx         # Punt d'entrada
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
 
 ```
 
-## 🤝 Contribució
+## 📱 Generar la PWA (Icones)
 
-Les contribucions són benvingudes! Si trobes un error o vols proposar una millora:
+Perquè l'aplicació sigui instal·lable, assegura't que la carpeta `public/` conté les icones necessàries:
 
-1. Fes un Fork del projecte.
-2. Crea una branca (`git checkout -b feature/nova-millora`).
-3. Fes Commit (`git commit -m 'Feat: Afegir nova millora'`).
-4. Fes Push (`git push origin feature/nova-millora`).
-5. Obre un Pull Request.
+* `pwa-192x192.png`
+* `pwa-512x512.png`
+* `favicon.ico`
+* `apple-touch-icon.png` (Opcional, per iOS)
+
+## 🌍 Desplegament a Vercel
+
+1. Importa el projecte des de GitHub a Vercel.
+2. A la configuració del projecte a Vercel, ves a **Environment Variables**.
+3. Afegeix totes les variables del fitxer `.env.local` (una per una).
+4. **Important:** Assegura't que `VITE_FIREBASE_PROJECT_ID` coincideix exactament amb l'ID del teu projecte a Firebase.
+5. Fes el desplegament!
+
+## 📄 Llicència
+
+Aquest projecte és de codi obert.
 
 ---
 
-Creat amb ❤️ per gestionar els teus comptes sense mals de cap.
+Fet amb ❤️ per Toni Tapias.
 
 ```
 
