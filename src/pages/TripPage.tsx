@@ -8,7 +8,7 @@ import {
 import { 
   doc, onSnapshot, updateDoc, arrayUnion, runTransaction, 
   collection, deleteDoc, addDoc, writeBatch 
-} from 'firebase/firestore'; //
+} from 'firebase/firestore'; 
 import { User } from 'firebase/auth';
 
 import Card from '../components/Card';
@@ -17,7 +17,7 @@ import Modal from '../components/Modal';
 import DonutChart from '../components/DonutChart';
 import ExpenseModal from '../components/modals/ExpenseModal';
 import GroupModal from '../components/modals/GroupModal';
-import { db, appId, auth } from '../config/firebase'; //
+import { db, appId, auth } from '../config/firebase';
 import { CURRENCIES, CATEGORIES } from '../utils/constants';
 import { useTripCalculations } from '../hooks/useTripCalculations';
 import { TripData, Expense, CategoryId, Settlement } from '../types';
@@ -135,7 +135,6 @@ export default function TripPage({ user }: TripPageProps) {
 
 
   // 3. Helpers i Hooks
-  // Ara passem 'expensesList' (de la subcol·lecció) al hook de càlculs
   const { users, currency = CURRENCIES[0], name, createdAt } = tripData || { users: [], expenses: [] };
   
   const { filteredExpenses, balances, categoryStats, settlements, totalGroupSpending, displayedTotal } = useTripCalculations(expensesList, users || [], searchQuery, filterCategory);
@@ -170,7 +169,6 @@ export default function TripPage({ user }: TripPageProps) {
   };
 
   // --- ACCIONS DE DESPESES (Eliminació) ---
-  // La creació i edició es fa directament dins de ExpenseModal
   const handleDeleteExpense = (id: string | number) => {
     setConfirmAction({ type: 'delete_expense', id, title: 'Eliminar Despesa', message: 'Estàs segur?' });
   };
@@ -229,7 +227,6 @@ export default function TripPage({ user }: TripPageProps) {
       });
 
       // 2. Actualitzar totes les despeses on apareix l'usuari (Batch Write)
-      // Iterem sobre expensesList que ja tenim en memòria
       const batch = writeBatch(db);
       let operationsCount = 0;
 
@@ -292,6 +289,43 @@ export default function TripPage({ user }: TripPageProps) {
 
     setConfirmAction(null); 
     setIsExpenseModalOpen(false);
+  };
+
+  // --- FUNCIÓ DE MIGRACIÓ (TEMPORAL) ---
+  const handleMigration = async () => {
+    if (!tripData?.expenses || tripData.expenses.length === 0) {
+      alert("No hi ha despeses antigues per migrar.");
+      return;
+    }
+
+    if (!window.confirm(`Es mouran ${tripData.expenses.length} despeses a la nova estructura. Això arreglarà el saldo a 0. Vols continuar?`)) return;
+
+    setLoading(true);
+    try {
+      const batch = writeBatch(db);
+      const expensesRef = collection(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`, 'expenses');
+      
+      // 1. Copiem cada despesa antiga a la nova col·lecció
+      tripData.expenses.forEach(exp => {
+        // Utilitzem l'ID existent com a ID del document
+        const docRef = doc(expensesRef, String(exp.id));
+        batch.set(docRef, exp);
+      });
+
+      // 2. Esborrem la llista antiga per netejar el document principal
+      const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
+      batch.update(tripRef, { expenses: [] });
+
+      await batch.commit();
+      alert("✅ Migració completada! Les dades s'han recuperat.");
+      setSettingsModalOpen(false); // Tanquem el modal
+      
+    } catch (e: any) {
+      console.error(e);
+      alert("❌ Error durant la migració: " + e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const GuestWarning = () => {
@@ -445,8 +479,8 @@ export default function TripPage({ user }: TripPageProps) {
         initialData={editingExpense} 
         users={users} 
         currency={currency}
-        tripId={tripId!} // PASSEM TRIP ID
-        onDelete={handleDeleteExpense} // PASSEM LA FUNCIÓ D'ELIMINAR
+        tripId={tripId!} 
+        onDelete={handleDeleteExpense} 
       />
 
       <GroupModal 
@@ -459,7 +493,35 @@ export default function TripPage({ user }: TripPageProps) {
         onRenameUser={handleRenameUser}
       />
 
-      <Modal isOpen={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} title="Configuració del Grup"><div className="space-y-6"><div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Nom</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={editTripName} onChange={e => setEditTripName(e.target.value)} /></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Data</label><input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={editTripDate} onChange={e => setEditTripDate(e.target.value)} /></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Moneda</label><div className="grid grid-cols-2 gap-2">{CURRENCIES.map(c => (<button key={c.code} onClick={() => updateTrip({ currency: c })} className={`p-3 rounded-xl border-2 text-sm font-bold flex items-center justify-center gap-2 ${currency?.code === c.code ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 hover:border-slate-300'}`}><span>{c.symbol}</span> {c.code}</button>))}</div></div><Button onClick={async () => { let d = createdAt ? new Date(createdAt) : new Date(); if (editTripDate) d = new Date(editTripDate); d.setHours(12, 0, 0, 0); await updateTrip({ name: editTripName, createdAt: d.toISOString() }); setSettingsModalOpen(false); }}>Guardar canvis</Button></div></Modal>
+      <Modal isOpen={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} title="Configuració del Grup">
+        <div className="space-y-6">
+          <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Nom</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={editTripName} onChange={e => setEditTripName(e.target.value)} /></div>
+          <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Data</label><input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={editTripDate} onChange={e => setEditTripDate(e.target.value)} /></div>
+          <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Moneda</label>
+            <div className="grid grid-cols-2 gap-2">
+              {CURRENCIES.map(c => (<button key={c.code} onClick={() => updateTrip({ currency: c })} className={`p-3 rounded-xl border-2 text-sm font-bold flex items-center justify-center gap-2 ${currency?.code === c.code ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 hover:border-slate-300'}`}><span>{c.symbol}</span> {c.code}</button>))}
+            </div>
+          </div>
+          <Button onClick={async () => { let d = createdAt ? new Date(createdAt) : new Date(); if (editTripDate) d = new Date(editTripDate); d.setHours(12, 0, 0, 0); await updateTrip({ name: editTripName, createdAt: d.toISOString() }); setSettingsModalOpen(false); }}>Guardar canvis</Button>
+          
+          {/* --- BOTÓ DE MIGRACIÓ --- */}
+          {tripData?.expenses && tripData.expenses.length > 0 && (
+            <div className="mt-8 pt-6 border-t border-slate-200">
+              <p className="text-xs text-slate-500 mb-2 text-center">
+                Si veus el saldo a 0€ però tens dades antigues:
+              </p>
+              <Button 
+                variant="secondary" 
+                onClick={handleMigration} 
+                className="w-full bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200"
+              >
+                ⚠️ Migrar dades a la nova versió
+              </Button>
+            </div>
+          )}
+        </div>
+      </Modal>
+
       <Modal isOpen={!!confirmAction} onClose={() => setConfirmAction(null)} title={confirmAction?.title || 'Confirmació'}><div className="space-y-6 text-center"><div className="py-2"><p className="text-slate-600">{confirmAction?.message}</p></div>{confirmAction?.type === 'info' ? <Button onClick={() => setConfirmAction(null)} className="w-full">Entesos</Button> : <div className="flex gap-3"><Button variant="secondary" onClick={() => setConfirmAction(null)} className="flex-1">Cancel·lar</Button><Button variant="danger" onClick={executeConfirmation} className="flex-1" icon={Trash2}>Eliminar</Button></div>}</div></Modal>
       
       <Modal isOpen={!!settleModalOpen} onClose={() => setSettleModalOpen(null)} title="Confirmar Pagament">
