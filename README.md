@@ -1,120 +1,136 @@
-# Comptes Clars 💸
+# 💸 Comptes Clars
 
-**Comptes Clars** és una aplicació web moderna dissenyada per gestionar i dividir despeses de viatges o esdeveniments en grup de manera senzilla i transparent.
+**Comptes Clars** és una aplicació web progressiva (PWA) moderna dissenyada per gestionar i dividir despeses de viatges i grups de manera justa i sense complicacions. Permet fer un seguiment de qui ha pagat què i calcula automàticament els deutes per liquidar els comptes de la manera més eficient possible.
 
-L'aplicació calcula automàticament qui deu diners a qui, permetent liquidar deutes de la manera més eficient possible. Funciona com una **PWA (Progressive Web App)**, la qual cosa significa que es pot instal·lar al mòbil i utilitzar com una aplicació nativa.
+![Estat del projecte](https://img.shields.io/badge/Estat-En%20Desenvolupament-green)
+![Llicència](https://img.shields.io/badge/Llicència-MIT-blue)
 
-## 🚀 Característiques Principals
+## ✨ Funcionalitats Principals
 
-- **Creació de Grups:** Crea viatges i comparteix el codi únic perquè els amics s'hi uneixin.
-- **Gestió de Despeses:** Afegeix despeses especificant qui ha pagat i qui hi participa (per categories).
-- **Càlcul de Balanços:** Algoritme automàtic per minimitzar el nombre de transferències necessàries per quadrar comptes.
-- **Núvol i Sincronització:** Tot es guarda a **Firebase (Firestore)** en temps real.
-- **Sistema d'Usuaris:**
-  - Login segur amb **Google**.
-  - Secció **"Els meus viatges"** per recuperar grups antics.
-  - Opció per abandonar/treure viatges de la llista personal.
-- **Exportació:** Genera un informe en **PDF** amb el resum de despeses.
-- **100% Instal·lable (PWA):** Disseny *mobile-first*, funciona sense connexió (memòria cau) i es pot afegir a la pantalla d'inici.
+* **👥 Gestió de Grups i Viatges:** Crea grups, afegeix participants i gestiona múltiples viatges.
+* **💰 Registre de Despeses:** Afegeix despeses especificant qui ha pagat i qui hi participa.
+* **💱 Múltiples Monedes:** Suport per a EUR, USD, GBP, JPY i MXN amb format localitzat.
+* **📊 Càlcul de Balanços:** Visualitza en temps real qui deu diners i a qui.
+* **🔄 Algoritme de Liquidació:** Optimitza els pagaments per reduir el nombre de transaccions necessàries per quedar en pau.
+* **📄 Exportació PDF:** Genera informes detallats del viatge amb un sol clic.
+* **📱 PWA Instal·lable:** Funciona com una aplicació nativa al mòbil, amb icona pròpia i sense barra de navegació.
+* **🔐 Autenticació Híbrida:** Mode "Convidat" (anònim) per començar ràpidament i opció de vincular amb Google per guardar les dades.
+* **☁️ Sincronització en Temps Real:** Totes les dades es guarden a Firebase Firestore i s'actualitzen a l'instant per a tots els usuaris.
 
 ## 🛠️ Tecnologies Utilitzades
 
-- **Frontend:** React, TypeScript, Vite.
-- **Estils:** Tailwind CSS.
-- **Base de Dades:** Firebase Firestore.
-- **Autenticació:** Firebase Auth (Google Provider).
-- **Icones:** Lucide React.
-- **PWA:** Vite Plugin PWA.
-- **Desplegament:** Vercel.
+El projecte està construït amb un stack modern basat en React i Firebase:
 
-## ⚙️ Instal·lació i Configuració Local
+* **Frontend:** [React 19](https://react.dev/), [TypeScript](https://www.typescriptlang.org/), [Vite](https://vitejs.dev/)
+* **Estils:** [Tailwind CSS](https://tailwindcss.com/)
+* **Backend & Base de Dades:** [Firebase](https://firebase.google.com/) (Firestore, Auth)
+* **Icones:** [Lucide React](https://lucide.dev/)
+* **Generació PDF:** [jsPDF](https://github.com/parallax/jsPDF) & [jspdf-autotable](https://github.com/simonbengtsson/jspdf-autotable)
+* **PWA:** [Vite PWA Plugin](https://vite-pwa-org.netlify.app/)
 
-### 1. Requisits Previs
-- Tenir instal·lat [Node.js](https://nodejs.org/).
-- Tenir un projecte creat a [Firebase Console](https://console.firebase.google.com/).
+## 🚀 Instal·lació i Configuració
 
-### 2. Clonar i Instal·lar
+Segueix aquests passos per executar el projecte en local:
+
+### 1. Clonar el repositori
+
 ```bash
 git clone [https://github.com/el-teu-usuari/comptes-clars.git](https://github.com/el-teu-usuari/comptes-clars.git)
 cd comptes-clars
+
+```
+
+### 2. Instal·lar dependències
+
+```bash
 npm install
 
 ```
 
-### 3. Configuració de Variables d'Entorn
+### 3. Configurar Firebase
 
-Crea un fitxer `.env.local` a l'arrel del projecte amb les teves claus de Firebase:
+Crea un projecte a [Firebase Console](https://console.firebase.google.com/), habilita **Firestore Database** i **Authentication** (Google i Anonymous).
+
+Crea un fitxer `.env` a l'arrel del projecte amb les teves credencials de Firebase:
 
 ```env
 VITE_FIREBASE_API_KEY=la_teva_api_key
-VITE_FIREBASE_AUTH_DOMAIN=el-teu-projecte.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=el-teu-projecte-id
-VITE_FIREBASE_STORAGE_BUCKET=el-teu-projecte.appspot.com
-VITE_FIREBASE_MESSAGING_SENDER_ID=el-teu-sender-id
-VITE_FIREBASE_APP_ID=la-teva-app-id
+VITE_FIREBASE_AUTH_DOMAIN=el_teu_projecte.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=el_teu_projecte_id
+VITE_FIREBASE_STORAGE_BUCKET=el_teu_projecte.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=el_teu_sender_id
+VITE_FIREBASE_APP_ID=el_teu_app_id
 
 ```
 
-### 4. Executar en local
+### 4. Executar en mode desenvolupament
 
 ```bash
 npm run dev
 
 ```
 
-Obre el navegador a `http://localhost:5173`.
+L'aplicació estarà disponible a `http://localhost:5173`.
 
-## ☁️ Configuració de Firebase
+## 📜 Scripts Disponibles
 
-Perquè l'aplicació funcioni correctament, has de configurar dos serveis a la consola de Firebase:
+* `npm run dev`: Inicia el servidor de desenvolupament amb HMR.
+* `npm run build`: Compila l'aplicació per a producció.
+* `npm run lint`: Executa ESLint per trobar problemes al codi.
+* `npm run preview`: Previsualitza la build de producció localment.
 
-### Authentication
+## 📱 Estructura del Projecte
 
-1. Activa el mètode d'inici de sessió **Google**.
-2. Afegeix el teu domini de producció (ex: `comptes-clars.vercel.app`) a **Authorized Domains** (Settings -> Authentication).
-
-### Firestore Database
-
-1. Crea una base de dades.
-2. A la pestanya **Rules**, configura aquestes regles de seguretat:
-
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if request.auth != null;
-    }
-  }
-}
+```
+src/
+├── components/      # Components reutilitzables (Botons, Cards, Modals...)
+├── config/          # Configuració de Firebase
+├── hooks/           # Custom Hooks (ex: useTripCalculations)
+├── pages/           # Pàgines principals (LandingPage, TripPage)
+├── types/           # Definicions de tipus TypeScript
+├── utils/           # Funcions d'utilitat i constants
+└── App.tsx          # Punt d'entrada i rutes
 
 ```
 
-## 📱 Generar la PWA (Icones)
+## 🤝 Contribució
 
-Perquè l'aplicació sigui instal·lable, assegura't que la carpeta `public/` conté les icones necessàries:
+Les contribucions són benvingudes! Si trobes un error o tens una idea per a una nova funcionalitat:
 
-* `pwa-192x192.png`
-* `pwa-512x512.png`
-* `favicon.ico`
-* `apple-touch-icon.png` (Opcional, per iOS)
-
-## 🌍 Desplegament a Vercel
-
-1. Importa el projecte des de GitHub a Vercel.
-2. A la configuració del projecte a Vercel, ves a **Environment Variables**.
-3. Afegeix totes les variables del fitxer `.env.local` (una per una).
-4. **Important:** Assegura't que `VITE_FIREBASE_PROJECT_ID` coincideix exactament amb l'ID del teu projecte a Firebase.
-5. Fes el desplegament!
+1. Fes un Fork del projecte.
+2. Crea una branca per a la teva funció (`git checkout -b feature/NovaFuncio`).
+3. Fes Commit dels teus canvis (`git commit -m 'Afegida nova funció'`).
+4. Fes Push a la branca (`git push origin feature/NovaFuncio`).
+5. Obre un Pull Request.
 
 ## 📄 Llicència
 
-Aquest projecte és de codi obert.
+Aquest projecte està sota la llicència MIT. Consulta el fitxer `LICENSE` per a més detalls.
+
+```
+
+### Què inclou aquest README?
+
+1.  **Badge d'estat:** Dona un toc professional.
+2.  **Descripció clara:** Explica què fa l'app.
+3.  **Llista de funcionalitats:** Basada en el codi que hem vist (PDF, múltiples monedes, etc.).
+4.  **Stack tecnològic:** Llista les dependències clau.
+5.  **Instruccions `.env`:** Crític perquè algú altre pugui fer anar l'app, basat en el teu fitxer `firebase.ts`.
+6.  **Estructura de carpetes:** Ajuda a nous desenvolupadors a orientar-se.
 
 ---
 
-Fet amb ❤️ per Toni Tapias.
-
-```
+<div align="center">
+  <p>
+    Fet amb ❤️ per <a href="https://github.com/tonitapias" target="_blank"><b>Toni Tapias</b></a>
+  </p>
+  <p>
+    Calculadora de Despeses © 2025 • <a href="LICENSE">Llicència MIT</a>
+  </p>
+  <p>
+    <a href="https://github.com/tonitapias/comptes-clars/issues">Reportar un error</a> • 
+    <a href="https://github.com/tonitapias/comptes-clars/pulls">Demanar funcionalitat</a>
+  </p>
+</div>
 
 ```
