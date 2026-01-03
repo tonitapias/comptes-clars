@@ -5,7 +5,7 @@ import {
   ChevronRight, Search, Edit2, Info, Settings, Share2, LogOut, 
   Loader2, Check, Calendar, AlertTriangle, Download, Save 
 } from 'lucide-react';
-import { doc, onSnapshot, updateDoc, arrayUnion, runTransaction } from 'firebase/firestore'; // AFEGIT: runTransaction
+import { doc, onSnapshot, updateDoc, arrayUnion, runTransaction } from 'firebase/firestore'; 
 import { User } from 'firebase/auth';
 
 import Card from '../components/Card';
@@ -64,6 +64,7 @@ export default function TripPage({ user }: TripPageProps) {
     
     setLoading(true);
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
+    
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data() as TripData;
@@ -75,7 +76,16 @@ export default function TripPage({ user }: TripPageProps) {
         setError("Grup no trobat");
         setLoading(false);
       }
-    }, (err) => { console.error(err); setError(err.message); setLoading(false); });
+    }, (err) => { 
+      console.error(err); 
+      // CORRECCIÓ: Missatge d'error amigable per permisos
+      if (err.code === 'permission-denied') {
+          setError("⛔ No tens accés a aquest grup. Demana a algú de dins que t'afegeixi primer.");
+      } else {
+          setError("Error carregant el grup: " + err.message); 
+      }
+      setLoading(false); 
+    });
     return () => unsubscribe();
   }, [tripId]);
 
@@ -98,12 +108,10 @@ export default function TripPage({ user }: TripPageProps) {
   // 2. Helpers i Hooks
   const { users, expenses, currency = CURRENCIES[0], name, createdAt } = tripData || { users: [], expenses: [] };
   
-  // NOU: Desestructurem també displayedTotal
   const { filteredExpenses, balances, categoryStats, settlements, totalGroupSpending, displayedTotal } = useTripCalculations(expenses || [], users || [], searchQuery, filterCategory);
 
   const formatCurrency = (amount: number) => new Intl.NumberFormat(currency?.locale || 'ca-ES', { style: 'currency', currency: currency?.code || 'EUR' }).format(amount / 100);
   
-  // CORRECCIÓ: GetCategory segur
   const getCategory = (id: string) => {
     const found = CATEGORIES.find(c => c.id === id);
     if (found) return found;
@@ -125,14 +133,12 @@ export default function TripPage({ user }: TripPageProps) {
     generatePDF(name, expenses, balances, settlements, currency.symbol);
   };
 
-  // 3. Accions de Base de Dades
   const updateTrip = async (newData: Partial<TripData>) => {
     if (!tripId) return;
     try { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`), newData); }
     catch (e: any) { alert("Error guardant: " + e.message); }
   };
 
-  // CORRECCIÓ: handleSaveExpense amb TRANSACCIÓ per evitar condicions de cursa
   const handleSaveExpense = async (expense: Expense) => {
     if (!tripId) return;
     const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
@@ -145,7 +151,8 @@ export default function TripPage({ user }: TripPageProps) {
           const tripDoc = await transaction.get(tripRef);
           if (!tripDoc.exists()) throw new Error("Document no trobat");
           
-          const currentExpenses = tripDoc.data().expenses as Expense[];
+          // CORRECCIÓ: Protecció contra array undefined
+          const currentExpenses = (tripDoc.data().expenses || []) as Expense[];
           const newExpensesList = currentExpenses.map(e => e.id === expense.id ? expense : e);
           
           transaction.update(tripRef, { expenses: newExpensesList });
@@ -155,7 +162,6 @@ export default function TripPage({ user }: TripPageProps) {
       }
     } else {
       try {
-        // Per afegir-ne una de nova, arrayUnion és segur i més eficient
         await updateDoc(tripRef, {
             expenses: arrayUnion(expense)
         });
@@ -191,10 +197,19 @@ export default function TripPage({ user }: TripPageProps) {
     }
   };
 
-  // Aquest pot ser arrayUnion (segur)
-  const handleAddUser = async (name: string) => await updateTrip({ users: [...users, name] }); // Nota: arrayUnion seria millor, però per consistència amb el tipatge actual ho deixem així si no dóna problemes. Idealment: updateDoc(ref, {users: arrayUnion(name)})
+  // CORRECCIÓ: Utilitzar arrayUnion per evitar condicions de cursa en afegir usuaris
+  const handleAddUser = async (name: string) => {
+    if (!tripId) return;
+    const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
+    try {
+      await updateDoc(tripRef, { 
+        users: arrayUnion(name) 
+      });
+    } catch (e: any) {
+      alert("Error afegint usuari: " + e.message);
+    }
+  };
   
-  // CORRECCIÓ: handleRenameUser amb TRANSACCIÓ
   const handleRenameUser = async (oldName: string, newName: string) => {
     if (!tripId) return;
     const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
@@ -227,7 +242,6 @@ export default function TripPage({ user }: TripPageProps) {
     else setConfirmAction({ type: 'delete_user', id: userName, title: 'Eliminar Participant', message: `Segur que vols eliminar a ${userName}?` });
   };
 
-  // CORRECCIÓ: executeConfirmation amb TRANSACCIÓ (per eliminacions)
   const executeConfirmation = async () => {
     if (!confirmAction || !tripId) return;
     const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
@@ -238,7 +252,6 @@ export default function TripPage({ user }: TripPageProps) {
           const tripDoc = await transaction.get(tripRef);
           if (!tripDoc.exists()) throw new Error("Error doc");
           const currentExps = tripDoc.data().expenses as Expense[];
-          // Filtrem
           const newExps = currentExps.filter(exp => exp.id !== confirmAction.id);
           transaction.update(tripRef, { expenses: newExps });
         });
@@ -259,7 +272,6 @@ export default function TripPage({ user }: TripPageProps) {
     setIsExpenseModalOpen(false);
   };
 
-  // --- COMPONENT INTERN: AVÍS CONVIDAT ---
   const GuestWarning = () => {
     if (!user || !user.isAnonymous) return null;
     return (
@@ -343,7 +355,6 @@ export default function TripPage({ user }: TripPageProps) {
       <main className="max-w-3xl mx-auto px-4 -mt-14 relative z-20">
         <Card className="mb-6 bg-white shadow-xl shadow-indigo-100/50 border-0">
           <div className="p-6 flex justify-between items-center">
-            {/* CORRECCIÓ: Mostrem el total filtrat si hi ha cerca, o el total general */}
             <div>
                 <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">
                     {searchQuery || filterCategory !== 'all' ? 'Total Filtrat' : 'Total Grup'}
