@@ -14,12 +14,35 @@ const DonutChart: React.FC<DonutChartProps> = ({ data }) => {
   const circumference = 2 * Math.PI * radius;
   let offset = 0;
 
-  // Mapa de colors segur per a Tailwind
+  // MILLORA: Mapa de colors complet amb la paleta estàndard de Tailwind.
+  // Això evita que el gràfic surti gris si canvies els colors a constants.ts
   const colorMap: Record<string, string> = {
-    'bg-orange-500': '#f97316', 'bg-blue-500': '#3b82f6', 'bg-indigo-500': '#6366f1',
-    'bg-purple-500': '#a855f7', 'bg-sky-500': '#0ea5e9', 'bg-pink-500': '#ec4899',
-    'bg-rose-500': '#f43f5e', 'bg-teal-500': '#14b8a6', 'bg-emerald-500': '#10b981', 
-    'bg-slate-500': '#64748b', 'bg-slate-400': '#94a3b8'
+    // Colors actuals
+    'bg-orange-500': '#f97316', 
+    'bg-blue-500': '#3b82f6', 
+    'bg-indigo-500': '#6366f1',
+    'bg-purple-500': '#a855f7', 
+    'bg-sky-500': '#0ea5e9', 
+    'bg-pink-500': '#ec4899',
+    'bg-rose-500': '#f43f5e', 
+    'bg-teal-500': '#14b8a6', 
+    'bg-emerald-500': '#10b981', 
+    'bg-slate-500': '#64748b', 
+    'bg-slate-400': '#94a3b8',
+
+    // Colors extres per si canvies la configuració en el futur
+    'bg-red-500': '#ef4444',
+    'bg-yellow-500': '#eab308',
+    'bg-amber-500': '#f59e0b',
+    'bg-lime-500': '#84cc16',
+    'bg-green-500': '#22c55e',
+    'bg-cyan-500': '#06b6d4',
+    'bg-violet-500': '#8b5cf6',
+    'bg-fuchsia-500': '#d946ef',
+    'bg-gray-500': '#6b7280',
+    'bg-zinc-500': '#71717a',
+    'bg-neutral-500': '#737373',
+    'bg-stone-500': '#78716c'
   };
 
   return (
@@ -30,9 +53,12 @@ const DonutChart: React.FC<DonutChartProps> = ({ data }) => {
           const currentOffset = offset;
           offset += dashArray;
           
+          // Fallback segur: si el color no existeix, es pintarà d'un gris clar (#cbd5e1) en lloc de trencar-se o ser invisible
+          const strokeColor = colorMap[item.barColor] || '#cbd5e1';
+
           return (
             <circle key={item.id} cx={size / 2} cy={size / 2} r={radius} fill="transparent" 
-              stroke={colorMap[item.barColor] || '#ccc'} 
+              stroke={strokeColor} 
               strokeWidth={strokeWidth} 
               strokeDasharray={`${dashArray} ${circumference}`} 
               strokeDashoffset={-currentOffset} 
@@ -41,7 +67,9 @@ const DonutChart: React.FC<DonutChartProps> = ({ data }) => {
           );
         })}
       </svg>
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><PieChartIcon className="text-slate-300" size={24} /></div>
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <PieChartIcon className="text-slate-300" size={24} />
+      </div>
     </div>
   );
 };

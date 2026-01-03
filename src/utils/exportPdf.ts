@@ -14,6 +14,7 @@ export const generatePDF = (
   // 1. CAPÇALERA
   doc.setFontSize(22);
   doc.setTextColor(79, 70, 229); // Color Indigo
+  // Aquí mantenim el nom original amb emojis i accents pel títol visual
   doc.text(tripName, 14, 20);
   
   doc.setFontSize(10);
@@ -88,5 +89,12 @@ export const generatePDF = (
   }
 
   // DESCARREGAR
-  doc.save(`comptes_clars_${tripName.replace(/\s+/g, '_')}.pdf`);
+  // MILLORA: Netejar el nom del fitxer per evitar errors amb emojis o caràcters especials
+  const safeFileName = tripName
+    .replace(/[^a-z0-9à-úÀ-Ú\s-]/gi, '') // Elimina emojis i símbols rars
+    .trim()
+    .replace(/\s+/g, '_') // Canvia espais per guions baixos
+    .toLowerCase();
+
+  doc.save(`comptes_clars_${safeFileName || 'viatge'}.pdf`);
 };

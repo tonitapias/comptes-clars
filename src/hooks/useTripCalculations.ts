@@ -8,7 +8,7 @@ interface CalculationsResult {
   categoryStats: CategoryStat[];
   settlements: Settlement[];
   totalGroupSpending: number;
-  displayedTotal: number; // NOU: Total respectant els filtres
+  displayedTotal: number;
 }
 
 export function useTripCalculations(
@@ -18,10 +18,17 @@ export function useTripCalculations(
   filterCategory: string
 ): CalculationsResult {
   
-  // 1. Filtrar i Ordenar (CORREGIT)
+  // 1. Filtrar i Ordenar
   const filteredExpenses = useMemo(() => {
     return expenses.filter(e => {
-        const matchesSearch = e.title.toLowerCase().includes(searchQuery.toLowerCase()) || e.payer.toLowerCase().includes(searchQuery.toLowerCase());
+        const q = searchQuery.toLowerCase();
+        
+        // MILLORA CERCA: Ara busquem al Títol, al Pagador O dins dels Participants (involved)
+        const matchesSearch = 
+            e.title.toLowerCase().includes(q) || 
+            e.payer.toLowerCase().includes(q) ||
+            e.involved.some(person => person.toLowerCase().includes(q)); // <--- NOVA LÍNIA
+            
         const matchesCategory = filterCategory === 'all' || e.category === filterCategory;
         return matchesSearch && matchesCategory;
       }).sort((a, b) => {
@@ -30,7 +37,7 @@ export function useTripCalculations(
         const dateB = new Date(b.date).getTime();
         if (dateA !== dateB) return dateB - dateA;
 
-        // Desempat segur per ID (funciona amb números i text)
+        // Desempat segur per ID
         if (typeof a.id === 'number' && typeof b.id === 'number') {
             return b.id - a.id;
         }
@@ -38,7 +45,7 @@ export function useTripCalculations(
       });
   }, [expenses, searchQuery, filterCategory]);
 
-  // 2. Balanços (Math entera - sense canvis)
+  // 2. Balanços (Sense canvis - Math entera)
   const balances = useMemo(() => {
     const balanceMap: Record<string, number> = {}; 
     users.forEach(u => balanceMap[u] = 0);
@@ -64,7 +71,7 @@ export function useTripCalculations(
     return users.map(user => ({ user, balance: balanceMap[user] })).sort((a, b) => b.balance - a.balance);
   }, [users, expenses]);
 
-  // 3. Estadístiques (sense canvis lògics, només protecció extra)
+  // 3. Estadístiques (Amb fallback de seguretat)
   const categoryStats = useMemo(() => {
     const stats: Record<string, number> = {};
     const total = expenses.filter(e => e.category !== 'transfer').reduce((acc, curr) => acc + curr.amount, 0);
@@ -78,7 +85,7 @@ export function useTripCalculations(
     });
     
     return Object.entries(stats).map(([id, amount]) => {
-      const catInfo = CATEGORIES.find(c => c.id === id) || CATEGORIES.find(c => c.id === 'other') || CATEGORIES[0]; // Fallback segur
+      const catInfo = CATEGORIES.find(c => c.id === id) || CATEGORIES.find(c => c.id === 'other') || CATEGORIES[0];
       return { 
         id: catInfo.id, 
         amount, 
@@ -91,7 +98,7 @@ export function useTripCalculations(
     }).sort((a, b) => b.amount - a.amount);
   }, [expenses]);
 
-  // 4. Liquidacions (sense canvis)
+  // 4. Liquidacions
   const settlements = useMemo(() => {
     let debts: Settlement[] = [];
     let debtors = balances.filter(b => b.balance < 0).map(b => ({ ...b }));
@@ -114,10 +121,9 @@ export function useTripCalculations(
     return debts;
   }, [balances]);
 
-  // NOU: Càlculs de totals
   const totalGroupSpending = expenses.filter(e => e.category !== 'transfer').reduce((acc, curr) => acc + curr.amount, 0);
   
-  // NOU: Total de la vista actual (respectant filtres)
+  // Total que es mostra en pantalla (afectat pel filtre de cerca millorat)
   const displayedTotal = filteredExpenses.filter(e => e.category !== 'transfer').reduce((acc, curr) => acc + curr.amount, 0);
 
   return { filteredExpenses, balances, categoryStats, settlements, totalGroupSpending, displayedTotal };
