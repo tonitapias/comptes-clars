@@ -2,8 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Cloud, LogIn, LogOut, ChevronRight, Calendar, Loader2, Trash2 } from 'lucide-react';
 import { doc, setDoc, updateDoc, arrayRemove, collection, query, where, getDocs } from 'firebase/firestore';
-// AFEGIT: getRedirectResult és vital per al login amb redirecció
-import { User, GoogleAuthProvider, signInWithRedirect, signOut, getRedirectResult } from 'firebase/auth'; 
+// Importem TOTS els mètodes necessaris
+import { 
+  User, 
+  GoogleAuthProvider, 
+  signInWithRedirect, 
+  signInWithPopup, 
+  signOut, 
+  getRedirectResult 
+} from 'firebase/auth'; 
 
 import Card from '../components/Card';
 import Button from '../components/Button';
@@ -27,86 +34,87 @@ export default function LandingPage({ user }: LandingPageProps) {
   
   const [myTrips, setMyTrips] = useState<TripData[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(false);
-  // Nou estat per saber si estem processant el retorn de Google
   const [isRedirecting, setIsRedirecting] = useState(true);
 
   const isGuest = !user || user.isAnonymous;
 
-  // 1. EFECTE NOU: Gestionar el retorn de Google (Redirect)
+  // 1. GESTIÓ DEL RETORN DEL LOGIN (Només afecta si venim de Redirect/Mòbil)
   useEffect(() => {
     getRedirectResult(auth)
       .then((result) => {
-        setIsRedirecting(false); // Ja hem comprovat, traiem el loading
+        setIsRedirecting(false); 
         if (result) {
-          console.log("Login correcte:", result.user);
-          // No cal fer res més, el 'user' prop s'actualitzarà sol
+          console.log("Login per redirecció completat");
         }
       })
       .catch((error) => {
         setIsRedirecting(false);
-        console.error("Error en tornar del redirect:", error);
-        // Ignorem errors menors, només mostrem si és greu
-        if (error.code !== 'auth/credential-already-in-use') {
-             // Opcional: alert(error.message); 
-        }
+        console.error("Error redirect:", error);
       });
   }, []);
 
-  // 2. Càrrega de viatges (Igual que abans)
+  // 2. Càrrega de viatges
   useEffect(() => {
     async function fetchMyTrips() {
       if (!user || user.isAnonymous) {
         setMyTrips([]);
         return;
       }
-      
       setLoadingTrips(true);
       try {
         const tripsRef = collection(db, 'artifacts', appId, 'public', 'data', 'trips');
         const q = query(tripsRef, where('memberUids', 'array-contains', user.uid));
         const querySnapshot = await getDocs(q);
-        
         const trips: TripData[] = [];
-        querySnapshot.forEach((doc) => {
-          trips.push(doc.data() as TripData);
-        });
-        
+        querySnapshot.forEach((doc) => trips.push(doc.data() as TripData));
         trips.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setMyTrips(trips);
       } catch (e) {
-        console.error("Error carregant els meus viatges:", e);
+        console.error("Error carregant viatges:", e);
       } finally {
         setLoadingTrips(false);
       }
     }
-
     fetchMyTrips();
   }, [user]);
+
+  // --- ESTRATÈGIA HÍBRIDA DE LOGIN ---
+  const handleGoogleLogin = async () => {
+    const provider = new GoogleAuthProvider();
+    setLoading(true);
+
+    // Detectem si és un dispositiu mòbil
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+    try {
+      if (isMobile) {
+        // MÒBIL: Fem servir Redirect (més estable en iOS/Android)
+        await signInWithRedirect(auth, provider);
+        // La pàgina es recarregarà, no cal fer res més
+      } else {
+        // PC: Fem servir Popup (més ràpid i evita problemes de redirecció)
+        await signInWithPopup(auth, provider);
+        setLoading(false); // Al PC no recarrega, hem de treure el loading manualment
+      }
+    } catch (error: any) {
+      console.error(error);
+      setLoading(false);
+      // Ignorem l'error de popup tancat per l'usuari
+      if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
+         alert(error.message);
+      }
+    }
+  };
 
   const handleRemoveTrip = async (tripId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!user) return;
-    const confirm = window.confirm("Vols treure aquest viatge de la teva llista?");
-    if (!confirm) return;
+    if (!window.confirm("Vols treure aquest viatge de la llista?")) return;
     try {
       const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
       await updateDoc(tripRef, { memberUids: arrayRemove(user.uid) });
       setMyTrips(prev => prev.filter(t => t.id !== tripId));
-    } catch (error: any) {
-      alert("Error: " + error.message);
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    const provider = new GoogleAuthProvider();
-    try {
-      setLoading(true); // Posem loading visual abans de marxar
-      await signInWithRedirect(auth, provider);
-    } catch (error: any) {
-      console.error(error);
-      setLoading(false);
-      alert(error.message);
-    }
+    } catch (error: any) { alert("Error: " + error.message); }
   };
 
   const handleLogout = async () => {
@@ -118,26 +126,16 @@ export default function LandingPage({ user }: LandingPageProps) {
   const createTrip = async () => {
     const finalCreatorName = isGuest ? creatorName : (user?.displayName || creatorName);
     if (!finalCreatorName) return;
-
     setLoading(true);
     try {
       const newId = Math.random().toString(36).substring(2, 9);
       const newTrip: TripData = { 
-        id: newId, 
-        name: inputName, 
-        users: [finalCreatorName], 
-        expenses: [], 
-        currency: CURRENCIES[0], 
-        createdAt: new Date().toISOString(),
-        memberUids: user ? [user.uid] : [] 
+        id: newId, name: inputName, users: [finalCreatorName], expenses: [], 
+        currency: CURRENCIES[0], createdAt: new Date().toISOString(), memberUids: user ? [user.uid] : [] 
       };
-      
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${newId}`), newTrip);
       navigate(`/trip/${newId}`);
-    } catch (e: any) {
-      alert("Error: " + e.message);
-      setLoading(false);
-    }
+    } catch (e: any) { alert("Error: " + e.message); setLoading(false); }
   };
 
   return (
@@ -153,7 +151,6 @@ export default function LandingPage({ user }: LandingPageProps) {
            </button>
         ) : (
            <button onClick={handleGoogleLogin} className="flex items-center gap-2 bg-white text-indigo-600 px-4 py-2 rounded-full text-xs font-bold shadow-lg hover:bg-slate-100 transition">
-             {/* Mostrem spinner si estem redirigint */}
              {loading ? <Loader2 className="animate-spin" size={14}/> : <LogIn size={14}/>} 
              {loading ? 'Carregant...' : 'Entrar amb Google'}
            </button>
@@ -168,7 +165,6 @@ export default function LandingPage({ user }: LandingPageProps) {
         </div>
         
         <Card className="p-8 shadow-xl border-0">
-          {/* Si estem esperant la resposta de Google, bloquegem la interfície amb un loading */}
           {isRedirecting && !user && !isGuest ? (
              <div className="py-10 text-center">
                 <Loader2 className="animate-spin mx-auto text-indigo-600 mb-4" size={32}/>
@@ -220,7 +216,6 @@ export default function LandingPage({ user }: LandingPageProps) {
                 </div>
               )}
 
-              {/* ... RESTA DE CODI DELS MODES create I join IGUAL ... */}
               {mode === 'create' && (
                 <div className="space-y-4 animate-fade-in">
                   <div>
