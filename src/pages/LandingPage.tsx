@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Cloud, LogIn, LogOut, ChevronRight, Calendar, Loader2, Trash2 } from 'lucide-react';
 import { doc, setDoc, updateDoc, arrayRemove, collection, query, where, getDocs } from 'firebase/firestore';
-// 1. AFEGIM signInWithRedirect ALS IMPORTS
-import { User, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut } from 'firebase/auth'; 
+// AFEGIT: getRedirectResult és vital per al login amb redirecció
+import { User, GoogleAuthProvider, signInWithRedirect, signOut, getRedirectResult } from 'firebase/auth'; 
 
 import Card from '../components/Card';
 import Button from '../components/Button';
@@ -27,9 +27,32 @@ export default function LandingPage({ user }: LandingPageProps) {
   
   const [myTrips, setMyTrips] = useState<TripData[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(false);
+  // Nou estat per saber si estem processant el retorn de Google
+  const [isRedirecting, setIsRedirecting] = useState(true);
 
   const isGuest = !user || user.isAnonymous;
 
+  // 1. EFECTE NOU: Gestionar el retorn de Google (Redirect)
+  useEffect(() => {
+    getRedirectResult(auth)
+      .then((result) => {
+        setIsRedirecting(false); // Ja hem comprovat, traiem el loading
+        if (result) {
+          console.log("Login correcte:", result.user);
+          // No cal fer res més, el 'user' prop s'actualitzarà sol
+        }
+      })
+      .catch((error) => {
+        setIsRedirecting(false);
+        console.error("Error en tornar del redirect:", error);
+        // Ignorem errors menors, només mostrem si és greu
+        if (error.code !== 'auth/credential-already-in-use') {
+             // Opcional: alert(error.message); 
+        }
+      });
+  }, []);
+
+  // 2. Càrrega de viatges (Igual que abans)
   useEffect(() => {
     async function fetchMyTrips() {
       if (!user || user.isAnonymous) {
@@ -63,10 +86,8 @@ export default function LandingPage({ user }: LandingPageProps) {
   const handleRemoveTrip = async (tripId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!user) return;
-
-    const confirm = window.confirm("Vols treure aquest viatge de la teva llista? (No s'esborrarà per als altres participants)");
+    const confirm = window.confirm("Vols treure aquest viatge de la teva llista?");
     if (!confirm) return;
-
     try {
       const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
       await updateDoc(tripRef, { memberUids: arrayRemove(user.uid) });
@@ -76,20 +97,15 @@ export default function LandingPage({ user }: LandingPageProps) {
     }
   };
 
-  // --- MODIFICACIÓ CLAU: LOGIN AMB REDIRECT ---
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      // Fem servir redirect en lloc de popup per evitar errors en mòbils
+      setLoading(true); // Posem loading visual abans de marxar
       await signInWithRedirect(auth, provider);
-      // Nota: No cal fer res més aquí, la pàgina es recarregarà 
-      // i el useEffect detectarà l'usuari automàticament.
     } catch (error: any) {
-      // Aquest catch només saltarà si falla abans de redirigir
       console.error(error);
-      if (error.code !== 'auth/cancelled-popup-request') {
-         alert(error.message);
-      }
+      setLoading(false);
+      alert(error.message);
     }
   };
 
@@ -101,7 +117,6 @@ export default function LandingPage({ user }: LandingPageProps) {
 
   const createTrip = async () => {
     const finalCreatorName = isGuest ? creatorName : (user?.displayName || creatorName);
-    
     if (!finalCreatorName) return;
 
     setLoading(true);
@@ -138,7 +153,9 @@ export default function LandingPage({ user }: LandingPageProps) {
            </button>
         ) : (
            <button onClick={handleGoogleLogin} className="flex items-center gap-2 bg-white text-indigo-600 px-4 py-2 rounded-full text-xs font-bold shadow-lg hover:bg-slate-100 transition">
-             <LogIn size={14}/> Entrar amb Google
+             {/* Mostrem spinner si estem redirigint */}
+             {loading ? <Loader2 className="animate-spin" size={14}/> : <LogIn size={14}/>} 
+             {loading ? 'Carregant...' : 'Entrar amb Google'}
            </button>
         )}
       </div>
@@ -151,80 +168,91 @@ export default function LandingPage({ user }: LandingPageProps) {
         </div>
         
         <Card className="p-8 shadow-xl border-0">
-          {mode === 'menu' && (
-            <div className="space-y-4">
-              <Button onClick={() => setMode('create')} className="w-full py-4 text-lg">Crear nou grup</Button>
-              <Button variant="secondary" onClick={() => setMode('join')} className="w-full py-4 text-lg">Tinc un codi</Button>
-              
-              {!isGuest && myTrips.length > 0 && (
-                <div className="pt-6 animate-fade-in">
-                  <p className="text-xs text-slate-400 mb-3 font-bold uppercase tracking-wider">Els meus viatges ({myTrips.length})</p>
-                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                    {myTrips.map(trip => (
-                      <div key={trip.id} onClick={() => navigate(`/trip/${trip.id}`)} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-xl hover:bg-indigo-50 hover:border-indigo-100 transition cursor-pointer group relative">
-                        <div>
-                          <p className="font-bold text-slate-700 group-hover:text-indigo-700 transition pr-6">{trip.name}</p>
-                          <p className="text-[10px] text-slate-400 flex items-center gap-1"><Calendar size={10}/> {new Date(trip.createdAt).toLocaleDateString()}</p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                           <button onClick={(e) => handleRemoveTrip(trip.id, e)} className="text-slate-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-full transition-all" title="Treure de la llista"><Trash2 size={16} /></button>
-                           <ChevronRight size={16} className="text-slate-300 group-hover:text-indigo-400 transition"/>
-                        </div>
+          {/* Si estem esperant la resposta de Google, bloquegem la interfície amb un loading */}
+          {isRedirecting && !user && !isGuest ? (
+             <div className="py-10 text-center">
+                <Loader2 className="animate-spin mx-auto text-indigo-600 mb-4" size={32}/>
+                <p className="text-slate-500 text-sm font-medium">Verificant sessió...</p>
+             </div>
+          ) : (
+            <>
+              {mode === 'menu' && (
+                <div className="space-y-4">
+                  <Button onClick={() => setMode('create')} className="w-full py-4 text-lg">Crear nou grup</Button>
+                  <Button variant="secondary" onClick={() => setMode('join')} className="w-full py-4 text-lg">Tinc un codi</Button>
+                  
+                  {!isGuest && myTrips.length > 0 && (
+                    <div className="pt-6 animate-fade-in">
+                      <p className="text-xs text-slate-400 mb-3 font-bold uppercase tracking-wider">Els meus viatges ({myTrips.length})</p>
+                      <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                        {myTrips.map(trip => (
+                          <div key={trip.id} onClick={() => navigate(`/trip/${trip.id}`)} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-xl hover:bg-indigo-50 hover:border-indigo-100 transition cursor-pointer group relative">
+                            <div>
+                              <p className="font-bold text-slate-700 group-hover:text-indigo-700 transition pr-6">{trip.name}</p>
+                              <p className="text-[10px] text-slate-400 flex items-center gap-1"><Calendar size={10}/> {new Date(trip.createdAt).toLocaleDateString()}</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <button onClick={(e) => handleRemoveTrip(trip.id, e)} className="text-slate-300 hover:text-red-500 p-2 hover:bg-red-50 rounded-full transition-all" title="Treure de la llista"><Trash2 size={16} /></button>
+                              <ChevronRight size={16} className="text-slate-300 group-hover:text-indigo-400 transition"/>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    </div>
+                  )}
+
+                  {loadingTrips && <div className="text-center py-4"><Loader2 className="animate-spin mx-auto text-indigo-400" size={20}/><p className="text-xs text-slate-400 mt-2">Buscant viatges...</p></div>}
+                  
+                  {!loadingTrips && !isGuest && myTrips.length === 0 && (
+                    <div className="text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                      <p className="text-xs text-slate-400">Encara no tens viatges guardats.</p>
+                    </div>
+                  )}
+
+                  {isGuest && localStorage.getItem('cc-last-trip-id') && (
+                    <div className="pt-4 border-t border-slate-100 text-center animate-fade-in">
+                        <p className="text-xs text-slate-400 mb-2 font-medium uppercase tracking-wider">Últim visitat</p>
+                        <button onClick={() => navigate(`/trip/${localStorage.getItem('cc-last-trip-id')}`)} className="text-indigo-600 font-bold text-sm hover:underline bg-indigo-50 px-3 py-1 rounded-lg">
+                          Tornar al grup anterior
+                        </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ... RESTA DE CODI DELS MODES create I join IGUAL ... */}
+              {mode === 'create' && (
+                <div className="space-y-4 animate-fade-in">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">Nom del grup</label>
+                    <input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all" value={inputName} onChange={e => setInputName(e.target.value)} placeholder="Ex: Viatge a Menorca" />
+                  </div>
+                  {isGuest && (
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-1">El teu nom</label>
+                      <input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all" value={creatorName} onChange={e => setCreatorName(e.target.value)} placeholder="Ex: Laura" />
+                    </div>
+                  )}
+                  <div className="flex gap-2 pt-2">
+                    <Button variant="ghost" onClick={() => setMode('menu')}>Enrere</Button>
+                    <Button className="flex-1" loading={loading} disabled={!inputName || (isGuest && !creatorName)} onClick={createTrip}>Començar</Button>
                   </div>
                 </div>
               )}
 
-              {loadingTrips && <div className="text-center py-4"><Loader2 className="animate-spin mx-auto text-indigo-400" size={20}/><p className="text-xs text-slate-400 mt-2">Buscant viatges...</p></div>}
-              
-              {!loadingTrips && !isGuest && myTrips.length === 0 && (
-                <div className="text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                   <p className="text-xs text-slate-400">Encara no tens viatges guardats.</p>
+              {mode === 'join' && (
+                <div className="space-y-4 animate-fade-in">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">Codi del grup</label>
+                    <input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-mono text-center text-lg uppercase tracking-widest focus:ring-2 focus:ring-indigo-500/20 transition-all" value={inputCode} onChange={e => setInputCode(e.target.value)} placeholder="XXX-YYY" />
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button variant="ghost" onClick={() => setMode('menu')}>Enrere</Button>
+                    <Button className="flex-1" disabled={inputCode.length < 3} onClick={() => navigate(`/trip/${inputCode}`)}>Entrar</Button>
+                  </div>
                 </div>
               )}
-
-              {isGuest && localStorage.getItem('cc-last-trip-id') && (
-                 <div className="pt-4 border-t border-slate-100 text-center animate-fade-in">
-                    <p className="text-xs text-slate-400 mb-2 font-medium uppercase tracking-wider">Últim visitat</p>
-                    <button onClick={() => navigate(`/trip/${localStorage.getItem('cc-last-trip-id')}`)} className="text-indigo-600 font-bold text-sm hover:underline bg-indigo-50 px-3 py-1 rounded-lg">
-                      Tornar al grup anterior
-                    </button>
-                 </div>
-              )}
-            </div>
-          )}
-
-          {mode === 'create' && (
-            <div className="space-y-4 animate-fade-in">
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">Nom del grup</label>
-                <input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all" value={inputName} onChange={e => setInputName(e.target.value)} placeholder="Ex: Viatge a Menorca" />
-              </div>
-              {isGuest && (
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">El teu nom</label>
-                  <input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all" value={creatorName} onChange={e => setCreatorName(e.target.value)} placeholder="Ex: Laura" />
-                </div>
-              )}
-              <div className="flex gap-2 pt-2">
-                <Button variant="ghost" onClick={() => setMode('menu')}>Enrere</Button>
-                <Button className="flex-1" loading={loading} disabled={!inputName || (isGuest && !creatorName)} onClick={createTrip}>Començar</Button>
-              </div>
-            </div>
-          )}
-
-          {mode === 'join' && (
-            <div className="space-y-4 animate-fade-in">
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">Codi del grup</label>
-                <input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-mono text-center text-lg uppercase tracking-widest focus:ring-2 focus:ring-indigo-500/20 transition-all" value={inputCode} onChange={e => setInputCode(e.target.value)} placeholder="XXX-YYY" />
-              </div>
-              <div className="flex gap-2 pt-2">
-                <Button variant="ghost" onClick={() => setMode('menu')}>Enrere</Button>
-                <Button className="flex-1" disabled={inputCode.length < 3} onClick={() => navigate(`/trip/${inputCode}`)}>Entrar</Button>
-              </div>
-            </div>
+            </>
           )}
         </Card>
       </div>
