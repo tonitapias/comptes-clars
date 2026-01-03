@@ -16,7 +16,6 @@ interface ExpenseModalProps {
 }
 
 export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, initialData, users, currency }: ExpenseModalProps) {
-  // L'estat 'amount' serà un string (el que veu l'usuari, ex: "12.50")
   const [formData, setFormData] = useState<{
     title: string; amount: string; payer: string; category: CategoryId; involved: string[]; date: string
   }>({ title: '', amount: '', payer: '', category: 'food', involved: [], date: '' });
@@ -26,7 +25,6 @@ export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, init
       if (initialData) {
         setFormData({
           title: initialData.title,
-          // CONVERSIÓ: De cèntims (Dades) a Euros (Visual)
           amount: (initialData.amount / 100).toFixed(2), 
           payer: initialData.payer,
           category: initialData.category,
@@ -35,7 +33,10 @@ export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, init
         });
       } else {
         setFormData({ 
-          title: '', amount: '', payer: users[0] || '', category: 'food', involved: [], 
+          title: '', amount: '', 
+          // CORRECCIÓ: Assegurar que hi ha un pagador per defecte si hi ha usuaris
+          payer: users.length > 0 ? users[0] : '', 
+          category: 'food', involved: [], 
           date: new Date().toISOString().split('T')[0] 
         });
       }
@@ -44,14 +45,22 @@ export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, init
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.title || !formData.amount) return;
+    // CORRECCIÓ: Validar que hi ha pagador
+    if (!formData.title || !formData.amount || !formData.payer) return;
     
-    let finalDate = formData.date ? new Date(formData.date) : new Date();
-    finalDate.setHours(12, 0, 0, 0);
+    // CORRECCIÓ DATA: Construir la data localment per evitar salts de zona horària
+    let finalDate;
+    if (formData.date) {
+        const [y, m, d] = formData.date.split('-').map(Number);
+        // Creem la data al migdia (12:00) hora LOCAL
+        finalDate = new Date(y, m - 1, d, 12, 0, 0);
+    } else {
+        finalDate = new Date();
+    }
 
-    // CONVERSIÓ: D'Euros (Input) a Cèntims (Base de Dades)
-    // Math.round per evitar errors de flotant tipus 10.50 * 100 = 1050.00000004
-    const amountInCents = Math.round(parseFloat(formData.amount) * 100);
+    // CORRECCIÓ DECIMAL: Gestionar comes i punts
+    const safeAmount = formData.amount.replace(',', '.');
+    const amountInCents = Math.round(parseFloat(safeAmount) * 100);
 
     const expense: Expense = {
       id: initialData?.id || Date.now(),
@@ -79,7 +88,6 @@ export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, init
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={initialData ? "Editar Despesa" : "Nova Despesa"}>
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Import */}
         <div className="relative">
           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl text-slate-400 font-light">{currency.symbol}</span>
           <input 
@@ -90,7 +98,6 @@ export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, init
           />
         </div>
 
-        {/* Detalls */}
         <div className="flex gap-3">
           <div className="flex-1">
             <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Concepte</label>
@@ -109,7 +116,6 @@ export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, init
             <input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} />
         </div>
 
-        {/* Pagador */}
         <div>
           <label className="block text-xs font-bold text-slate-500 uppercase mb-2">{isTransfer ? 'Qui paga (Origen)?' : 'Pagador'}</label>
           <div className="flex flex-wrap gap-2">
@@ -120,9 +126,10 @@ export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, init
               </button>
             ))}
           </div>
+          {/* Feedback visual si no hi ha pagador */}
+          {!formData.payer && users.length > 0 && <p className="text-xs text-rose-500 mt-1 font-bold">Selecciona qui ha pagat</p>}
         </div>
 
-        {/* Participants / Receptors */}
         <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
           <div className="flex justify-between mb-2">
             <label className="block text-xs font-bold text-slate-500 uppercase">{isTransfer ? 'Receptors (Qui rep els diners?)' : 'Participants'}</label>
@@ -146,7 +153,8 @@ export default function ExpenseModal({ isOpen, onClose, onSubmit, onDelete, init
 
         <div className="flex gap-2">
           {initialData && onDelete && <Button variant="danger" className="w-16" icon={Trash2} onClick={(e) => { e.preventDefault(); onDelete(initialData.id); }}></Button>}
-          <Button className="flex-1 text-lg py-4" type="submit" disabled={!formData.amount || !formData.title}>{initialData ? "Guardar" : "Afegir"}</Button>
+          {/* CORRECCIÓ: Deshabilitar si falta el pagador */}
+          <Button className="flex-1 text-lg py-4" type="submit" disabled={!formData.amount || !formData.title || !formData.payer}>{initialData ? "Guardar" : "Afegir"}</Button>
         </div>
       </form>
     </Modal>

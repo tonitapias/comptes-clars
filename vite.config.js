@@ -44,6 +44,21 @@ export default defineConfig({
       }
     })
   ],
+  // --- NOVA SECCIÓ: Optimització del Build ---
+  build: {
+    chunkSizeWarningLimit: 1000, // Pugem el límit de l'avís a 1MB (per si de cas)
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Separem les llibreries grans en fitxers independents per millorar la càrrega
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore'],
+          'vendor-pdf': ['jspdf', 'jspdf-autotable'],
+          'vendor-ui': ['lucide-react']
+        }
+      }
+    }
+  },
   server: {
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
