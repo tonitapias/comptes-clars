@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Calculator, Scale, AlertCircle } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { collection, addDoc, doc, updateDoc } from 'firebase/firestore'; 
 import Button from '../Button';
 import Modal from '../Modal';
@@ -42,13 +42,12 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
           date: initialData.date ? new Date(initialData.date).toISOString().split('T')[0] : '',
           splitType: initialData.splitType || 'equal',
           splitDetails: initialData.splitType === 'exact' 
-             ? Object.fromEntries(Object.entries(initialData.splitDetails || {}).map(([k, v]) => [k, v / 100])) // Convertir cèntims a unitats per visualitzar
+             ? Object.fromEntries(Object.entries(initialData.splitDetails || {}).map(([k, v]) => [k, v / 100]))
              : initialData.splitDetails || {}
         });
       } else {
-        // Valors per defecte
         const defaultDetails: Record<string, number> = {};
-        users.forEach(u => defaultDetails[u] = 1); // Per defecte 1 part per persona
+        users.forEach(u => defaultDetails[u] = 1);
         
         setFormData({ 
           title: '', amount: '', 
@@ -65,17 +64,29 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
   // Validació de l'import "Exacte"
   const currentTotalAmount = parseFloat(formData.amount.replace(',', '.')) || 0;
   
-  // Calcular suma actual del repartiment
   const currentSplitSum = formData.splitType === 'exact' 
     ? Object.values(formData.splitDetails).reduce((sum, val) => sum + (Number(val) || 0), 0)
     : 0;
 
   const exactDiff = currentTotalAmount - currentSplitSum;
-  const isExactValid = Math.abs(exactDiff) < 0.02; // Marge petit d'error decimal
+  const isExactValid = Math.abs(exactDiff) < 0.02;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.title || !formData.amount || !formData.payer) return;
+    
+    // --- VALIDACIONS (Ara amb alertes enlloc de botó desactivat) ---
+    if (!formData.amount || parseFloat(formData.amount) === 0) {
+        alert("Si us plau, introdueix l'import de la despesa.");
+        return;
+    }
+    if (!formData.title) {
+        alert("Falta el concepte (ex: Sopar).");
+        return;
+    }
+    if (!formData.payer) {
+        alert("Selecciona qui ha pagat la despesa.");
+        return;
+    }
     if (formData.splitType === 'exact' && !isExactValid) {
         alert(`Els imports no quadren. Sobren/Falten ${exactDiff.toFixed(2)} ${currency.symbol}`);
         return;
@@ -90,18 +101,16 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
         const safeAmount = formData.amount.replace(',', '.');
         const amountInCents = Math.round(parseFloat(safeAmount) * 100);
 
-        // Preparar splitDetails per guardar (convertir a cèntims si és exacte)
         let finalSplitDetails = { ...formData.splitDetails };
         if (formData.splitType === 'exact') {
             Object.keys(finalSplitDetails).forEach(key => {
                 finalSplitDetails[key] = Math.round(finalSplitDetails[key] * 100);
             });
         }
-        // Si és equal, no cal guardar detalls (estalvi d'espai)
+        
         if (formData.splitType === 'equal') {
             finalSplitDetails = {};
         } else {
-            // Netejar usuaris amb valor 0 per no embrutar
             Object.keys(finalSplitDetails).forEach(k => {
                 if (!finalSplitDetails[k]) delete finalSplitDetails[k];
             });
@@ -129,7 +138,7 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
         onClose();
     } catch (error) {
         console.error("Error:", error);
-        alert("Error guardant.");
+        alert("Error guardant la despesa.");
     } finally {
         setIsSubmitting(false);
     }
@@ -143,10 +152,20 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
 
   const updateSplitDetail = (user: string, value: string) => {
       const numVal = parseFloat(value) || 0;
-      setFormData(prev => ({
-          ...prev,
-          splitDetails: { ...prev.splitDetails, [user]: numVal }
-      }));
+      const newDetails = { ...formData.splitDetails, [user]: numVal };
+      
+      // --- MILLORA: AUTO-SUMA EN MODE EXACTE ---
+      // Si estem en mode exacte, actualitzem el total automàticament
+      if (formData.splitType === 'exact') {
+          const newTotal = Object.values(newDetails).reduce((acc, curr) => acc + curr, 0);
+          setFormData(prev => ({
+              ...prev,
+              splitDetails: newDetails,
+              amount: newTotal > 0 ? newTotal.toFixed(2) : prev.amount 
+          }));
+      } else {
+          setFormData(prev => ({ ...prev, splitDetails: newDetails }));
+      }
   };
 
   const isTransfer = formData.category === 'transfer';
@@ -161,7 +180,7 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl text-slate-400 font-light">{currency.symbol}</span>
           <input 
             type="text" inputMode="decimal" placeholder="0.00" autoFocus={!initialData}
-            className="w-full pl-10 pr-4 py-4 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-500 rounded-2xl text-4xl font-bold text-slate-800 text-center outline-none transition-all" 
+            className={`w-full pl-10 pr-4 py-4 bg-slate-50 border-2 focus:bg-white rounded-2xl text-4xl font-bold text-slate-800 text-center outline-none transition-all ${(!formData.amount && !initialData) ? 'border-indigo-200 animate-pulse' : 'border-transparent focus:border-indigo-500'}`}
             value={formData.amount} 
             onChange={(e) => setFormData({...formData, amount: e.target.value})} 
           />
@@ -171,7 +190,7 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
         <div className="flex gap-3">
           <div className="flex-1">
             <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Concepte</label>
-            <input type="text" required placeholder="Sopar..." className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} />
+            <input type="text" placeholder="Sopar..." className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} />
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Categoria</label>
@@ -183,7 +202,7 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
 
         <div>
             <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Data</label>
-            <input type="date" required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} />
+            <input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} />
         </div>
 
         {/* PAGADOR */}
@@ -204,7 +223,6 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
           <div className="flex justify-between items-center mb-4">
             <label className="block text-xs font-bold text-slate-500 uppercase">{isTransfer ? 'Receptor' : 'Repartiment'}</label>
             
-            {/* Tabs Selector de Mode */}
             {!isTransfer && (
                 <div className="flex bg-slate-200 p-1 rounded-lg">
                     <button type="button" onClick={() => setFormData({...formData, splitType: 'equal'})} className={`px-2 py-1 rounded text-xs font-bold transition-all ${formData.splitType === 'equal' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>Igual</button>
@@ -220,9 +238,7 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
             )}
           </div>
 
-          {/* Contingut Dinàmic segons Mode */}
           <div className="space-y-2">
-            
             {/* MODE IGUAL */}
             {formData.splitType === 'equal' && (
                 <div className="grid grid-cols-2 gap-2">
@@ -279,7 +295,9 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
 
         <div className="flex gap-2 pt-2">
           {initialData && onDelete && <Button variant="danger" className="w-14" icon={Trash2} onClick={(e) => { e.preventDefault(); onDelete(initialData.id); }}></Button>}
-          <Button className="flex-1 text-lg py-4" type="submit" disabled={!formData.amount || !formData.title || !formData.payer || isSubmitting}>
+          
+          {/* BOTÓ SENSE DISABLED */}
+          <Button className="flex-1 text-lg py-4" type="submit" disabled={isSubmitting}>
             {isSubmitting ? 'Guardant...' : (initialData ? "Guardar Canvis" : "Afegir Despesa")}
           </Button>
         </div>
