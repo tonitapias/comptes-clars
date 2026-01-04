@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /trip/
+
+Sitemap: https://comptes-clars.vercel.app/sitemap.xml
