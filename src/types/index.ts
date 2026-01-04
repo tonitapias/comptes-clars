@@ -18,6 +18,9 @@ export interface Category {
   barColor: string;
 }
 
+// --- NOUS TIPUS PER AL REPARTIMENT ---
+export type SplitType = 'equal' | 'exact' | 'shares';
+
 export interface Expense {
   id: number | string;
   title: string;
@@ -26,6 +29,10 @@ export interface Expense {
   category: CategoryId;
   involved: string[];
   date: string; // ISO String
+  
+  // --- CAMPS NOUS ---
+  splitType?: SplitType; 
+  splitDetails?: Record<string, number>; // Mapeja userID -> quantitat (o parts)
 }
 
 export interface TripData {
@@ -35,8 +42,7 @@ export interface TripData {
   expenses: Expense[];
   currency: Currency;
   createdAt: string;
-  // --- NOU CAMP ---
-  memberUids?: string[]; // Llista d'IDs d'usuaris de Google vinculats a aquest viatge
+  memberUids?: string[]; 
 }
 
 export interface Balance {
