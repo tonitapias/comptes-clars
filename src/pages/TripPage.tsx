@@ -1,29 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { 
-  Plus, Users, Receipt, ArrowRightLeft, Trash2, CheckCircle2, 
-  ChevronRight, Search, Edit2, Info, Settings, Share2, LogOut, 
-  Loader2, Check, Calendar, AlertTriangle, Download, Save, Lock
-} from 'lucide-react';
-import { 
-  doc, onSnapshot, updateDoc, arrayUnion, runTransaction, 
-  collection, deleteDoc, addDoc, writeBatch 
-} from 'firebase/firestore'; 
+import { Plus, Trash2, CheckCircle2, ArrowRightLeft, Loader2, AlertTriangle, Lock } from 'lucide-react';
 import { User } from 'firebase/auth';
 
-import Card from '../components/Card';
 import Button from '../components/Button';
 import Modal from '../components/Modal';
-import DonutChart from '../components/DonutChart';
-import Toast, { ToastType } from '../components/Toast'; // <--- IMPORT NOU
+import Toast, { ToastType } from '../components/Toast';
 import ExpenseModal from '../components/modals/ExpenseModal';
 import GroupModal from '../components/modals/GroupModal';
-import { db, appId, auth } from '../config/firebase'; 
-import { CURRENCIES, CATEGORIES } from '../utils/constants';
+import TripHeader from '../components/trip/TripHeader';
+import ExpensesList from '../components/trip/ExpensesList';
+import BalancesView from '../components/trip/BalancesView';
+import SettlementsView from '../components/trip/SettlementsView';
+
+// Nous Serveis i Hooks
+import { TripService } from '../services/tripService';
+import { useTripData } from '../hooks/useTripData';
 import { useTripCalculations } from '../hooks/useTripCalculations';
-import { TripData, Expense, CategoryId, Settlement } from '../types';
+
+import { CURRENCIES, CATEGORIES } from '../utils/constants'; 
+import { CategoryId, Settlement, Expense } from '../types';
 import { generatePDF } from '../utils/exportPdf';
-import { secureAccountLinking } from '../utils/authUtils';
+import { formatCurrency } from '../utils/formatters';
 
 interface TripPageProps {
   user: User | null;
@@ -33,18 +31,13 @@ export default function TripPage({ user }: TripPageProps) {
   const { tripId } = useParams<{ tripId: string }>();
   const navigate = useNavigate();
   
-  // Dades
-  const [tripData, setTripData] = useState<TripData | null>(null);
-  const [expensesList, setExpensesList] = useState<Expense[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // 1. Dades via Custom Hook (Molt més net!)
+  const { tripData, expenses, loading, error } = useTripData(tripId);
 
   // UI States
   const [activeTab, setActiveTab] = useState<'expenses' | 'balances' | 'settle'>('expenses');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<CategoryId | 'all'>('all');
-  
-  // TOAST STATE (Nou)
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
   const showToast = (msg: string, type: ToastType = 'success') => setToast({ msg, type });
 
@@ -53,108 +46,61 @@ export default function TripPage({ user }: TripPageProps) {
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [settleModalOpen, setSettleModalOpen] = useState<Settlement | null>(null);
-  
-  const [settleMethod, setSettleMethod] = useState('Bizum');
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ type: string; id?: string | number; title: string; message: string } | null>(null);
-  
-  // Settings
+  const [settleMethod, setSettleMethod] = useState('Bizum');
+
+  // Settings Local State
   const [editTripName, setEditTripName] = useState('');
   const [editTripDate, setEditTripDate] = useState('');
 
-  // 1. Càrrega Dades
+  // Sincronitzar settings quan carreguen les dades
   useEffect(() => {
-    if (tripId) localStorage.setItem('cc-last-trip-id', tripId);
-  }, [tripId]);
+    if (tripData) {
+        setEditTripName(tripData.name);
+        setEditTripDate(tripData.createdAt ? new Date(tripData.createdAt).toISOString().split('T')[0] : '');
+    }
+  }, [tripData]);
 
-  useEffect(() => {
-    if (!tripId) return;
-    setLoading(true);
-    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
-    
-    const unsubscribe = onSnapshot(docRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data() as TripData;
-        setTripData(data);
-        setEditTripName(data.name);
-        setEditTripDate(data.createdAt ? new Date(data.createdAt).toISOString().split('T')[0] : '');
-        setLoading(false);
-      } else {
-        setError("Grup no trobat");
-        setLoading(false);
-      }
-    }, (err) => { 
-      if (err.code === 'permission-denied') setError("⛔ Accés denegat.");
-      else setError("Error carregant el grup."); 
-      setLoading(false); 
-    });
-    return () => unsubscribe();
-  }, [tripId]);
+  useEffect(() => { if (tripId) localStorage.setItem('cc-last-trip-id', tripId); }, [tripId]);
 
-  // 2. Càrrega Despeses
-  useEffect(() => {
-    if (!tripId) return;
-    const expensesRef = collection(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`, 'expenses');
-    
-    const unsubscribe = onSnapshot(expensesRef, (snapshot) => {
-      setExpensesList(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Expense[]);
-    });
-    return () => unsubscribe();
-  }, [tripId]);
-
-  // Auto-link
+  // Auto-link User (Service)
   useEffect(() => {
     if (user && tripData && tripId && !tripData.memberUids?.includes(user.uid)) {
-      updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`), { 
-        memberUids: arrayUnion(user.uid) 
-      }).catch(console.error);
+      TripService.linkAuthUser(tripId, user.uid).catch(console.error);
     }
   }, [user, tripData, tripId]);
 
-  // Helpers
+  // Càlculs
   const { users, currency = CURRENCIES[0], name, createdAt } = tripData || { users: [], expenses: [] };
-  const { filteredExpenses, balances, categoryStats, settlements, totalGroupSpending, displayedTotal } = useTripCalculations(expensesList, users || [], searchQuery, filterCategory);
+  const { filteredExpenses, balances, categoryStats, settlements, totalGroupSpending, displayedTotal } = useTripCalculations(expenses, users || [], searchQuery, filterCategory);
 
-  const formatCurrency = (amount: number) => new Intl.NumberFormat(currency?.locale || 'ca-ES', { style: 'currency', currency: currency?.code || 'EUR' }).format(amount / 100);
-  
-  const getCategory = (id: string) => CATEGORIES.find(c => c.id === id) || CATEGORIES.find(c => c.id === 'other') || CATEGORIES[0];
-  const formatDateDisplay = (d: string) => d ? new Date(d).toLocaleDateString('ca-ES', { day: 'numeric', month: 'short' }) : '';
-  
-  const copyCode = () => {
-    navigator.clipboard.writeText(tripId || '').then(() => showToast("Codi copiat al porta-retalls!", 'success'));
-  };
+  // --- HANDLERS (Ara utilitzen TripService) ---
 
-  const handleExportPDF = () => {
-    if (!tripData) return;
-    try {
-        generatePDF(name, expensesList, balances, settlements, currency.symbol);
-        showToast("PDF descarregat correctament", 'success');
-    } catch (e) {
-        showToast("Error generant el PDF", 'error');
-    }
-  };
-
-  const updateTrip = async (newData: Partial<TripData>) => {
+  const handleUpdateTrip = async () => {
     if (!tripId) return;
-    try { 
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`), newData);
-        showToast("Configuració actualitzada", 'success');
-    } catch (e: any) { showToast("Error guardant: " + e.message, 'error'); }
+    try {
+        let d = createdAt ? new Date(createdAt) : new Date();
+        if (editTripDate) d = new Date(editTripDate);
+        d.setHours(12, 0, 0, 0);
+        
+        await TripService.updateTrip(tripId, { name: editTripName, createdAt: d.toISOString() });
+        setSettingsModalOpen(false);
+        showToast("Configuració actualitzada");
+    } catch (e: any) { showToast(e.message, 'error'); }
   };
 
-  const handleDeleteExpense = (id: string | number) => {
-    setConfirmAction({ type: 'delete_expense', id, title: 'Eliminar Despesa', message: 'Estàs segur? Aquesta acció no es pot desfer.' });
+  const handleChangeCurrency = async (newCurrency: any) => {
+      if (tripId) {
+          await TripService.updateTrip(tripId, { currency: newCurrency });
+          showToast("Moneda canviada");
+      }
   };
 
   const handleSettleDebt = async () => {
     if (!settleModalOpen || !tripId) return;
-    const repayment = { 
-      title: `Pagament deute (${settleMethod})`, amount: settleModalOpen.amount, payer: settleModalOpen.from, 
-      category: 'transfer', involved: [settleModalOpen.to], date: new Date().toISOString() 
-    };
-
     try {
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`, 'expenses'), repayment);
+        await TripService.settleDebt(tripId, settleModalOpen, settleMethod);
         setSettleModalOpen(null);
         showToast("Pagament registrat!", 'success');
     } catch (e: any) { showToast("Error liquidant", 'error'); }
@@ -163,44 +109,24 @@ export default function TripPage({ user }: TripPageProps) {
   const handleAddUser = async (userName: string) => {
     if (!tripId) return;
     try {
-      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`), { users: arrayUnion(userName) });
+      await TripService.addUser(tripId, userName);
       showToast(`Usuari ${userName} afegit`, 'success');
     } catch (e: any) { showToast("Error afegint usuari", 'error'); }
   };
-  
+
   const handleRenameUser = async (oldName: string, newName: string) => {
     if (!tripId) return;
     try {
-      await runTransaction(db, async (transaction) => {
-        const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
-        const tripDoc = await transaction.get(tripRef);
-        if (!tripDoc.exists()) throw new Error("Doc no trobat");
-        const newUsers = (tripDoc.data().users || []).map((u: string) => u === oldName ? newName : u);
-        transaction.update(tripRef, { users: newUsers });
-      });
-
-      const batch = writeBatch(db);
-      let ops = 0;
-      expensesList.forEach(exp => {
-        if (exp.payer === oldName || exp.involved.includes(oldName)) {
-            const newPayer = exp.payer === oldName ? newName : exp.payer;
-            const newInvolved = exp.involved.map(inv => inv === oldName ? newName : inv);
-            const ref = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`, 'expenses', String(exp.id));
-            batch.update(ref, { payer: newPayer, involved: newInvolved });
-            ops++;
-        }
-      });
-      if (ops > 0) await batch.commit();
-      showToast("Usuari reanomenat correctament", 'success');
-    } catch (e: any) { showToast("Error reanomenant", 'error'); }
+        await TripService.renameUser(tripId, oldName, newName);
+        showToast("Usuari reanomenat correctament", 'success');
+    } catch (e: any) { showToast("Error reanomenant: " + e.message, 'error'); }
   };
-  
+
   const requestDeleteUser = (userName: string) => {
-    const hasExpenses = expensesList.some(e => e.payer === userName || e.involved.includes(userName));
+    const hasExpenses = expenses.some(e => e.payer === userName || e.involved.includes(userName));
     const userBalance = balances.find(b => b.user === userName)?.balance || 0;
-    
-    if (hasExpenses || Math.abs(userBalance) > 1) {
-        showToast(`No es pot eliminar: Té despeses o balanç pendent (${formatCurrency(userBalance)})`, 'error');
+    if (hasExpenses || Math.abs(userBalance) > 5) {
+        showToast(`No es pot eliminar: Té despeses o balanç pendent`, 'error');
     } else {
         setConfirmAction({ type: 'delete_user', id: userName, title: 'Eliminar Participant', message: `Segur que vols eliminar a ${userName}?` });
     }
@@ -210,10 +136,10 @@ export default function TripPage({ user }: TripPageProps) {
     if (!confirmAction || !tripId) return;
     try {
       if (confirmAction.type === 'delete_expense') {
-        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`, 'expenses', String(confirmAction.id)));
+        await TripService.deleteExpense(tripId, String(confirmAction.id));
         showToast("Despesa eliminada", 'success');
       } else if (confirmAction.type === 'delete_user') {
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`), { users: users.filter(u => u !== confirmAction.id) });
+        await TripService.removeUser(tripId, String(confirmAction.id));
         showToast("Usuari eliminat", 'success');
       }
     } catch (e: any) { showToast("Error: " + e.message, 'error'); }
@@ -221,98 +147,58 @@ export default function TripPage({ user }: TripPageProps) {
     setIsExpenseModalOpen(false);
   };
 
-  const canChangeCurrency = expensesList.length === 0;
+  // --- RENDER ---
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600"/></div>;
   if (error) return <div className="min-h-screen flex flex-col items-center justify-center gap-4"><AlertTriangle className="text-red-500" size={40}/><p className="text-slate-600 font-bold">{error}</p><Button variant="secondary" onClick={() => { localStorage.removeItem('cc-last-trip-id'); navigate('/'); }}>Tornar a l'inici</Button></div>;
   if (!tripData) return null;
 
+  const canChangeCurrency = expenses.length === 0;
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-24 md:pb-10">
-      {/* TOAST COMPONENT */}
       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
       
-      {/* Header */}
-      <header className="bg-gradient-to-br from-indigo-800 to-indigo-600 text-white pt-8 pb-20 px-6 shadow-xl relative overflow-hidden">
-        <div className="max-w-3xl mx-auto flex justify-between items-start relative z-10">
-          <div>
-            <div className="flex items-center gap-2 mb-2"><button className="bg-white/20 p-1.5 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors" onClick={() => { localStorage.removeItem('cc-last-trip-id'); navigate('/'); }}><LogOut className="text-indigo-100" size={16} /></button><span className="text-indigo-200 text-xs font-bold tracking-wider uppercase">En línia • {tripId}</span></div>
-            <h1 className="text-2xl font-bold tracking-tight cursor-pointer hover:opacity-90" onClick={() => setSettingsModalOpen(true)}>{name} <Edit2 size={16} className="inline opacity-50"/></h1>
-            {createdAt && <p className="text-indigo-200 text-xs mt-1 flex items-center gap-1 opacity-80"><Calendar size={12} /> {new Date(createdAt).toLocaleDateString('ca-ES', { dateStyle: 'long' })}</p>}
-          </div>
-          <div className="flex gap-2">
-            <button onClick={handleExportPDF} className="bg-white/20 hover:bg-white/30 p-2.5 rounded-xl transition-colors backdrop-blur-md text-indigo-100" title="Exportar PDF"><Download size={20} /></button>
-            <button onClick={() => setSettingsModalOpen(true)} className="bg-white/20 hover:bg-white/30 p-2.5 rounded-xl transition-colors backdrop-blur-md text-indigo-100"><Settings size={20} /></button>
-            <button onClick={copyCode} className="bg-white/20 hover:bg-white/30 p-2.5 rounded-xl transition-colors backdrop-blur-md text-indigo-100"><Share2 size={20} /></button>
-            <button onClick={() => setGroupModalOpen(true)} className="bg-white text-indigo-600 hover:bg-indigo-50 py-2 px-3 rounded-xl transition-colors shadow-lg font-bold text-sm flex items-center gap-2"><Users size={16} /> {users.length}</button>
-          </div>
-        </div>
-      </header>
+      <TripHeader 
+        tripId={tripId!} name={name} createdAt={createdAt} userCount={users.length}
+        displayedTotal={displayedTotal} totalGroupSpending={totalGroupSpending} currency={currency}
+        isFiltered={!!searchQuery || filterCategory !== 'all'}
+        onOpenSettings={() => setSettingsModalOpen(true)}
+        onOpenGroup={() => setGroupModalOpen(true)}
+        onExportPDF={() => generatePDF(name, expenses, balances, settlements, currency.symbol)}
+        onCopyCode={() => { navigator.clipboard.writeText(tripId || '').then(() => showToast("Codi copiat!", 'success')); }}
+      />
 
-      <main className="max-w-3xl mx-auto px-4 -mt-14 relative z-20">
-        <Card className="mb-6 bg-white shadow-xl shadow-indigo-100/50 border-0">
-          <div className="p-6 flex justify-between items-center">
-            <div>
-                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">{searchQuery || filterCategory !== 'all' ? 'Total Filtrat' : 'Total Grup'}</p>
-                <h2 className="text-3xl font-extrabold text-slate-800">{formatCurrency(displayedTotal)}</h2>
-            </div>
-            <div className="text-right pl-4 border-l border-slate-100"><p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">Per persona</p><p className="text-xl font-bold text-indigo-600">{users.length > 0 ? formatCurrency(totalGroupSpending / users.length) : formatCurrency(0)}</p></div>
-          </div>
-        </Card>
-        
+      <main className="max-w-3xl mx-auto px-4 relative z-20">
         <div className="flex p-1.5 bg-white rounded-2xl mb-6 shadow-sm border border-slate-200">
           {(['expenses', 'balances', 'settle'] as const).map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all ${activeTab === tab ? 'bg-indigo-100 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>{tab === 'expenses' ? 'Despeses' : tab === 'balances' ? 'Balanç' : 'Liquidar'}</button>
+            <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all ${activeTab === tab ? 'bg-indigo-100 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+                {tab === 'expenses' ? 'Despeses' : tab === 'balances' ? 'Balanç' : 'Liquidar'}
+            </button>
           ))}
         </div>
 
         {activeTab === 'expenses' && (
-          <div className="space-y-4 animate-fade-in">
-             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-              <div className="bg-white p-2 rounded-xl border border-slate-200 flex items-center gap-2 flex-1 min-w-[150px] shadow-sm"><Search size={16} className="text-slate-400 ml-1" /><input type="text" placeholder="Buscar..." className="w-full bg-transparent outline-none text-sm font-medium text-slate-700" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
-              <select className="bg-white px-3 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 outline-none shadow-sm" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value as CategoryId)}>{CATEGORIES.map(c => (<option key={c.id} value={c.id}>{c.label}</option>))}</select>
-            </div>
-            {filteredExpenses.length === 0 ? (
-              <div className="text-center py-16 bg-white rounded-3xl border border-dashed border-slate-200"><Receipt size={32} className="text-indigo-300 mx-auto mb-4" /><p className="text-slate-400 text-sm">No hi ha despeses.</p>{!searchQuery && filterCategory === 'all' && <Button onClick={() => { setEditingExpense(null); setIsExpenseModalOpen(true); }} className="mx-auto mt-4" icon={Plus}>Afegir Despesa</Button>}</div>
-            ) : (
-              <div className="space-y-3">{filteredExpenses.map((expense) => { const category = getCategory(expense.category); const isTransfer = expense.category === 'transfer'; return (
-                    <Card key={expense.id} className={`hover:shadow-md transition-all group ${isTransfer ? 'bg-slate-50' : 'bg-white'}`} onClick={() => { setEditingExpense(expense); setIsExpenseModalOpen(true); }}>
-                      <div className="flex items-center p-4 cursor-pointer">
-                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mr-4 shadow-sm ${category.color}`}>{isTransfer ? <ArrowRightLeft size={20}/> : <category.icon size={22} />}</div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex justify-between items-start"><h4 className={`font-bold truncate ${isTransfer ? 'text-slate-600 italic' : 'text-slate-800'}`}>{expense.title}</h4><span className="text-xs text-slate-400 font-medium bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-100 ml-2 whitespace-nowrap">{formatDateDisplay(expense.date)}</span></div>
-                          <div className="flex items-center gap-2 mt-0.5"><span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">{expense.payer}</span><span className="text-xs text-slate-500">{isTransfer ? '→' : '•'} {isTransfer ? expense.involved[0] : (expense.splitType === 'equal' ? `${expense.involved.length} pers.` : (expense.splitType === 'exact' ? 'Exacte' : 'Parts'))}</span></div>
-                        </div>
-                        <div className="flex flex-col items-end pl-2">
-                          <span className={`font-bold text-lg ${isTransfer ? 'text-slate-500' : 'text-slate-800'}`}>{formatCurrency(expense.amount)}</span>
-                        </div>
-                      </div>
-                    </Card>
-                  );})}</div>
-            )}
-          </div>
+          <ExpensesList 
+            expenses={filteredExpenses} searchQuery={searchQuery} setSearchQuery={setSearchQuery}
+            filterCategory={filterCategory} setFilterCategory={setFilterCategory}
+            onEditExpense={(e) => { setEditingExpense(e); setIsExpenseModalOpen(true); }}
+            currency={currency}
+          />
         )}
-
-        {/* ... (La resta de tabs es manté igual, només assegura't que l'estructura és consistent) ... */}
-        {activeTab === 'balances' && (
-           <div className="space-y-6 animate-fade-in">
-             {categoryStats.length > 0 && <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-6"><DonutChart data={categoryStats} /><div className="flex-1 space-y-2">{categoryStats.slice(0, 3).map(stat => (<div key={stat.id} className="flex justify-between items-center text-sm"><span className="flex items-center gap-2 font-medium text-slate-600"><div className={`w-3 h-3 rounded-full ${stat.barColor}`}></div>{stat.label}</span><span className="font-bold text-slate-800">{Math.round(stat.percentage)}%</span></div>))}</div></div>}
-             <div className="grid gap-3">{balances.map((b) => <Card key={b.user} className="p-0 overflow-hidden"><div className="p-5 relative z-10"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white shadow-sm ${b.balance >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}>{(b.user || '?').charAt(0)}</div><div><p className="font-bold text-slate-800">{b.user}</p><p className={`text-xs font-bold uppercase ${b.balance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{b.balance >= 0 ? 'Recupera' : 'Ha de pagar'}</p></div></div><span className={`text-xl font-black ${b.balance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{b.balance >= 0 ? '+' : ''}{formatCurrency(b.balance)}</span></div></div></Card>)}</div>
-           </div>
-        )}
-
-        {activeTab === 'settle' && (
-          <div className="space-y-4 animate-fade-in">
-             <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl mb-4 text-sm text-indigo-800 flex gap-2"><Info size={20} className="shrink-0"/> Fes clic en un deute per marcar-lo com a pagat.</div>
-             {settlements.length === 0 ? <div className="text-center py-10 bg-white rounded-2xl border border-slate-100 shadow-sm"><CheckCircle2 className="mx-auto text-emerald-500 mb-2" size={32}/><p>Tot quadrat!</p></div> : settlements.map((s, idx) => (<div key={idx} onClick={() => setSettleModalOpen(s)} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex items-center justify-between cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all active:scale-[0.98]"><div className="flex flex-col items-center w-20"><span className="font-bold text-rose-600">{s.from}</span></div><div className="flex-1 px-2 flex flex-col items-center"><span className="text-[10px] uppercase text-slate-400 font-bold tracking-wider">Paga a</span><ChevronRight size={14} className="text-slate-300 my-1"/><div className="bg-indigo-600 text-white px-3 py-1 rounded-full font-bold text-sm shadow-md">{formatCurrency(s.amount)}</div></div><div className="flex flex-col items-center w-20"><span className="font-bold text-emerald-600">{s.to}</span></div></div>))}
-          </div>
-        )}
+        {activeTab === 'balances' && <BalancesView balances={balances} categoryStats={categoryStats} currency={currency} />}
+        {activeTab === 'settle' && <SettlementsView settlements={settlements} onSettleDebt={setSettleModalOpen} currency={currency} />}
       </main>
       
-      {/* Botó Flotant + Modals (Mateix que abans) */}
       <button onClick={() => { setEditingExpense(null); setIsExpenseModalOpen(true); }} className="fixed bottom-6 right-6 md:right-[calc(50%-350px)] bg-indigo-600 text-white p-4 rounded-2xl shadow-xl hover:bg-indigo-700 transition-all z-40 shadow-indigo-200"><Plus size={28} /></button>
       
-      <ExpenseModal isOpen={isExpenseModalOpen} onClose={() => setIsExpenseModalOpen(false)} initialData={editingExpense} users={users} currency={currency} tripId={tripId!} onDelete={handleDeleteExpense} />
+      <ExpenseModal 
+        isOpen={isExpenseModalOpen} onClose={() => setIsExpenseModalOpen(false)} 
+        initialData={editingExpense} users={users} currency={currency} tripId={tripId!} 
+        onDelete={(id) => setConfirmAction({ type: 'delete_expense', id, title: 'Eliminar?', message: 'Segur?' })} 
+        showToast={showToast} 
+      />
+      
       <GroupModal isOpen={groupModalOpen} onClose={() => setGroupModalOpen(false)} tripId={tripId!} users={users} onAddUser={handleAddUser} onRemoveUser={requestDeleteUser} onRenameUser={handleRenameUser} />
       
       <Modal isOpen={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} title="Configuració del Grup">
@@ -322,10 +208,10 @@ export default function TripPage({ user }: TripPageProps) {
           <div>
             <div className="flex items-center justify-between mb-2"><label className="block text-xs font-bold text-slate-500 uppercase">Moneda</label>{!canChangeCurrency && <span className="text-xs text-rose-500 font-bold flex items-center gap-1"><Lock size={10} /> Bloquejat</span>}</div>
             <div className="grid grid-cols-2 gap-2">
-              {CURRENCIES.map(c => (<button key={c.code} onClick={() => canChangeCurrency && updateTrip({ currency: c })} disabled={!canChangeCurrency} className={`p-3 rounded-xl border-2 text-sm font-bold flex items-center justify-center gap-2 transition-all ${currency?.code === c.code ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100'} ${!canChangeCurrency && currency?.code !== c.code ? 'opacity-40 cursor-not-allowed bg-slate-50' : 'hover:border-slate-300'}`}><span>{c.symbol}</span> {c.code}</button>))}
+              {CURRENCIES.map(c => (<button key={c.code} onClick={() => canChangeCurrency && handleChangeCurrency(c)} disabled={!canChangeCurrency} className={`p-3 rounded-xl border-2 text-sm font-bold flex items-center justify-center gap-2 transition-all ${currency?.code === c.code ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100'} ${!canChangeCurrency && currency?.code !== c.code ? 'opacity-40 cursor-not-allowed bg-slate-50' : 'hover:border-slate-300'}`}><span>{c.symbol}</span> {c.code}</button>))}
             </div>
           </div>
-          <Button onClick={async () => { let d = createdAt ? new Date(createdAt) : new Date(); if (editTripDate) d = new Date(editTripDate); d.setHours(12, 0, 0, 0); await updateTrip({ name: editTripName, createdAt: d.toISOString() }); setSettingsModalOpen(false); }}>Guardar canvis</Button>
+          <Button onClick={handleUpdateTrip}>Guardar canvis</Button>
         </div>
       </Modal>
 
@@ -337,7 +223,7 @@ export default function TripPage({ user }: TripPageProps) {
             <div className="py-4">
               <p className="text-slate-500 text-lg">Confirmar pagament de</p>
               <p className="text-xl font-bold text-slate-800 my-2">{settleModalOpen.from} <ArrowRightLeft className="inline mx-2" size={16}/> {settleModalOpen.to}</p>
-              <p className="text-3xl font-black text-indigo-600">{formatCurrency(settleModalOpen.amount)}</p>
+              <p className="text-3xl font-black text-indigo-600">{formatCurrency(settleModalOpen.amount, currency)}</p>
             </div>
             <div>
               <p className="text-xs font-bold text-slate-400 uppercase mb-2">Com s'ha pagat?</p>
@@ -348,7 +234,7 @@ export default function TripPage({ user }: TripPageProps) {
         )}
       </Modal>
       
-      <style>{`@keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } .animate-fade-in { animation: fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; } .scrollbar-hide::-webkit-scrollbar { display: none; }`}</style>
+      <style>{`@keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } .animate-fade-in { animation: fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }`}</style>
     </div>
   );
 }

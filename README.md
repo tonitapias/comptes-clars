@@ -2,33 +2,57 @@
 
 **Comptes Clars** és una aplicació web progressiva (PWA) moderna dissenyada per gestionar i dividir despeses de viatges i grups de manera justa i sense complicacions. Permet fer un seguiment de qui ha pagat què i calcula automàticament els deutes per liquidar els comptes de la manera més eficient possible.
 
-![Estat del projecte](https://img.shields.io/badge/Estat-En%20Desenvolupament-green)
+![Estat del projecte](https://img.shields.io/badge/Estat-En%20Producció-green)
 ![Llicència](https://img.shields.io/badge/Llicència-MIT-blue)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
+![Firebase](https://img.shields.io/badge/Firebase-Supported-FFCA28?logo=firebase&logoColor=black)
 
 ## ✨ Funcionalitats Principals
 
-* **👥 Gestió de Grups i Viatges:** Crea grups, afegeix participants i gestiona múltiples viatges.
-* **💰 Registre de Despeses:** Afegeix despeses especificant qui ha pagat i qui hi participa.
-* **💱 Múltiples Monedes:** Suport per a EUR, USD, GBP, JPY i MXN amb format localitzat.
-* **📊 Càlcul de Balanços:** Visualitza en temps real qui deu diners i a qui.
+* **👥 Gestió de Grups i Viatges:** Crea grups il·limitats, comparteix-los mitjançant codi i gestiona participants.
+* **💰 Registre de Despeses Flexible:**
+  * **Repartiment Igualitari:** Divideix entre tots o persones específiques.
+  * **Repartiment Exacte:** Assigna imports concrets a cada persona.
+  * **Per Parts/Pesos:** Ideal per a famílies o parelles (ex: algú compta per 2).
+* **💱 Múltiples Monedes:** Suport complet per a EUR, USD, GBP, JPY i MXN.
+* **📊 Càlcul de Balanços en Temps Real:** Visualitza a l'instant qui deu diners i a qui, amb precisió de cèntims.
 * **🔄 Algoritme de Liquidació:** Optimitza els pagaments per reduir el nombre de transaccions necessàries per quedar en pau.
-* **📄 Exportació PDF:** Genera informes detallats del viatge amb un sol clic.
-* **📱 PWA Instal·lable:** Funciona com una aplicació nativa al mòbil, amb icona pròpia i sense barra de navegació.
-* **🔐 Autenticació Híbrida:** Mode "Convidat" (anònim) per començar ràpidament i opció de vincular amb Google per guardar les dades.
-* **☁️ Sincronització en Temps Real:** Totes les dades es guarden a Firebase Firestore i s'actualitzen a l'instant per a tots els usuaris.
+* **📄 Exportació PDF:** Genera informes detallats i professionals del viatge amb un sol clic.
+* **📱 PWA Instal·lable:** Funciona com una aplicació nativa al mòbil, amb suport *offline* i icona pròpia.
+* **🔐 Autenticació Híbrida:** Mode "Convidat" per començar ràpidament i vinculació amb Google per guardar les dades al núvol.
+* **⚡ Arquitectura Robusta:** Gestió de dades atòmica per evitar errors de sincronització (ex: reanomenar usuaris massivament sense perdre dades).
 
 ## 🛠️ Tecnologies Utilitzades
 
-El projecte està construït amb un stack modern basat en React i Firebase:
+El projecte utilitza un stack modern basat en React 19 i una arquitectura per capes:
 
 * **Frontend:** [React 19](https://react.dev/), [TypeScript](https://www.typescriptlang.org/), [Vite](https://vitejs.dev/)
 * **Estils:** [Tailwind CSS](https://tailwindcss.com/)
-* **Backend & Base de Dades:** [Firebase](https://firebase.google.com/) (Firestore, Auth)
+* **Backend (Serverless):** [Firebase Firestore](https://firebase.google.com/docs/firestore) & [Authentication](https://firebase.google.com/docs/auth)
+* **Gestió d'Estat:** Custom Hooks + Service Layer Pattern.
 * **Icones:** [Lucide React](https://lucide.dev/)
-* **Generació PDF:** [jsPDF](https://github.com/parallax/jsPDF) & [jspdf-autotable](https://github.com/simonbengtsson/jspdf-autotable)
-* **PWA:** [Vite PWA Plugin](https://vite-pwa-org.netlify.app/)
+* **PDF:** [jsPDF](https://github.com/parallax/jsPDF) & [jspdf-autotable](https://github.com/simonbengtsson/jspdf-autotable)
 
-## 🚀 Instal·lació i Configuració
+## 📱 Estructura del Projecte
+
+L'aplicació segueix una arquitectura neta separant la lògica de negoci de la interfície:
+
+```bash
+src/
+├── components/      # Components de UI (Botons, Cards, Modals...)
+│   ├── modals/      # Modals específics (ExpenseModal, GroupModal...)
+│   └── trip/        # Vistes parcials del viatge (ExpensesList, Balances...)
+├── config/          # Inicialització de Firebase
+├── hooks/           # Custom Hooks (useTripData, useTripCalculations...)
+├── pages/           # Pàgines principals (LandingPage, TripPage)
+├── services/        # Capa de Serveis (Lògica d'escriptura a Firebase)
+├── types/           # Definicions de tipus TypeScript
+├── utils/           # Funcions d'utilitat, constants i exportació PDF
+└── App.tsx          # Enrutament i Layout principal
+
+```
+
+## 🚀 Instal·lació i Desenvolupament
 
 Segueix aquests passos per executar el projecte en local:
 
@@ -49,9 +73,9 @@ npm install
 
 ### 3. Configurar Firebase
 
-Crea un projecte a [Firebase Console](https://console.firebase.google.com/), habilita **Firestore Database** i **Authentication** (Google i Anonymous).
-
-Crea un fitxer `.env` a l'arrel del projecte amb les teves credencials de Firebase:
+1. Crea un projecte a [Firebase Console](https://console.firebase.google.com/).
+2. Habilita **Firestore Database** i **Authentication** (Google i Anonymous).
+3. Crea un fitxer `.env` a l'arrel del projecte amb les teves credencials:
 
 ```env
 VITE_FIREBASE_API_KEY=la_teva_api_key
@@ -63,44 +87,38 @@ VITE_FIREBASE_APP_ID=el_teu_app_id
 
 ```
 
-### 4. Executar en mode desenvolupament
+### 4. Executar en local
 
 ```bash
 npm run dev
 
 ```
 
-L'aplicació estarà disponible a `http://localhost:5173`.
+## 📦 Desplegament
 
-## 📜 Scripts Disponibles
+El projecte està configurat per desplegar-se fàcilment a **Vercel** o **Netlify**.
 
-* `npm run dev`: Inicia el servidor de desenvolupament amb HMR.
-* `npm run build`: Compila l'aplicació per a producció.
-* `npm run lint`: Executa ESLint per trobar problemes al codi.
-* `npm run preview`: Previsualitza la build de producció localment.
+### Vercel (Recomanat)
 
-## 📱 Estructura del Projecte
+El fitxer `vercel.json` ja està inclòs per gestionar les rutes de la SPA i les capçaleres de seguretat (COOP/COEP) necessàries per a l'autenticació de Google.
 
-```
-src/
-├── components/      # Components reutilitzables (Botons, Cards, Modals...)
-├── config/          # Configuració de Firebase
-├── hooks/           # Custom Hooks (ex: useTripCalculations)
-├── pages/           # Pàgines principals (LandingPage, TripPage)
-├── types/           # Definicions de tipus TypeScript
-├── utils/           # Funcions d'utilitat i constants
-└── App.tsx          # Punt d'entrada i rutes
+1. Instal·la Vercel CLI: `npm i -g vercel`
+2. Executa el desplegament:
+```bash
+vercel --prod
 
 ```
+
+
 
 ## 🤝 Contribució
 
-Les contribucions són benvingudes! Si trobes un error o tens una idea per a una nova funcionalitat:
+Les contribucions són benvingudes! Si tens una idea per millorar l'app:
 
 1. Fes un Fork del projecte.
-2. Crea una branca per a la teva funció (`git checkout -b feature/NovaFuncio`).
-3. Fes Commit dels teus canvis (`git commit -m 'Afegida nova funció'`).
-4. Fes Push a la branca (`git push origin feature/NovaFuncio`).
+2. Crea una branca (`git checkout -b feature/NovaFuncio`).
+3. Fes Commit (`git commit -m 'Afegida nova funció'`).
+4. Fes Push (`git push origin feature/NovaFuncio`).
 5. Obre un Pull Request.
 
 ## 📄 Llicència
@@ -114,11 +132,7 @@ Aquest projecte està sota la llicència MIT. Consulta el fitxer `LICENSE` per a
 Fet amb ❤️ per <a href="https://www.google.com/search?q=https://github.com/tonitapias" target="_blank"><b>Toni Tapias</b></a>
 </p>
 <p>
-Calculadora de Despeses © 2025 • <a href="LICENSE">Llicència MIT</a>
-</p>
-<p>
-<a href="https://www.google.com/search?q=https://github.com/tonitapias/comptes-clars/issues">Reportar un error</a> •
-<a href="https://www.google.com/search?q=https://github.com/tonitapias/comptes-clars/pulls">Demanar funcionalitat</a>
+Calculadora de Despeses © 2025
 </p>
 </div>
 

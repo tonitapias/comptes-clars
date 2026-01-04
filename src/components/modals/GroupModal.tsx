@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Check, Copy, Edit2, Trash2, CheckCircle2 } from 'lucide-react';
+import { Plus, Check, Copy, Edit2, Trash2, CheckCircle2, Loader2 } from 'lucide-react';
 import Button from '../Button';
 import Modal from '../Modal';
 
@@ -17,6 +17,7 @@ export default function GroupModal({ isOpen, onClose, tripId, users, onAddUser, 
   const [newUserName, setNewUserName] = useState('');
   const [editingUser, setEditingUser] = useState<{ oldName: string, newName: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const copyCode = () => {
     navigator.clipboard.writeText(tripId);
@@ -24,28 +25,37 @@ export default function GroupModal({ isOpen, onClose, tripId, users, onAddUser, 
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleAdd = () => {
-    // CORRECCIÓ: Netejar espais i comprovar duplicats (case-insensitive)
+  const handleAdd = async () => {
     const cleanName = newUserName.trim();
     const exists = users.some(u => u.toLowerCase() === cleanName.toLowerCase());
     
     if (cleanName && !exists) {
-      onAddUser(cleanName);
-      setNewUserName('');
+      setIsSubmitting(true);
+      try {
+        await onAddUser(cleanName);
+        setNewUserName('');
+      } finally {
+        setIsSubmitting(false);
+      }
     } else if (exists) {
       alert("Aquest usuari ja existeix!");
     }
   };
 
-  const handleRenameSubmit = (e: React.FormEvent) => {
+  const handleRenameSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingUser && editingUser.newName) {
        const cleanName = editingUser.newName.trim();
        const exists = users.some(u => u.toLowerCase() === cleanName.toLowerCase() && u !== editingUser.oldName);
        
        if (!exists && cleanName) {
-         onRenameUser(editingUser.oldName, cleanName);
-         setEditingUser(null);
+         setIsSubmitting(true);
+         try {
+            await onRenameUser(editingUser.oldName, cleanName);
+            setEditingUser(null);
+         } finally {
+            setIsSubmitting(false);
+         }
        } else if (exists) {
          alert("Ja existeix un usuari amb aquest nom");
        }
@@ -66,9 +76,11 @@ export default function GroupModal({ isOpen, onClose, tripId, users, onAddUser, 
           {users.map(u => (
             <div key={u} className="flex justify-between items-center bg-white border border-slate-100 p-3 rounded-xl">
               {editingUser?.oldName === u ? (
-                <form onSubmit={handleRenameSubmit} className="flex gap-2 w-full">
-                  <input autoFocus type="text" className="flex-1 bg-slate-50 px-2 rounded border border-indigo-300 outline-none" value={editingUser.newName} onChange={e => setEditingUser({...editingUser, newName: e.target.value})} />
-                  <button type="submit" className="text-emerald-600"><CheckCircle2 size={18}/></button>
+                <form onSubmit={handleRenameSubmit} className="flex gap-2 w-full items-center">
+                  <input autoFocus type="text" className="flex-1 bg-slate-50 px-2 py-1 rounded border border-indigo-300 outline-none" value={editingUser.newName} onChange={e => setEditingUser({...editingUser, newName: e.target.value})} disabled={isSubmitting}/>
+                  <button type="submit" className="text-emerald-600 p-1" disabled={isSubmitting}>
+                      {isSubmitting ? <Loader2 size={18} className="animate-spin text-indigo-500"/> : <CheckCircle2 size={18}/>}
+                  </button>
                 </form>
               ) : (
                 <>
@@ -84,8 +96,10 @@ export default function GroupModal({ isOpen, onClose, tripId, users, onAddUser, 
         </div>
 
         <div className="pt-4 border-t border-slate-100 flex gap-2">
-          <input type="text" placeholder="Nom..." className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={newUserName} onChange={(e) => setNewUserName(e.target.value)} />
-          <Button variant="secondary" onClick={handleAdd} icon={Plus} disabled={!newUserName.trim()}>Afegir</Button>
+          <input type="text" placeholder="Nom..." className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={newUserName} onChange={(e) => setNewUserName(e.target.value)} disabled={isSubmitting} onKeyDown={(e) => e.key === 'Enter' && handleAdd()}/>
+          <Button variant="secondary" onClick={handleAdd} icon={isSubmitting ? undefined : Plus} disabled={!newUserName.trim() || isSubmitting}>
+              {isSubmitting ? <Loader2 className="animate-spin" size={20}/> : "Afegir"}
+          </Button>
         </div>
       </div>
     </Modal>

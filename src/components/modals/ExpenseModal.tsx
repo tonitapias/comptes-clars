@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Trash2 } from 'lucide-react';
-import { collection, addDoc, doc, updateDoc } from 'firebase/firestore'; 
 import Button from '../Button';
 import Modal from '../Modal';
 import { CATEGORIES } from '../../utils/constants';
 import { Expense, CategoryId, Currency, SplitType } from '../../types';
-import { db, appId } from '../../config/firebase'; 
+import { TripService } from '../../services/tripService'; // <--- Nou Import
+import { ToastType } from '../Toast'; // Assegura't que la ruta sigui correcta segons on tinguis el Toast
 
 interface ExpenseModalProps {
   isOpen: boolean;
@@ -15,10 +15,10 @@ interface ExpenseModalProps {
   initialData?: Expense | null;
   users: string[];
   currency: Currency;
+  showToast: (msg: string, type?: ToastType) => void; // <--- Nova Prop
 }
 
-export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initialData, users, currency }: ExpenseModalProps) {
-  // ESTAT DEL FORMULARI
+export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initialData, users, currency, showToast }: ExpenseModalProps) {
   const [formData, setFormData] = useState<{
     title: string; amount: string; payer: string; category: CategoryId; involved: string[]; date: string;
     splitType: SplitType; splitDetails: Record<string, number>;
@@ -29,7 +29,6 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Inicialitzar dades
   useEffect(() => {
     if (isOpen) {
       if (initialData) {
@@ -50,95 +49,49 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
         users.forEach(u => defaultDetails[u] = 1);
         
         setFormData({ 
-          title: '', amount: '', 
-          payer: users.length > 0 ? users[0] : '', 
-          category: 'food', involved: [], 
-          date: new Date().toISOString().split('T')[0],
-          splitType: 'equal',
-          splitDetails: defaultDetails
+          title: '', amount: '', payer: users.length > 0 ? users[0] : '', category: 'food', involved: [], 
+          date: new Date().toISOString().split('T')[0], splitType: 'equal', splitDetails: defaultDetails
         });
       }
     }
   }, [isOpen, initialData, users]);
 
-  // Validació de l'import "Exacte"
-  const currentTotalAmount = parseFloat(formData.amount.replace(',', '.')) || 0;
-  
-  const currentSplitSum = formData.splitType === 'exact' 
-    ? Object.values(formData.splitDetails).reduce((sum, val) => sum + (Number(val) || 0), 0)
-    : 0;
-
-  const exactDiff = currentTotalAmount - currentSplitSum;
-  const isExactValid = Math.abs(exactDiff) < 0.02;
+  const safeParseFloat = (str: string) => { const val = parseFloat(str.replace(',', '.')); return isNaN(val) ? 0 : val; };
+  const currentTotalCents = Math.round(safeParseFloat(formData.amount) * 100);
+  const currentSplitSumCents = formData.splitType === 'exact' ? Object.values(formData.splitDetails).reduce((sum, val) => sum + Math.round((Number(val) || 0) * 100), 0) : 0;
+  const diffCents = currentTotalCents - currentSplitSumCents;
+  const isExactValid = Math.abs(diffCents) < 1;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // --- VALIDACIONS (Ara amb alertes enlloc de botó desactivat) ---
-    if (!formData.amount || parseFloat(formData.amount) === 0) {
-        alert("Si us plau, introdueix l'import de la despesa.");
-        return;
-    }
-    if (!formData.title) {
-        alert("Falta el concepte (ex: Sopar).");
-        return;
-    }
-    if (!formData.payer) {
-        alert("Selecciona qui ha pagat la despesa.");
-        return;
-    }
-    if (formData.splitType === 'exact' && !isExactValid) {
-        alert(`Els imports no quadren. Sobren/Falten ${exactDiff.toFixed(2)} ${currency.symbol}`);
-        return;
-    }
+    if (currentTotalCents === 0) return showToast("Introdueix un import vàlid.", 'error');
+    if (!formData.title.trim()) return showToast("Falta el concepte.", 'error');
+    if (!formData.payer) return showToast("Selecciona qui paga.", 'error');
+    if (formData.splitType === 'exact' && !isExactValid) return showToast(`Els imports no quadren.`, 'error');
     
     setIsSubmitting(true);
 
     try {
-        const dateObj = formData.date ? new Date(formData.date) : new Date();
-        dateObj.setHours(12, 0, 0, 0);
-
-        const safeAmount = formData.amount.replace(',', '.');
-        const amountInCents = Math.round(parseFloat(safeAmount) * 100);
-
+        const dateObj = formData.date ? new Date(`${formData.date}T12:00:00`) : new Date();
         let finalSplitDetails = { ...formData.splitDetails };
-        if (formData.splitType === 'exact') {
-            Object.keys(finalSplitDetails).forEach(key => {
-                finalSplitDetails[key] = Math.round(finalSplitDetails[key] * 100);
-            });
-        }
-        
-        if (formData.splitType === 'equal') {
-            finalSplitDetails = {};
-        } else {
-            Object.keys(finalSplitDetails).forEach(k => {
-                if (!finalSplitDetails[k]) delete finalSplitDetails[k];
-            });
-        }
+        if (formData.splitType === 'exact') Object.keys(finalSplitDetails).forEach(k => finalSplitDetails[k] = Math.round((finalSplitDetails[k] || 0) * 100));
+        if (formData.splitType === 'equal') finalSplitDetails = {};
+        else Object.keys(finalSplitDetails).forEach(k => { if (!finalSplitDetails[k]) delete finalSplitDetails[k]; });
 
         const expensePayload = {
-          title: formData.title,
-          amount: amountInCents, 
-          payer: formData.payer,
-          category: formData.category,
+          title: formData.title.trim(), amount: currentTotalCents, payer: formData.payer, category: formData.category,
           involved: formData.involved.length > 0 ? formData.involved : users,
-          date: dateObj.toISOString(),
-          splitType: formData.splitType,
-          splitDetails: finalSplitDetails
+          date: dateObj.toISOString(), splitType: formData.splitType, splitDetails: finalSplitDetails
         };
 
-        const tripDocId = `trip_${tripId}`;
-        const collectionPath = initialData 
-            ? doc(db, 'artifacts', appId, 'public', 'data', 'trips', tripDocId, 'expenses', String(initialData.id))
-            : collection(db, 'artifacts', appId, 'public', 'data', 'trips', tripDocId, 'expenses');
-
-        if (initialData) await updateDoc(collectionPath as any, expensePayload);
-        else await addDoc(collectionPath as any, expensePayload);
+        if (initialData) await TripService.updateExpense(tripId, String(initialData.id), expensePayload);
+        else await TripService.addExpense(tripId, expensePayload);
 
         onClose();
+        showToast(initialData ? "Despesa actualitzada" : "Despesa creada", 'success');
     } catch (error) {
-        console.error("Error:", error);
-        alert("Error guardant la despesa.");
+        console.error(error);
+        showToast("Error guardant la despesa", 'error');
     } finally {
         setIsSubmitting(false);
     }
@@ -151,21 +104,9 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
   };
 
   const updateSplitDetail = (user: string, value: string) => {
-      const numVal = parseFloat(value) || 0;
-      const newDetails = { ...formData.splitDetails, [user]: numVal };
-      
-      // --- MILLORA: AUTO-SUMA EN MODE EXACTE ---
-      // Si estem en mode exacte, actualitzem el total automàticament
-      if (formData.splitType === 'exact') {
-          const newTotal = Object.values(newDetails).reduce((acc, curr) => acc + curr, 0);
-          setFormData(prev => ({
-              ...prev,
-              splitDetails: newDetails,
-              amount: newTotal > 0 ? newTotal.toFixed(2) : prev.amount 
-          }));
-      } else {
-          setFormData(prev => ({ ...prev, splitDetails: newDetails }));
-      }
+      const numVal = value === '' ? 0 : parseFloat(value.replace(',', '.'));
+      const newDetails = { ...formData.splitDetails, [user]: isNaN(numVal) ? 0 : numVal };
+      setFormData(prev => ({ ...prev, splitDetails: newDetails }));
   };
 
   const isTransfer = formData.category === 'transfer';
@@ -174,19 +115,16 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={initialData ? "Editar Despesa" : "Nova Despesa"}>
       <form onSubmit={handleSubmit} className="space-y-5">
-        
-        {/* INPUT IMPORT */}
         <div className="relative">
           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl text-slate-400 font-light">{currency.symbol}</span>
           <input 
             type="text" inputMode="decimal" placeholder="0.00" autoFocus={!initialData}
             className={`w-full pl-10 pr-4 py-4 bg-slate-50 border-2 focus:bg-white rounded-2xl text-4xl font-bold text-slate-800 text-center outline-none transition-all ${(!formData.amount && !initialData) ? 'border-indigo-200 animate-pulse' : 'border-transparent focus:border-indigo-500'}`}
             value={formData.amount} 
-            onChange={(e) => setFormData({...formData, amount: e.target.value})} 
+            onChange={(e) => { if (/^[\d.,]*$/.test(e.target.value)) setFormData({...formData, amount: e.target.value}); }}
           />
         </div>
 
-        {/* INFO BASICA */}
         <div className="flex gap-3">
           <div className="flex-1">
             <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Concepte</label>
@@ -205,7 +143,6 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
             <input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} />
         </div>
 
-        {/* PAGADOR */}
         <div>
           <label className="block text-xs font-bold text-slate-500 uppercase mb-2">{isTransfer ? 'Qui paga (Origen)?' : 'Pagador'}</label>
           <div className="flex flex-wrap gap-2">
@@ -218,19 +155,19 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
           </div>
         </div>
 
-        {/* SECCIÓ REPARTIMENT */}
         <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
           <div className="flex justify-between items-center mb-4">
             <label className="block text-xs font-bold text-slate-500 uppercase">{isTransfer ? 'Receptor' : 'Repartiment'}</label>
-            
             {!isTransfer && (
                 <div className="flex bg-slate-200 p-1 rounded-lg">
-                    <button type="button" onClick={() => setFormData({...formData, splitType: 'equal'})} className={`px-2 py-1 rounded text-xs font-bold transition-all ${formData.splitType === 'equal' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>Igual</button>
-                    <button type="button" onClick={() => setFormData({...formData, splitType: 'exact'})} className={`px-2 py-1 rounded text-xs font-bold transition-all ${formData.splitType === 'exact' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>Exacte</button>
-                    <button type="button" onClick={() => setFormData({...formData, splitType: 'shares'})} className={`px-2 py-1 rounded text-xs font-bold transition-all ${formData.splitType === 'shares' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>Parts</button>
+                    {['equal', 'exact', 'shares'].map(t => (
+                        <button type="button" key={t} onClick={() => setFormData({...formData, splitType: t as SplitType})} 
+                            className={`px-2 py-1 rounded text-xs font-bold transition-all ${formData.splitType === t ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>
+                            {t === 'equal' ? 'Igual' : t === 'exact' ? 'Exacte' : 'Parts'}
+                        </button>
+                    ))}
                 </div>
             )}
-            
             {formData.splitType === 'equal' && !isTransfer && (
                 <button type="button" onClick={() => setFormData({...formData, involved: isAllInvolved ? [] : users})} className="text-xs font-bold text-indigo-600">
                 {isAllInvolved ? 'Desmarcar' : 'Tothom'}
@@ -239,7 +176,6 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
           </div>
 
           <div className="space-y-2">
-            {/* MODE IGUAL */}
             {formData.splitType === 'equal' && (
                 <div className="grid grid-cols-2 gap-2">
                     {users.map(u => {
@@ -258,7 +194,6 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
                 </div>
             )}
 
-            {/* MODE EXACTE i PARTS */}
             {(formData.splitType === 'exact' || formData.splitType === 'shares') && !isTransfer && (
                 <div className="space-y-2">
                     {users.map(u => (
@@ -267,25 +202,17 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
                              <span className="flex-1 text-sm font-medium text-slate-700 truncate">{u}</span>
                              <div className="flex items-center gap-2">
                                 {formData.splitType === 'shares' && <span className="text-xs text-slate-400 font-bold uppercase">Parts</span>}
-                                <input 
-                                    type="number" 
-                                    step={formData.splitType === 'exact' ? "0.01" : "1"}
-                                    min="0"
-                                    placeholder="0"
-                                    className={`w-20 p-1 text-right font-bold text-slate-800 bg-slate-50 rounded border focus:border-indigo-500 outline-none ${formData.splitType === 'exact' ? 'pr-6' : ''}`}
-                                    value={formData.splitDetails[u] || ''}
-                                    onChange={(e) => updateSplitDetail(u, e.target.value)}
+                                <input type="number" step={formData.splitType === 'exact' ? "0.01" : "1"} min="0" placeholder="0"
+                                    className={`w-20 p-1 text-right font-bold text-slate-800 bg-slate-50 rounded border outline-none ${formData.splitType === 'exact' ? 'pr-6' : ''} ${formData.splitType === 'exact' && !isExactValid ? 'focus:border-rose-500 border-rose-200' : 'focus:border-indigo-500'}`}
+                                    value={formData.splitDetails[u] ?? ''} onChange={(e) => updateSplitDetail(u, e.target.value)}
                                 />
                                 {formData.splitType === 'exact' && <span className="text-xs font-bold text-slate-400 absolute right-6">{currency.symbol}</span>}
                              </div>
                         </div>
                     ))}
-                    
-                    {/* Validació Visual */}
                     {formData.splitType === 'exact' && (
                         <div className={`mt-3 text-xs font-bold flex items-center justify-between px-2 ${isExactValid ? 'text-emerald-600' : 'text-rose-500'}`}>
-                            <span>{isExactValid ? 'Tot quadrat' : `Falten/Sobren: ${exactDiff.toFixed(2)} ${currency.symbol}`}</span>
-                            <span>Total: {currentSplitSum.toFixed(2)} / {currentTotalAmount.toFixed(2)}</span>
+                            <span>{isExactValid ? 'Tot quadrat' : `Sobren/Falten: ${(diffCents / 100).toFixed(2)} ${currency.symbol}`}</span>
                         </div>
                     )}
                 </div>
@@ -295,9 +222,7 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
 
         <div className="flex gap-2 pt-2">
           {initialData && onDelete && <Button variant="danger" className="w-14" icon={Trash2} onClick={(e) => { e.preventDefault(); onDelete(initialData.id); }}></Button>}
-          
-          {/* BOTÓ SENSE DISABLED */}
-          <Button className="flex-1 text-lg py-4" type="submit" disabled={isSubmitting}>
+          <Button className="flex-1 text-lg py-4" type="submit" disabled={isSubmitting || (formData.splitType === 'exact' && !isExactValid)}>
             {isSubmitting ? 'Guardant...' : (initialData ? "Guardar Canvis" : "Afegir Despesa")}
           </Button>
         </div>
