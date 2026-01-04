@@ -1,17 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Trash2 } from 'lucide-react';
-import { collection, addDoc, doc, updateDoc } from 'firebase/firestore'; //
+import { collection, addDoc, doc, updateDoc } from 'firebase/firestore'; 
 import Button from '../Button';
 import Modal from '../Modal';
 import { CATEGORIES } from '../../utils/constants';
 import { Expense, CategoryId, Currency } from '../../types';
-import { db, appId } from '../../config/firebase'; //
+import { db, appId } from '../../config/firebase'; 
 
 interface ExpenseModalProps {
   isOpen: boolean;
   onClose: () => void;
-  // onSubmit: (expense: Expense) => Promise<void>; // ELIMINAT: Ja no ho necessitem
-  tripId: string; // NOVA PROPIETAT: Necessària per saber on guardar
+  tripId: string;
   onDelete?: (id: string | number) => void;
   initialData?: Expense | null;
   users: string[];
@@ -54,7 +53,7 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
     setIsSubmitting(true);
 
     try {
-        // 1. Construir la data (igual que abans)
+        // 1. Construir la data
         let finalDate;
         if (formData.date) {
             const [y, m, d] = formData.date.split('-').map(Number);
@@ -67,7 +66,7 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
         const safeAmount = formData.amount.replace(',', '.');
         const amountInCents = Math.round(parseFloat(safeAmount) * 100);
 
-        // 3. Preparar l'objecte per a Firestore (SENSE ID, l'ID el posa Firestore o el docRef)
+        // 3. Preparar l'objecte
         const expensePayload = {
           title: formData.title,
           amount: amountInCents, 
@@ -77,15 +76,16 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
           date: finalDate.toISOString()
         };
 
+        // CORRECCIÓ: Afegim el prefix 'trip_' al tripId per coincidir amb la base de dades
+        const tripDocId = `trip_${tripId}`;
+
         if (initialData) {
           // --- EDITAR (Subcol·lecció) ---
-          // Referència directa al document de la despesa dins la subcol·lecció
-          const expenseRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', tripId, 'expenses', String(initialData.id));
+          const expenseRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', tripDocId, 'expenses', String(initialData.id)); //
           await updateDoc(expenseRef, expensePayload);
         } else {
           // --- CREAR (Subcol·lecció) ---
-          // Afegir a la col·lecció 'expenses'
-          const expensesRef = collection(db, 'artifacts', appId, 'public', 'data', 'trips', tripId, 'expenses');
+          const expensesRef = collection(db, 'artifacts', appId, 'public', 'data', 'trips', tripDocId, 'expenses'); //
           await addDoc(expensesRef, expensePayload);
         }
 
