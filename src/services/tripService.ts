@@ -1,20 +1,18 @@
 import { 
-  collection, doc, addDoc, updateDoc, deleteDoc, setDoc, writeBatch, 
-  runTransaction, query, where, getDocs, arrayUnion, arrayRemove
+  collection, doc, addDoc, updateDoc, deleteDoc, setDoc, 
+  arrayUnion, arrayRemove, query, where, getDocs, getDoc
 } from 'firebase/firestore';
 import { db, appId } from '../config/firebase';
-import { Expense, TripData, Settlement } from '../types';
+import { Expense, TripData, Settlement, TripUser } from '../types';
 
-// Helpers per rutes
 const getTripRef = (tripId: string) => doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
 const getExpensesCol = (tripId: string) => collection(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`, 'expenses');
 const getExpenseRef = (tripId: string, expenseId: string) => doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`, 'expenses', expenseId);
 
+const generateId = () => crypto.randomUUID();
+
 export const TripService = {
-  // --- GESTIÓ DEL GRUP (DADES) ---
-  
   createTrip: async (trip: TripData) => {
-    // Utilitzem setDoc per definir nosaltres l'ID (trip_XXX) manualment
     await setDoc(getTripRef(trip.id), trip);
   },
 
@@ -29,79 +27,59 @@ export const TripService = {
     await updateDoc(getTripRef(tripId), data);
   },
 
+  // 1. Aquesta és la funció per ABANDONAR el grup
   leaveTrip: async (tripId: string, userId: string) => {
-    // Elimina l'UID de l'usuari de la llista de membres (sense esborrar l'usuari del viatge)
     await updateDoc(getTripRef(tripId), { memberUids: arrayRemove(userId) });
   },
 
-  // --- GESTIÓ DE PARTICIPANTS (NOMS) ---
-
-  addUser: async (tripId: string, userName: string) => {
-    await updateDoc(getTripRef(tripId), { users: arrayUnion(userName) });
-  },
-
-  removeUser: async (tripId: string, userName: string) => {
-    await updateDoc(getTripRef(tripId), { users: arrayRemove(userName) });
-  },
-
+  // 2. Aquesta és la funció que faltava per UNIR-SE automàticament
   linkAuthUser: async (tripId: string, uid: string) => {
     await updateDoc(getTripRef(tripId), { memberUids: arrayUnion(uid) });
   },
 
-  renameUser: async (tripId: string, oldName: string, newName: string) => {
-    // 1. Canviem la llista d'usuaris
-    await runTransaction(db, async (transaction) => {
-      const tripRef = getTripRef(tripId);
-      const tripDoc = await transaction.get(tripRef);
-      if (!tripDoc.exists()) throw new Error("Grup no trobat");
-      
-      const currentUsers = tripDoc.data().users || [];
-      const newUsers = currentUsers.map((u: string) => u === oldName ? newName : u);
-      transaction.update(tripRef, { users: newUsers });
+  // 3. Aquesta és per VINCULAR el perfil ("Sóc jo")
+  linkUserToProfile: async (tripId: string, tripUserId: string, authUid: string, photoUrl?: string | null) => {
+    const tripRef = getTripRef(tripId);
+    const snap = await getDoc(tripRef);
+    if (!snap.exists()) throw new Error("Grup no trobat");
+    
+    const trip = snap.data() as TripData;
+    const updatedUsers = trip.users.map(u => {
+        if (u.linkedUid === authUid) return { ...u, linkedUid: undefined, isAuth: false, photoUrl: undefined };
+        return u;
     });
 
-    // 2. Actualització en cascada a totes les despeses (Batching)
-    const expensesRef = getExpensesCol(tripId);
-    const payerQuery = query(expensesRef, where('payer', '==', oldName));
-    const involvedQuery = query(expensesRef, where('involved', 'array-contains', oldName));
-    const [payerDocs, involvedDocs] = await Promise.all([getDocs(payerQuery), getDocs(involvedQuery)]);
-    
-    const allDocs = new Map();
-    payerDocs.forEach(d => allDocs.set(d.id, d));
-    involvedDocs.forEach(d => allDocs.set(d.id, d));
+    const finalUsers = updatedUsers.map(u => {
+        if (u.id === tripUserId) return { ...u, linkedUid: authUid, isAuth: true, photoUrl: photoUrl || undefined };
+        return u;
+    });
 
-    const docsArray = Array.from(allDocs.values());
-    const chunkSize = 450; 
+    await updateDoc(tripRef, { users: finalUsers, memberUids: arrayUnion(authUid) });
+  },
 
-    for (let i = 0; i < docsArray.length; i += chunkSize) {
-      const chunk = docsArray.slice(i, i + chunkSize);
-      const batch = writeBatch(db);
-      
-      chunk.forEach(docSnap => {
-        const data = docSnap.data();
-        const updates: any = {};
-        
-        if (data.payer === oldName) updates.payer = newName;
-        
-        if (data.involved?.includes(oldName)) {
-            updates.involved = data.involved.map((inv: string) => inv === oldName ? newName : inv);
-        }
-        
-        // Actualitzar splitDetails si existeix
-        if (data.splitDetails && data.splitDetails[oldName] !== undefined) {
-            const newDetails = { ...data.splitDetails, [newName]: data.splitDetails[oldName] };
-            delete newDetails[oldName];
-            updates.splitDetails = newDetails;
-        }
+  addUser: async (tripId: string, userName: string) => {
+    const newUser: TripUser = { id: generateId(), name: userName };
+    await updateDoc(getTripRef(tripId), { users: arrayUnion(newUser) });
+  },
 
-        if (Object.keys(updates).length > 0) batch.update(docSnap.ref, updates);
-      });
-      
-      await batch.commit();
+  removeUser: async (tripId: string, userId: string) => {
+    const tripRef = getTripRef(tripId);
+    const snap = await getDoc(tripRef);
+    if (snap.exists()) {
+        const trip = snap.data() as TripData;
+        const newUsers = trip.users.filter(u => u.id !== userId);
+        await updateDoc(tripRef, { users: newUsers });
     }
   },
 
-  // --- GESTIÓ DE DESPESES ---
+  renameUser: async (tripId: string, userId: string, newName: string) => {
+    const tripRef = getTripRef(tripId);
+    const snap = await getDoc(tripRef);
+    if (!snap.exists()) throw new Error("Grup no trobat");
+    const trip = snap.data() as TripData;
+    const updatedUsers = trip.users.map(u => u.id === userId ? { ...u, name: newName } : u);
+    await updateDoc(tripRef, { users: updatedUsers });
+  },
 
   addExpense: async (tripId: string, expense: Omit<Expense, 'id'>) => {
     await addDoc(getExpensesCol(tripId), expense);

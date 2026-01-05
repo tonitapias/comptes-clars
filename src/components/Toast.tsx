@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { CheckCircle2, AlertCircle, X, Info } from 'lucide-react';
 
 export type ToastType = 'success' | 'error' | 'info';
@@ -10,6 +10,7 @@ interface ToastProps {
   duration?: number;
 }
 
+// 1. El component visual (La "torrada")
 export default function Toast({ message, type, onClose, duration = 3000 }: ToastProps) {
   useEffect(() => {
     const timer = setTimeout(onClose, duration);
@@ -44,4 +45,28 @@ export default function Toast({ message, type, onClose, duration = 3000 }: Toast
       `}</style>
     </div>
   );
+}
+
+// 2. El Hook que faltava (per fer servir "const { toast, showToast } = useToast()")
+export function useToast() {
+  const [toastConfig, setToastConfig] = useState<{ message: string; type: ToastType } | null>(null);
+
+  const showToast = (message: string, type: ToastType = 'info') => {
+    setToastConfig({ message, type });
+  };
+
+  const closeToast = () => {
+    setToastConfig(null);
+  };
+
+  // Retornem el component llest per pintar ({toast}) i la funció per activar-lo
+  const toast = toastConfig ? (
+    <Toast
+      message={toastConfig.message}
+      type={toastConfig.type}
+      onClose={closeToast}
+    />
+  ) : null;
+
+  return { toast, showToast };
 }

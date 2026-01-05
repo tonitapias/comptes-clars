@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { CATEGORIES } from '../utils/constants';
-import type { Expense, Balance, Settlement, CategoryStat } from '../types';
+import type { Expense, Balance, Settlement, CategoryStat, TripUser } from '../types';
 
 interface CalculationsResult {
   filteredExpenses: Expense[];
@@ -13,19 +13,27 @@ interface CalculationsResult {
 
 export function useTripCalculations(
   expenses: Expense[], 
-  users: string[], 
+  users: TripUser[], // Ara rep objectes complets
   searchQuery: string, 
   filterCategory: string
 ): CalculationsResult {
   
+  // Helpers per buscar noms ràpidament si calgués (encara que aquí treballem amb IDs)
+  // const getUserName = (id: string) => users.find(u => u.id === id)?.name || 'Desconegut';
+
   // 1. Filtrar i Ordenar
   const filteredExpenses = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    
     return expenses.filter(e => {
-        const q = searchQuery.toLowerCase();
+        // Busquem els noms corresponents als IDs per fer la cerca de text
+        const payerName = users.find(u => u.id === e.payer)?.name.toLowerCase() || '';
+        const involvedNames = e.involved.map(id => users.find(u => u.id === id)?.name.toLowerCase() || '');
+
         const matchesSearch = 
             e.title.toLowerCase().includes(q) || 
-            e.payer.toLowerCase().includes(q) ||
-            e.involved.some(person => person.toLowerCase().includes(q));
+            payerName.includes(q) ||
+            involvedNames.some(name => name.includes(q));
             
         const matchesCategory = filterCategory === 'all' || e.category === filterCategory;
         return matchesSearch && matchesCategory;
@@ -36,78 +44,70 @@ export function useTripCalculations(
         if (typeof a.id === 'number' && typeof b.id === 'number') return b.id - a.id;
         return String(b.id).localeCompare(String(a.id));
       });
-  }, [expenses, searchQuery, filterCategory]);
+  }, [expenses, searchQuery, filterCategory, users]);
 
   // 2. Balanços
   const balances = useMemo(() => {
     const balanceMap: Record<string, number> = {}; 
-    users.forEach(u => balanceMap[u] = 0);
+    // Inicialitzem a 0 per ID
+    users.forEach(u => balanceMap[u.id] = 0);
     
     expenses.forEach(exp => {
-      // Treballem sempre amb la unitat mínima (cèntims) per evitar errors de coma flotant
-      // exp.amount ja ve en cèntims des de la base de dades.
-      
-      // 1. El pagador "posa" els diners (suma positiva)
+      // 1. El pagador "posa" els diners
       if (balanceMap[exp.payer] !== undefined) {
-          balanceMap[exp.payer] = (balanceMap[exp.payer] || 0) + exp.amount;
+          balanceMap[exp.payer] += exp.amount;
       }
       
       const splitType = exp.splitType || 'equal';
       
-      // 2. Restem a qui li toca pagar (deute negatiu)
+      // 2. Restem a qui li toca pagar
       if (splitType === 'equal') {
-          // --- REPARTIMENT IGUALITARI ---
-          const receivers = exp.involved?.length > 0 ? exp.involved : users;
-          const count = receivers.length;
+          // Si involved està buit, vol dir TOTS els usuaris
+          let receiversIds = exp.involved?.length > 0 ? exp.involved : users.map(u => u.id);
+          
+          // MILLORA: Ordenem els IDs per garantir determinisme en el repartiment de cèntims
+          receiversIds = [...receiversIds].sort();
+
+          const count = receiversIds.length;
           
           if (count > 0) {
               const baseAmount = Math.floor(exp.amount / count);
               const remainder = exp.amount % count;
 
-              receivers.forEach((p, index) => {
-                 // Els primers 'remainder' usuaris paguen 1 cèntim més per quadrar el total
+              receiversIds.forEach((uid, index) => {
+                 // Els primers 'remainder' usuaris paguen 1 cèntim més
                  const amountToPay = baseAmount + (index < remainder ? 1 : 0);
-                 if (balanceMap[p] !== undefined) {
-                     balanceMap[p] -= amountToPay;
+                 if (balanceMap[uid] !== undefined) {
+                     balanceMap[uid] -= amountToPay;
                  }
               });
           }
 
       } else if (splitType === 'exact') {
-          // --- REPARTIMENT EXACTE ---
           const details = exp.splitDetails || {};
-          let distributedAmount = 0;
-
           Object.entries(details).forEach(([uid, amount]) => {
-              // amount ve en cèntims
               if (balanceMap[uid] !== undefined) {
                   balanceMap[uid] -= amount;
-                  distributedAmount += amount;
               }
           });
-          // La diferència (si n'hi ha) es queda al pagador original, així que no cal fer res més.
 
       } else if (splitType === 'shares') {
-          // --- REPARTIMENT PER PARTS/PESOS ---
           const details = exp.splitDetails || {};
           const totalShares = Object.values(details).reduce((acc, curr) => acc + curr, 0);
           
           if (totalShares > 0) {
-              const amountPerShare = exp.amount / totalShares; // Això pot tenir decimals
-              
+              const amountPerShare = exp.amount / totalShares;
               let distributed = 0;
-              const involvedUsers = Object.keys(details);
+              const involvedUsersIds = Object.keys(details).sort(); // Ordenem també aquí
               
-              involvedUsers.forEach((uid, index) => {
+              involvedUsersIds.forEach((uid, index) => {
                   if (balanceMap[uid] !== undefined) {
                       const shares = details[uid];
                       let amountToPay;
 
-                      // L'últim usuari carrega amb l'arrodoniment final per assegurar que suma 0
-                      if (index === involvedUsers.length - 1) {
+                      if (index === involvedUsersIds.length - 1) {
                           amountToPay = exp.amount - distributed;
                       } else {
-                          // Arrodonim cada part
                           amountToPay = Math.floor(shares * amountPerShare);
                       }
                       
@@ -119,13 +119,16 @@ export function useTripCalculations(
       }
     });
     
-    // Convertim el mapa a array i ordenem
-    return users.map(user => ({ user, balance: balanceMap[user] || 0 }))
-                .sort((a, b) => b.balance - a.balance);
+    // Retornem array mapejat: { userId: "...", amount: ... }
+    return Object.entries(balanceMap)
+        .map(([userId, amount]) => ({ userId, amount }))
+        .sort((a, b) => b.amount - a.amount);
+
   }, [users, expenses]);
 
   // 3. Estadístiques
   const categoryStats = useMemo(() => {
+    // (Aquesta part no canvia gaire, ja que les categories no depenen dels usuaris)
     const stats: Record<string, number> = {};
     const validExpenses = expenses.filter(e => e.category !== 'transfer');
     const total = validExpenses.reduce((acc, curr) => acc + curr.amount, 0);
@@ -147,29 +150,28 @@ export function useTripCalculations(
     }).sort((a, b) => b.amount - a.amount);
   }, [expenses]);
 
-  // 4. Liquidacions (Algoritme de Deutes)
+  // 4. Liquidacions
   const settlements = useMemo(() => {
     const debts: Settlement[] = [];
-    // Copia profunda per no mutar l'estat original
-    const debtors = balances.filter(b => b.balance < -1).map(b => ({ ...b })); // -1 per tolerància de rounding
-    const creditors = balances.filter(b => b.balance > 1).map(b => ({ ...b }));
+    // Copiem i ordenem
+    const debtors = balances.filter(b => b.amount < -1).sort((a, b) => a.amount - b.amount); 
+    const creditors = balances.filter(b => b.amount > 1).sort((a, b) => b.amount - a.amount);
     
     let i = 0, j = 0;
     while (i < debtors.length && j < creditors.length) {
       const debtor = debtors[i]; 
       const creditor = creditors[j];
       
-      // Quan pot pagar el deutor com a màxim? O el seu deute sencer, o el que li falta al creditor.
-      const amount = Math.min(Math.abs(debtor.balance), creditor.balance);
+      const amount = Math.min(Math.abs(debtor.amount), creditor.amount);
       
-      debts.push({ from: debtor.user, to: creditor.user, amount });
+      // Ara 'from' i 'to' són IDs
+      debts.push({ from: debtor.userId, to: creditor.userId, amount });
       
-      debtor.balance += amount; 
-      creditor.balance -= amount;
+      debtor.amount += amount; 
+      creditor.amount -= amount;
       
-      // Si el deute és menys d'1 cèntim, passem al següent
-      if (Math.abs(debtor.balance) < 1) i++; 
-      if (creditor.balance < 1) j++;
+      if (Math.abs(debtor.amount) < 1) i++; 
+      if (creditor.amount < 1) j++;
     }
     return debts;
   }, [balances]);

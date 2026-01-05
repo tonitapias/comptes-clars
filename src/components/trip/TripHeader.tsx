@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import Card from '../Card';
 import { formatCurrency } from '../../utils/formatters';
 import { Currency } from '../../types';
+// NO cal importar TripService si només fem logout local
 
 interface TripHeaderProps {
   tripId: string;
@@ -32,7 +33,14 @@ export default function TripHeader({
         <div className="max-w-3xl mx-auto flex justify-between items-start relative z-10">
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <button className="bg-white/20 p-1.5 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors" onClick={() => { localStorage.removeItem('cc-last-trip-id'); navigate('/'); }}>
+              <button 
+                className="bg-white/20 p-1.5 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors" 
+                onClick={() => { 
+                    // LOGOUT LOCAL SEGUR
+                    localStorage.removeItem('cc-last-trip-id'); 
+                    navigate('/'); 
+                }}
+              >
                 <LogOut className="text-indigo-100" size={16} />
               </button>
               <span className="text-indigo-200 text-xs font-bold tracking-wider uppercase">En línia • {tripId}</span>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Plus, Trash2, CheckCircle2, ArrowRightLeft, Loader2, AlertTriangle, Lock } from 'lucide-react';
+import { Plus, Trash2, CheckCircle2, ArrowRightLeft, Loader2, AlertTriangle, Lock, LogOut } from 'lucide-react';
 import { User } from 'firebase/auth';
 
 import Button from '../components/Button';
@@ -13,13 +13,13 @@ import ExpensesList from '../components/trip/ExpensesList';
 import BalancesView from '../components/trip/BalancesView';
 import SettlementsView from '../components/trip/SettlementsView';
 
-// Nous Serveis i Hooks
+// Serveis i Hooks
 import { TripService } from '../services/tripService';
 import { useTripData } from '../hooks/useTripData';
 import { useTripCalculations } from '../hooks/useTripCalculations';
 
-import { CURRENCIES, CATEGORIES } from '../utils/constants'; 
-import { CategoryId, Settlement, Expense } from '../types';
+import { CURRENCIES } from '../utils/constants'; 
+import { CategoryId, Settlement, Expense, TripUser } from '../types';
 import { generatePDF } from '../utils/exportPdf';
 import { formatCurrency } from '../utils/formatters';
 
@@ -31,7 +31,7 @@ export default function TripPage({ user }: TripPageProps) {
   const { tripId } = useParams<{ tripId: string }>();
   const navigate = useNavigate();
   
-  // 1. Dades via Custom Hook (Molt més net!)
+  // 1. Dades via Custom Hook
   const { tripData, expenses, loading, error } = useTripData(tripId);
 
   // UI States
@@ -54,7 +54,7 @@ export default function TripPage({ user }: TripPageProps) {
   const [editTripName, setEditTripName] = useState('');
   const [editTripDate, setEditTripDate] = useState('');
 
-  // Sincronitzar settings quan carreguen les dades
+  // Sincronitzar settings
   useEffect(() => {
     if (tripData) {
         setEditTripName(tripData.name);
@@ -64,18 +64,69 @@ export default function TripPage({ user }: TripPageProps) {
 
   useEffect(() => { if (tripId) localStorage.setItem('cc-last-trip-id', tripId); }, [tripId]);
 
-  // Auto-link User (Service)
+  // Auto-link User
   useEffect(() => {
     if (user && tripData && tripId && !tripData.memberUids?.includes(user.uid)) {
       TripService.linkAuthUser(tripId, user.uid).catch(console.error);
     }
   }, [user, tripData, tripId]);
 
+  // --- MIGRACIÓ I AUTO-REPARACIÓ ---
+  useEffect(() => {
+    if (!tripData || !tripId) return;
+
+    const performMigration = async () => {
+        if (tripData.users.length > 0 && typeof tripData.users[0] === 'string') {
+            // ... (Codi de migració nivell 1 igual que abans) ...
+            // @ts-ignore
+            const migratedUsers = tripData.users.map(name => ({ id: crypto.randomUUID(), name: name }));
+            const migratedExpenses = tripData.expenses.map(exp => {
+                const payerUser = migratedUsers.find(u => u.name === exp.payer);
+                const newInvolved = exp.involved.map(invName => {
+                    const invUser = migratedUsers.find(u => u.name === invName);
+                    return invUser ? invUser.id : invName;
+                });
+                return { ...exp, payer: payerUser ? payerUser.id : exp.payer, involved: newInvolved };
+            });
+            await TripService.updateTrip(tripId, { users: migratedUsers, expenses: migratedExpenses });
+            window.location.reload();
+        }
+        else if (tripData.users.length > 0 && typeof tripData.users[0] === 'object') {
+            // ... (Codi de migració nivell 2 igual que abans) ...
+            const currentUsers = tripData.users as TripUser[];
+            const currentExpenses = tripData.expenses;
+            const needsFix = currentExpenses.some(exp => currentUsers.some(u => u.name === exp.payer && u.id !== exp.payer));
+
+            if (needsFix) {
+                const fixedExpenses = currentExpenses.map(exp => {
+                    const payerUser = currentUsers.find(u => u.name === exp.payer);
+                    const newInvolved = exp.involved.map(invVal => {
+                        const invUser = currentUsers.find(u => u.name === invVal);
+                        return invUser ? invUser.id : invVal;
+                    });
+                    let newSplitDetails = {};
+                     if (exp.splitDetails) {
+                         newSplitDetails = Object.fromEntries(Object.entries(exp.splitDetails).map(([key, val]) => {
+                                const u = currentUsers.find(user => user.name === key);
+                                return [u ? u.id : key, val];
+                            }));
+                     }
+                    return { ...exp, payer: payerUser ? payerUser.id : exp.payer, involved: newInvolved, splitDetails: newSplitDetails };
+                });
+                await TripService.updateTrip(tripId, { expenses: fixedExpenses });
+                showToast("Dades reparades automàticament", 'success');
+            }
+        }
+    };
+    performMigration().catch(console.error);
+  }, [tripData, tripId]);
+
+
   // Càlculs
   const { users, currency = CURRENCIES[0], name, createdAt } = tripData || { users: [], expenses: [] };
   const { filteredExpenses, balances, categoryStats, settlements, totalGroupSpending, displayedTotal } = useTripCalculations(expenses, users || [], searchQuery, filterCategory);
 
-  // --- HANDLERS (Ara utilitzen TripService) ---
+  // --- HANDLERS ---
 
   const handleUpdateTrip = async () => {
     if (!tripId) return;
@@ -83,7 +134,6 @@ export default function TripPage({ user }: TripPageProps) {
         let d = createdAt ? new Date(createdAt) : new Date();
         if (editTripDate) d = new Date(editTripDate);
         d.setHours(12, 0, 0, 0);
-        
         await TripService.updateTrip(tripId, { name: editTripName, createdAt: d.toISOString() });
         setSettingsModalOpen(false);
         showToast("Configuració actualitzada");
@@ -122,14 +172,36 @@ export default function TripPage({ user }: TripPageProps) {
     } catch (e: any) { showToast("Error reanomenant: " + e.message, 'error'); }
   };
 
-  const requestDeleteUser = (userName: string) => {
-    const hasExpenses = expenses.some(e => e.payer === userName || e.involved.includes(userName));
-    const userBalance = balances.find(b => b.user === userName)?.balance || 0;
+  const requestDeleteUser = (userId: string) => {
+    const hasExpenses = expenses.some(e => e.payer === userId || e.involved.includes(userId));
+    const userBalance = balances.find(b => b.userId === userId)?.amount || 0;
+    
     if (hasExpenses || Math.abs(userBalance) > 5) {
         showToast(`No es pot eliminar: Té despeses o balanç pendent`, 'error');
     } else {
-        setConfirmAction({ type: 'delete_user', id: userName, title: 'Eliminar Participant', message: `Segur que vols eliminar a ${userName}?` });
+        const uName = users.find(u => u.id === userId)?.name || '???';
+        setConfirmAction({ type: 'delete_user', id: userId, title: 'Eliminar Participant', message: `Segur que vols eliminar a ${uName}?` });
     }
+  };
+
+  // --- NOU HANDLER: ABANDONAR GRUP ---
+  const handleLeaveTrip = async () => {
+      if (!confirm("Segur que vols deixar de veure aquest grup? (No s'esborrarà per als altres)")) return;
+      
+      try {
+          // 1. Si l'usuari està loguejat, el desvinculem de Firebase (deixa de sortir a la seva llista)
+          if (user && tripId) {
+              await TripService.leaveTrip(tripId, user.uid);
+          }
+          
+          // 2. Sempre esborrem de la memòria local
+          localStorage.removeItem('cc-last-trip-id');
+          navigate('/');
+          
+      } catch (error) {
+          console.error(error);
+          showToast("Error al sortir del grup", 'error');
+      }
   };
 
   const executeConfirmation = async () => {
@@ -147,8 +219,6 @@ export default function TripPage({ user }: TripPageProps) {
     setIsExpenseModalOpen(false);
   };
 
-  // --- RENDER ---
-
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600"/></div>;
   if (error) return <div className="min-h-screen flex flex-col items-center justify-center gap-4"><AlertTriangle className="text-red-500" size={40}/><p className="text-slate-600 font-bold">{error}</p><Button variant="secondary" onClick={() => { localStorage.removeItem('cc-last-trip-id'); navigate('/'); }}>Tornar a l'inici</Button></div>;
   if (!tripData) return null;
@@ -165,7 +235,7 @@ export default function TripPage({ user }: TripPageProps) {
         isFiltered={!!searchQuery || filterCategory !== 'all'}
         onOpenSettings={() => setSettingsModalOpen(true)}
         onOpenGroup={() => setGroupModalOpen(true)}
-        onExportPDF={() => generatePDF(name, expenses, balances, settlements, currency.symbol)}
+        onExportPDF={() => generatePDF(name, expenses, balances, settlements, users, currency.symbol)}
         onCopyCode={() => { navigator.clipboard.writeText(tripId || '').then(() => showToast("Codi copiat!", 'success')); }}
       />
 
@@ -182,12 +252,12 @@ export default function TripPage({ user }: TripPageProps) {
           <ExpensesList 
             expenses={filteredExpenses} searchQuery={searchQuery} setSearchQuery={setSearchQuery}
             filterCategory={filterCategory} setFilterCategory={setFilterCategory}
-            onEditExpense={(e) => { setEditingExpense(e); setIsExpenseModalOpen(true); }}
-            currency={currency}
+            onEdit={(e) => { setEditingExpense(e); setIsExpenseModalOpen(true); }}
+            currency={currency} users={users}
           />
         )}
-        {activeTab === 'balances' && <BalancesView balances={balances} categoryStats={categoryStats} currency={currency} />}
-        {activeTab === 'settle' && <SettlementsView settlements={settlements} onSettleDebt={setSettleModalOpen} currency={currency} />}
+        {activeTab === 'balances' && <BalancesView balances={balances} categoryStats={categoryStats} currency={currency} users={users} />}
+        {activeTab === 'settle' && <SettlementsView settlements={settlements} onSettle={setSettleModalOpen} currency={currency} users={users} />}
       </main>
       
       <button onClick={() => { setEditingExpense(null); setIsExpenseModalOpen(true); }} className="fixed bottom-6 right-6 md:right-[calc(50%-350px)] bg-indigo-600 text-white p-4 rounded-2xl shadow-xl hover:bg-indigo-700 transition-all z-40 shadow-indigo-200"><Plus size={28} /></button>
@@ -199,19 +269,35 @@ export default function TripPage({ user }: TripPageProps) {
         showToast={showToast} 
       />
       
-      <GroupModal isOpen={groupModalOpen} onClose={() => setGroupModalOpen(false)} tripId={tripId!} users={users} onAddUser={handleAddUser} onRemoveUser={requestDeleteUser} onRenameUser={handleRenameUser} />
+      <GroupModal isOpen={groupModalOpen} onClose={() => setGroupModalOpen(false)} trip={tripData} showToast={showToast} />
       
+      {/* MODAL DE CONFIGURACIÓ (Aquí hi ha el botó nou) */}
       <Modal isOpen={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} title="Configuració del Grup">
         <div className="space-y-6">
           <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Nom</label><input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={editTripName} onChange={e => setEditTripName(e.target.value)} /></div>
           <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Data</label><input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" value={editTripDate} onChange={e => setEditTripDate(e.target.value)} /></div>
+          
           <div>
             <div className="flex items-center justify-between mb-2"><label className="block text-xs font-bold text-slate-500 uppercase">Moneda</label>{!canChangeCurrency && <span className="text-xs text-rose-500 font-bold flex items-center gap-1"><Lock size={10} /> Bloquejat</span>}</div>
             <div className="grid grid-cols-2 gap-2">
               {CURRENCIES.map(c => (<button key={c.code} onClick={() => canChangeCurrency && handleChangeCurrency(c)} disabled={!canChangeCurrency} className={`p-3 rounded-xl border-2 text-sm font-bold flex items-center justify-center gap-2 transition-all ${currency?.code === c.code ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100'} ${!canChangeCurrency && currency?.code !== c.code ? 'opacity-40 cursor-not-allowed bg-slate-50' : 'hover:border-slate-300'}`}><span>{c.symbol}</span> {c.code}</button>))}
             </div>
           </div>
+
           <Button onClick={handleUpdateTrip}>Guardar canvis</Button>
+
+          {/* BOTÓ DE ZONA PERILLOSA: ABANDONAR */}
+          <div className="pt-6 mt-4 border-t border-slate-100">
+             <button 
+                onClick={handleLeaveTrip}
+                className="w-full p-4 flex items-center justify-center gap-2 text-rose-600 bg-rose-50 hover:bg-rose-100 font-bold rounded-xl transition-colors"
+             >
+                <LogOut size={20}/> Abandonar Grup
+             </button>
+             <p className="text-center text-xs text-slate-400 mt-2">
+                Esborra el viatge de la teva vista sense afectar als altres.
+             </p>
+          </div>
         </div>
       </Modal>
 
@@ -222,7 +308,7 @@ export default function TripPage({ user }: TripPageProps) {
           <div className="space-y-6 text-center">
             <div className="py-4">
               <p className="text-slate-500 text-lg">Confirmar pagament de</p>
-              <p className="text-xl font-bold text-slate-800 my-2">{settleModalOpen.from} <ArrowRightLeft className="inline mx-2" size={16}/> {settleModalOpen.to}</p>
+              <p className="text-xl font-bold text-slate-800 my-2">{users.find(u => u.id === settleModalOpen.from)?.name} <ArrowRightLeft className="inline mx-2" size={16}/> {users.find(u => u.id === settleModalOpen.to)?.name}</p>
               <p className="text-3xl font-black text-indigo-600">{formatCurrency(settleModalOpen.amount, currency)}</p>
             </div>
             <div>

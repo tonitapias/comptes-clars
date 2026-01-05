@@ -18,27 +18,34 @@ export interface Category {
   barColor: string;
 }
 
-// --- NOUS TIPUS PER AL REPARTIMENT ---
+// --- USUARI COM A OBJECTE (IMPORTANT PER LES FOTOS) ---
+export interface TripUser {
+  id: string;
+  name: string;
+  email?: string;
+  isAuth?: boolean;
+  linkedUid?: string;
+  photoUrl?: string; // <--- LA FOTO
+}
+
 export type SplitType = 'equal' | 'exact' | 'shares';
 
 export interface Expense {
   id: number | string;
   title: string;
   amount: number;
-  payer: string;
+  payer: string;        // Guardarà l'ID
   category: CategoryId;
-  involved: string[];
-  date: string; // ISO String
-  
-  // --- CAMPS NOUS ---
+  involved: string[];   // Guardarà IDs
+  date: string;         
   splitType?: SplitType; 
-  splitDetails?: Record<string, number>; // Mapeja userID -> quantitat (o parts)
+  splitDetails?: Record<string, number>; 
 }
 
 export interface TripData {
   id: string;
   name: string;
-  users: string[];
+  users: TripUser[];    // Array d'objectes
   expenses: Expense[];
   currency: Currency;
   createdAt: string;
@@ -46,13 +53,13 @@ export interface TripData {
 }
 
 export interface Balance {
-  user: string;
-  balance: number;
+  userId: string;
+  amount: number;
 }
 
 export interface Settlement {
-  from: string;
-  to: string;
+  from: string; 
+  to: string;   
   amount: number;
 }
 

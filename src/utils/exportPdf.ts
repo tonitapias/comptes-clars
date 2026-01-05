@@ -1,20 +1,24 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Expense, Settlement, Balance } from '../types';
+import { Expense, Settlement, Balance, TripUser } from '../types';
+
+// Helper per buscar noms
+const getName = (id: string, users: TripUser[]) => users.find(u => u.id === id)?.name || '???';
 
 export const generatePDF = (
   tripName: string, 
   expenses: Expense[], 
   balances: Balance[], 
   settlements: Settlement[],
+  users: TripUser[], // <-- NOU: Necessitem els usuaris per traduir IDs
   currencySymbol: string
 ) => {
   const doc = new jsPDF();
-  const indigoColor = [79, 70, 229] as [number, number, number]; // Indigo 600
+  const indigoColor = [79, 70, 229] as [number, number, number];
 
-  // 1. HEADER DISSENY
+  // 1. HEADER
   doc.setFillColor(...indigoColor);
-  doc.rect(0, 0, 210, 40, 'F'); // Barra superior
+  doc.rect(0, 0, 210, 40, 'F'); 
 
   doc.setFontSize(24);
   doc.setTextColor(255, 255, 255);
@@ -24,7 +28,7 @@ export const generatePDF = (
   doc.setTextColor(200, 200, 200);
   doc.text(`Informe generat el: ${new Date().toLocaleDateString('ca-ES')}`, 14, 28);
 
-  // 2. RESUM GENERAL
+  // 2. RESUM
   const totalCents = expenses.filter(e => e.category !== 'transfer').reduce((acc, curr) => acc + curr.amount, 0);
   
   doc.setTextColor(0);
@@ -41,9 +45,9 @@ export const generatePDF = (
 
   // 3. TAULA DE BALANÇOS
   const balanceData = balances.map(b => [
-    b.user,
-    (b.balance / 100).toFixed(2) + ' ' + currencySymbol,
-    b.balance >= 0 ? 'Recupera' : 'Ha de pagar'
+    getName(b.userId, users), // <-- Traducció ID -> Nom
+    (b.amount / 100).toFixed(2) + ' ' + currencySymbol, // <-- 'amount', no 'balance'
+    b.amount >= 0 ? 'Recupera' : 'Ha de pagar'
   ]);
 
   autoTable(doc, {
@@ -58,15 +62,15 @@ export const generatePDF = (
     }
   });
 
-  // 4. TAULA DE DESPESES DETALLADA
+  // 4. TAULA DE DESPESES
   const expenseData = expenses.map(e => [
     new Date(e.date).toLocaleDateString('ca-ES'),
     e.title,
-    e.payer,
+    getName(e.payer, users), // <-- Traducció ID -> Nom
     (e.amount / 100).toFixed(2) + ' ' + currencySymbol,
     e.category === 'transfer' 
         ? 'Transferència' 
-        : (e.splitType === 'exact' ? 'Exacte' : (e.splitType === 'shares' ? 'Parts' : `${e.involved.length} pers.`))
+        : (e.splitType === 'exact' ? 'Exacte' : (e.splitType === 'shares' ? 'Parts' : `${e.involved.length || users.length} pers.`))
   ]);
 
   let finalY = (doc as any).lastAutoTable.finalY + 15;
@@ -83,18 +87,17 @@ export const generatePDF = (
     columnStyles: { 3: { halign: 'right', fontStyle: 'bold' } }
   });
 
-  // 5. LIQUIDACIONS (Pla de pagament)
+  // 5. LIQUIDACIONS
   if (settlements.length > 0) {
       const settlementData = settlements.map(s => [
-        s.from,
+        getName(s.from, users), // <-- Traducció
         '→ PAGA A →',
-        s.to,
+        getName(s.to, users),   // <-- Traducció
         (s.amount / 100).toFixed(2) + ' ' + currencySymbol
       ]);
 
       finalY = (doc as any).lastAutoTable.finalY + 15;
       
-      // Salt de pàgina si no cap
       if (finalY > 240) {
           doc.addPage();
           finalY = 20;
@@ -102,7 +105,7 @@ export const generatePDF = (
 
       doc.setFontSize(14);
       doc.setTextColor(indigoColor[0], indigoColor[1], indigoColor[2]);
-      doc.text("Pla de Liquidació (Qui paga a qui?)", 14, finalY);
+      doc.text("Pla de Liquidació", 14, finalY);
 
       autoTable(doc, {
         startY: finalY + 5,
@@ -110,20 +113,14 @@ export const generatePDF = (
         theme: 'plain',
         styles: { fontSize: 11, cellPadding: 4 },
         columnStyles: {
-            0: { fontStyle: 'bold', textColor: [225, 29, 72] }, // Vermell
+            0: { fontStyle: 'bold', textColor: [225, 29, 72] },
             1: { halign: 'center', fontSize: 8, textColor: [150, 150, 150] },
-            2: { fontStyle: 'bold', textColor: [16, 185, 129] }, // Verd
+            2: { fontStyle: 'bold', textColor: [16, 185, 129] },
             3: { halign: 'right', fontStyle: 'bold' }
         }
       });
   }
 
-  // DESCARREGAR
-  const safeFileName = tripName
-    .replace(/[^a-z0-9à-úÀ-Ú\s-]/gi, '')
-    .trim()
-    .replace(/\s+/g, '_')
-    .toLowerCase();
-
-  doc.save(`comptes_clars_${safeFileName || 'viatge'}.pdf`);
+  const safeFileName = tripName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  doc.save(`comptes_${safeFileName}.pdf`);
 };

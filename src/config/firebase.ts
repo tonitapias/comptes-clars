@@ -1,6 +1,11 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { 
+  getFirestore, 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager 
+} from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -12,19 +17,23 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
 
-// Configuració de persistència simplificada i robusta per evitar problemes de sessió
+// --- AUTENTICACIÓ ---
+export const auth = getAuth(app);
 setPersistence(auth, browserLocalPersistence)
   .then(() => {
      console.log("✅ Sessió configurada: LOCAL");
   })
   .catch((error) => {
-     console.error("❌ Error persistència:", error);
+     console.error("❌ Error persistència Auth:", error);
   });
 
-export const db = getFirestore(app);
+// --- FIRESTORE AMB PERSISTÈNCIA OFFLINE ---
+// Utilitzem 'initializeFirestore' en lloc de 'getFirestore' per configurar la cache
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager() // Permet tenir l'app oberta en múltiples pestanyes sense error
+  })
+});
 
-// --- CORRECCIÓ CLAU AQUÍ ---
-// Canviem 'comptes-clars' per 'comptes-clars-v1' perquè coincideixi amb la teva BD real.
 export const appId = "comptes-clars-v1";
