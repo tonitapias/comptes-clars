@@ -45,10 +45,7 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
              : initialData.splitDetails || {}
         });
       } else {
-        // CORRECCIÓ: Ja no inicialitzem amb '1' per defecte. 
-        // Deixem l'objecte buit perquè els inputs surtin nets (placeholder 0).
         const defaultDetails: Record<string, number> = {};
-        
         setFormData({ 
           title: '', amount: '', payer: users.length > 0 ? users[0].id : '', category: 'food', involved: [], 
           date: new Date().toISOString().split('T')[0], splitType: 'equal', splitDetails: defaultDetails
@@ -60,8 +57,10 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
   const safeParseFloat = (str: string) => { const val = parseFloat(str.replace(',', '.')); return isNaN(val) ? 0 : val; };
   const currentTotalCents = Math.round(safeParseFloat(formData.amount) * 100);
   const currentSplitSumCents = formData.splitType === 'exact' ? Object.values(formData.splitDetails).reduce((sum, val) => sum + Math.round((Number(val) || 0) * 100), 0) : 0;
+  
+  // En mode exacte, com que sumem automàticament, la diferència hauria de ser sempre 0 (o molt propera per decimals)
   const diffCents = currentTotalCents - currentSplitSumCents;
-  const isExactValid = Math.abs(diffCents) < 1;
+  const isExactValid = Math.abs(diffCents) < 2; // Marge petit per error de coma flotant
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,21 +102,49 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
     setFormData({ ...formData, involved: updated });
   };
 
+  // NOU: Actualitza el detall i, si és "Exacte", recalcula el TOTAL automàticament
   const updateSplitDetail = (userId: string, value: string) => {
       const numVal = value === '' ? 0 : parseFloat(value.replace(',', '.'));
-      const newDetails = { ...formData.splitDetails, [userId]: isNaN(numVal) ? 0 : numVal };
-      setFormData(prev => ({ ...prev, splitDetails: newDetails }));
+      const safeVal = isNaN(numVal) ? 0 : numVal;
+      
+      setFormData(prev => {
+          const newDetails = { ...prev.splitDetails, [userId]: safeVal };
+          
+          let newAmount = prev.amount;
+          // Si estem en mode 'exact', el total és la suma de les parts
+          if (prev.splitType === 'exact') {
+              const totalSum = Object.values(newDetails).reduce((acc, curr) => acc + (curr || 0), 0);
+              newAmount = totalSum === 0 ? '' : totalSum.toFixed(2);
+          }
+          
+          return { ...prev, splitDetails: newDetails, amount: newAmount };
+      });
   };
 
   const isTransfer = formData.category === 'transfer';
   const isAllInvolved = formData.involved.length === 0 || formData.involved.length === users.length;
+  const isExactMode = formData.splitType === 'exact';
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={initialData ? "Editar Despesa" : "Nova Despesa"}>
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="relative">
           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl text-slate-400 font-light">{currency.symbol}</span>
-          <input type="text" inputMode="decimal" placeholder="0.00" autoFocus={!initialData} className="w-full pl-10 pr-4 py-4 bg-slate-50 border-2 focus:bg-white rounded-2xl text-4xl font-bold text-slate-800 text-center outline-none transition-all border-transparent focus:border-indigo-500" value={formData.amount} onChange={(e) => { if (/^[\d.,]*$/.test(e.target.value)) setFormData({...formData, amount: e.target.value}); }} />
+          <input 
+            type="text" 
+            inputMode="decimal" 
+            placeholder="0.00" 
+            autoFocus={!initialData && !isExactMode} 
+            readOnly={isExactMode} // Bloquejat si és mode exacte
+            className={`w-full pl-10 pr-4 py-4 border-2 rounded-2xl text-4xl font-bold text-slate-800 text-center outline-none transition-all ${
+                isExactMode 
+                ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed' 
+                : 'bg-slate-50 border-transparent focus:bg-white focus:border-indigo-500'
+            }`} 
+            value={formData.amount} 
+            onChange={(e) => { if (/^[\d.,]*$/.test(e.target.value)) setFormData({...formData, amount: e.target.value}); }} 
+          />
+          {isExactMode && <p className="text-center text-xs text-slate-400 mt-1 font-medium">Suma automàtica (edita a sota)</p>}
         </div>
 
         <div className="flex gap-3">
@@ -166,7 +193,7 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
                              <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 overflow-hidden shrink-0">{u.photoUrl ? <img src={u.photoUrl} className="w-full h-full object-cover"/> : u.name.charAt(0)}</div>
                              <span className="flex-1 text-sm font-medium text-slate-700 truncate">{u.name}</span>
                              <div className="flex items-center gap-2">
-                                <input type="number" step={formData.splitType === 'exact' ? "0.01" : "1"} min="0" placeholder="0" className={`w-20 p-1 text-right font-bold text-slate-800 bg-slate-50 rounded border outline-none ${formData.splitType === 'exact' ? 'pr-6' : ''} ${formData.splitType === 'exact' && !isExactValid ? 'focus:border-rose-500 border-rose-200' : 'focus:border-indigo-500'}`} value={formData.splitDetails[u.id] ?? ''} onChange={(e) => updateSplitDetail(u.id, e.target.value)} />
+                                <input type="number" step={formData.splitType === 'exact' ? "0.01" : "1"} min="0" placeholder="0" className={`w-20 p-1 text-right font-bold text-slate-800 bg-slate-50 rounded border outline-none ${formData.splitType === 'exact' ? 'pr-6' : ''} ${isExactMode ? 'focus:border-indigo-500' : (formData.splitType === 'exact' && !isExactValid ? 'focus:border-rose-500 border-rose-200' : 'focus:border-indigo-500')}`} value={formData.splitDetails[u.id] ?? ''} onChange={(e) => updateSplitDetail(u.id, e.target.value)} />
                                 {formData.splitType === 'exact' && <span className="text-xs font-bold text-slate-400 absolute right-6">{currency.symbol}</span>}
                              </div>
                         </div>
