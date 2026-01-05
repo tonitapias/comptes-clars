@@ -13,22 +13,25 @@ interface CalculationsResult {
 
 export function useTripCalculations(
   expenses: Expense[], 
-  users: TripUser[], // Ara rep objectes complets
+  users: TripUser[], 
   searchQuery: string, 
   filterCategory: string
 ): CalculationsResult {
   
-  // Helpers per buscar noms ràpidament si calgués (encara que aquí treballem amb IDs)
-  // const getUserName = (id: string) => users.find(u => u.id === id)?.name || 'Desconegut';
-
   // 1. Filtrar i Ordenar
   const filteredExpenses = useMemo(() => {
     const q = searchQuery.toLowerCase();
     
     return expenses.filter(e => {
         // Busquem els noms corresponents als IDs per fer la cerca de text
-        const payerName = users.find(u => u.id === e.payer)?.name.toLowerCase() || '';
-        const involvedNames = e.involved.map(id => users.find(u => u.id === id)?.name.toLowerCase() || '');
+        // (Intentem fer match tant per ID com si el camp conté el nom directament)
+        const payerUser = users.find(u => u.id === e.payer || u.name === e.payer);
+        const payerName = payerUser?.name.toLowerCase() || '';
+        
+        const involvedNames = e.involved.map(idOrName => {
+            const user = users.find(u => u.id === idOrName || u.name === idOrName);
+            return user ? user.name.toLowerCase() : '';
+        });
 
         const matchesSearch = 
             e.title.toLowerCase().includes(q) || 
@@ -49,13 +52,31 @@ export function useTripCalculations(
   // 2. Balanços
   const balances = useMemo(() => {
     const balanceMap: Record<string, number> = {}; 
-    // Inicialitzem a 0 per ID
+    // Inicialitzem a 0 per ID d'usuari real
     users.forEach(u => balanceMap[u.id] = 0);
+
+    // --- FUNCIÓ CLAU: Resol l'ID tant si ve com a ID real o com a Nom (legacy) ---
+    const resolveId = (identifier: string): string | undefined => {
+        // 1. Si l'identificador ja és una clau vàlida (ID real), el tornem
+        if (balanceMap[identifier] !== undefined) return identifier;
+        
+        // 2. Si no, busquem si hi ha un usuari amb aquest NOM
+        const userByName = users.find(u => u.name === identifier);
+        // Si trobem l'usuari pel nom i tenim el seu ID al mapa, tornem l'ID
+        if (userByName && balanceMap[userByName.id] !== undefined) {
+            return userByName.id;
+        }
+        
+        // 3. Usuari no trobat
+        return undefined;
+    };
     
     expenses.forEach(exp => {
       // 1. El pagador "posa" els diners
-      if (balanceMap[exp.payer] !== undefined) {
-          balanceMap[exp.payer] += exp.amount;
+      const payerId = resolveId(exp.payer);
+
+      if (payerId) {
+          balanceMap[payerId] += exp.amount;
       }
       
       const splitType = exp.splitType || 'equal';
@@ -63,9 +84,14 @@ export function useTripCalculations(
       // 2. Restem a qui li toca pagar
       if (splitType === 'equal') {
           // Si involved està buit, vol dir TOTS els usuaris
-          let receiversIds = exp.involved?.length > 0 ? exp.involved : users.map(u => u.id);
+          let rawInvolved = exp.involved?.length > 0 ? exp.involved : users.map(u => u.id);
           
-          // MILLORA: Ordenem els IDs per garantir determinisme en el repartiment de cèntims
+          // Convertim qualsevol nom antic a ID actual
+          let receiversIds = rawInvolved
+            .map(id => resolveId(id))
+            .filter((id): id is string => id !== undefined);
+          
+          // Ordenem els IDs per garantir determinisme en el repartiment de cèntims
           receiversIds = [...receiversIds].sort();
 
           const count = receiversIds.length;
@@ -85,8 +111,9 @@ export function useTripCalculations(
 
       } else if (splitType === 'exact') {
           const details = exp.splitDetails || {};
-          Object.entries(details).forEach(([uid, amount]) => {
-              if (balanceMap[uid] !== undefined) {
+          Object.entries(details).forEach(([identifier, amount]) => {
+              const uid = resolveId(identifier);
+              if (uid && balanceMap[uid] !== undefined) {
                   balanceMap[uid] -= amount;
               }
           });
@@ -98,20 +125,26 @@ export function useTripCalculations(
           if (totalShares > 0) {
               const amountPerShare = exp.amount / totalShares;
               let distributed = 0;
-              const involvedUsersIds = Object.keys(details).sort(); // Ordenem també aquí
               
-              involvedUsersIds.forEach((uid, index) => {
-                  if (balanceMap[uid] !== undefined) {
-                      const shares = details[uid];
+              // Obtenim IDs vàlids de les keys (que poden ser noms)
+              const entries = Object.entries(details)
+                .map(([key, shares]) => ({ uid: resolveId(key), shares }))
+                .filter(entry => entry.uid !== undefined)
+                .sort((a, b) => (a.uid! > b.uid! ? 1 : -1)); // Ordenem per ID
+
+              const count = entries.length;
+              
+              entries.forEach((entry, index) => {
+                  if (entry.uid && balanceMap[entry.uid] !== undefined) {
                       let amountToPay;
 
-                      if (index === involvedUsersIds.length - 1) {
+                      if (index === count - 1) {
                           amountToPay = exp.amount - distributed;
                       } else {
-                          amountToPay = Math.floor(shares * amountPerShare);
+                          amountToPay = Math.floor(entry.shares * amountPerShare);
                       }
                       
-                      balanceMap[uid] -= amountToPay;
+                      balanceMap[entry.uid] -= amountToPay;
                       distributed += amountToPay;
                   }
               });
@@ -128,7 +161,6 @@ export function useTripCalculations(
 
   // 3. Estadístiques
   const categoryStats = useMemo(() => {
-    // (Aquesta part no canvia gaire, ja que les categories no depenen dels usuaris)
     const stats: Record<string, number> = {};
     const validExpenses = expenses.filter(e => e.category !== 'transfer');
     const total = validExpenses.reduce((acc, curr) => acc + curr.amount, 0);
@@ -153,9 +185,15 @@ export function useTripCalculations(
   // 4. Liquidacions
   const settlements = useMemo(() => {
     const debts: Settlement[] = [];
-    // Copiem i ordenem
-    const debtors = balances.filter(b => b.amount < -1).sort((a, b) => a.amount - b.amount); 
-    const creditors = balances.filter(b => b.amount > 1).sort((a, b) => b.amount - a.amount);
+    // Copiem i ordenem (Clonem els objectes balance per no mutar l'original directament si no volem)
+    // Però aquí modifiquem 'debtor.amount', així que millor fer map per trencar referència si fos necessari.
+    // En aquest cas, 'balances' ve del useMemo anterior i és nou cada cop, així que podem mutar-lo localment dins aquest useMemo
+    // sense afectar el renderitzat previ, PERÒ React StrictMode podria queixar-se. 
+    // MILLORA: Fem deep copy dels balances per calcular settlements sense tocar l'original.
+    const balancesCopy = balances.map(b => ({ ...b }));
+
+    const debtors = balancesCopy.filter(b => b.amount < -0.01).sort((a, b) => a.amount - b.amount); 
+    const creditors = balancesCopy.filter(b => b.amount > 0.01).sort((a, b) => b.amount - a.amount);
     
     let i = 0, j = 0;
     while (i < debtors.length && j < creditors.length) {
@@ -170,8 +208,8 @@ export function useTripCalculations(
       debtor.amount += amount; 
       creditor.amount -= amount;
       
-      if (Math.abs(debtor.amount) < 1) i++; 
-      if (creditor.amount < 1) j++;
+      if (Math.abs(debtor.amount) < 0.01) i++; 
+      if (creditor.amount < 0.01) j++;
     }
     return debts;
   }, [balances]);

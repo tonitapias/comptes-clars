@@ -2,15 +2,18 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Expense, Settlement, Balance, TripUser } from '../types';
 
-// Helper per buscar noms
-const getName = (id: string, users: TripUser[]) => users.find(u => u.id === id)?.name || '???';
+// MILLORA: Funció robusta que busca per ID, però si no troba l'usuari, retorna el text original (per noms antics)
+const getName = (idOrName: string, users: TripUser[]) => {
+  const u = users.find(u => u.id === idOrName);
+  return u ? u.name : idOrName; 
+};
 
 export const generatePDF = (
   tripName: string, 
   expenses: Expense[], 
   balances: Balance[], 
   settlements: Settlement[],
-  users: TripUser[], // <-- NOU: Necessitem els usuaris per traduir IDs
+  users: TripUser[], 
   currencySymbol: string
 ) => {
   const doc = new jsPDF();
@@ -41,12 +44,13 @@ export const generatePDF = (
   
   doc.setFontSize(16);
   doc.setTextColor(0);
-  doc.text(`${(totalCents / 100).toFixed(2)} ${currencySymbol}`, 14, 69);
+  // Nota: Si vols format català al PDF (comes), pots fer servir toLocaleString o replace('.', ',')
+  doc.text(`${(totalCents / 100).toFixed(2).replace('.', ',')} ${currencySymbol}`, 14, 69);
 
   // 3. TAULA DE BALANÇOS
   const balanceData = balances.map(b => [
-    getName(b.userId, users), // <-- Traducció ID -> Nom
-    (b.amount / 100).toFixed(2) + ' ' + currencySymbol, // <-- 'amount', no 'balance'
+    getName(b.userId, users), 
+    (b.amount / 100).toFixed(2).replace('.', ',') + ' ' + currencySymbol, 
     b.amount >= 0 ? 'Recupera' : 'Ha de pagar'
   ]);
 
@@ -66,8 +70,8 @@ export const generatePDF = (
   const expenseData = expenses.map(e => [
     new Date(e.date).toLocaleDateString('ca-ES'),
     e.title,
-    getName(e.payer, users), // <-- Traducció ID -> Nom
-    (e.amount / 100).toFixed(2) + ' ' + currencySymbol,
+    getName(e.payer, users), // Ara això ja no tornarà "???" amb dades antigues
+    (e.amount / 100).toFixed(2).replace('.', ',') + ' ' + currencySymbol,
     e.category === 'transfer' 
         ? 'Transferència' 
         : (e.splitType === 'exact' ? 'Exacte' : (e.splitType === 'shares' ? 'Parts' : `${e.involved.length || users.length} pers.`))
@@ -90,10 +94,10 @@ export const generatePDF = (
   // 5. LIQUIDACIONS
   if (settlements.length > 0) {
       const settlementData = settlements.map(s => [
-        getName(s.from, users), // <-- Traducció
+        getName(s.from, users), 
         '→ PAGA A →',
-        getName(s.to, users),   // <-- Traducció
-        (s.amount / 100).toFixed(2) + ' ' + currencySymbol
+        getName(s.to, users),   
+        (s.amount / 100).toFixed(2).replace('.', ',') + ' ' + currencySymbol
       ]);
 
       finalY = (doc as any).lastAutoTable.finalY + 15;
