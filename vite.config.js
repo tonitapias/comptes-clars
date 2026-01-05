@@ -6,15 +6,15 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate', // S'actualitza sola quan treus una nova versió
+      registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'maskable-icon.png'],
       manifest: {
         name: 'Comptes Clars',
         short_name: 'Comptes',
         description: 'Divideix despeses i viatja lleuger.',
         theme_color: '#ffffff',
-        background_color: '#f8fafc', // Coincideix amb el bg-slate-50
-        display: 'standalone', // Fa que sembli una app nativa (sense barra URL)
+        background_color: '#f8fafc',
+        display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
         icons: [
@@ -38,19 +38,17 @@ export default defineConfig({
             src: 'maskable-icon-512x512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'maskable' // Important per Android (icones rodones)
+            purpose: 'maskable'
           }
         ]
       }
     })
   ],
-  // --- NOVA SECCIÓ: Optimització del Build ---
   build: {
-    chunkSizeWarningLimit: 1000, // Pugem el límit de l'avís a 1MB (per si de cas)
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
         manualChunks: {
-          // Separem les llibreries grans en fitxers independents per millorar la càrrega
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           'vendor-firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore'],
           'vendor-pdf': ['jspdf', 'jspdf-autotable'],
@@ -59,10 +57,11 @@ export default defineConfig({
       }
     }
   },
+  // --- CONFIGURACIÓ NETEJA (Sense headers) ---
   server: {
-    headers: {
-      'Cross-Origin-Opener-Policy': 'unsafe-none',
-      'Cross-Origin-Embedder-Policy': 'unsafe-none',
-    },
+    // Deixem que el navegador faci servir els valors per defecte
+  },
+  preview: {
+    // Deixem que el navegador faci servir els valors per defecte
   },
 });

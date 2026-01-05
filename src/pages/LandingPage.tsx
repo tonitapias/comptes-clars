@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Plus, Users, ArrowRight, Wallet, Loader2, LogOut, History, ChevronRight, MapPin, User as UserIcon, Trash2, Sparkles, KeyRound 
 } from 'lucide-react';
+// TORNA A SER: signInWithPopup
 import { GoogleAuthProvider, signInWithPopup, signOut, User } from 'firebase/auth';
 
 import { auth } from '../config/firebase';
-import { TripService } from '../services/tripService'; // <--- Únic import de dades
+import { TripService } from '../services/tripService';
 import { CURRENCIES } from '../utils/constants';
 import { TripData } from '../types';
 
@@ -60,10 +61,16 @@ export default function LandingPage({ user }: LandingPageProps) {
     fetchMyTrips();
   }, [user, isGuest]);
 
+  // FUNCIÓ RESTAURADA A POPUP
   const handleLogin = async () => {
     setLoginLoading(true);
-    try { await signInWithPopup(auth, new GoogleAuthProvider()); } 
-    catch (e) { console.error(e); } 
+    try { 
+      // Ignora l'error de consola sobre window.closed, el login funcionarà igual
+      await signInWithPopup(auth, new GoogleAuthProvider()); 
+    } 
+    catch (e) { 
+      console.error(e); 
+    } 
     finally { setLoginLoading(false); }
   };
 
