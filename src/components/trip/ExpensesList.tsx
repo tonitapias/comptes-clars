@@ -73,18 +73,26 @@ export default function ExpensesList({
                             <h4 className={`font-bold truncate ${isTransfer ? 'text-slate-600 italic' : 'text-slate-800'}`}>{expense.title}</h4>
                             <span className="text-xs text-slate-400 font-medium bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-100 ml-2 whitespace-nowrap">{formatDateDisplay(expense.date)}</span>
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                            {/* MINI AVATAR */}
-                            <div className="w-4 h-4 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center text-[8px] font-bold text-slate-600">
-                                {photoUrl ? <img src={photoUrl} className="w-full h-full object-cover"/> : payerName.charAt(0)}
+                        
+                        {/* SECCIÓ QUI PAGA I DETALLS - ARA AMB ICONA MÉS GRAN */}
+                        <div className="flex items-center gap-2 mt-1.5">
+                            <div className="flex items-center gap-1.5 bg-slate-50 pl-1 pr-2 py-0.5 rounded-full border border-slate-100">
+                                {/* AVATAR: Mida augmentada a w-5 h-5 (20px) o w-6 h-6 (24px) */}
+                                <div className="w-5 h-5 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center text-[9px] font-bold text-slate-600 border border-white shadow-sm">
+                                    {photoUrl ? <img src={photoUrl} className="w-full h-full object-cover" alt={payerName}/> : payerName.charAt(0)}
+                                </div>
+                                <span className="text-xs text-slate-600 font-bold">{payerName}</span>
                             </div>
-                            <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">{payerName}</span>
                             
-                            <span className="text-xs text-slate-500">
-                                {isTransfer ? '→' : '•'} 
+                            <span className="text-xs text-slate-400">•</span>
+
+                            <span className="text-xs text-slate-500 truncate">
+                                {isTransfer ? '→' : 'Per a'} 
+                                <span className="ml-1 font-medium">
                                 {isTransfer 
                                     ? (expense.involved[0] ? getUserName(expense.involved[0]) : 'Tothom') 
                                     : (expense.splitType === 'equal' ? `${expense.involved.length} pers.` : (expense.splitType === 'exact' ? 'Exacte' : 'Parts'))}
+                                </span>
                             </span>
                         </div>
                       </div>

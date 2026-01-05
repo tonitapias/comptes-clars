@@ -1,6 +1,6 @@
 import { 
   collection, doc, addDoc, updateDoc, deleteDoc, setDoc, 
-  arrayUnion, arrayRemove, query, where, getDocs, getDoc
+  arrayUnion, query, where, getDocs, getDoc
 } from 'firebase/firestore';
 import { db, appId } from '../config/firebase';
 import { Expense, TripData, Settlement, TripUser } from '../types';
@@ -42,7 +42,8 @@ export const TripService = {
         // Així si recarregues la pàgina, veuràs el nom però sense la teva foto/identitat
         const newUsers = trip.users.map(u => {
             if (u.linkedUid === userId) {
-                return { ...u, linkedUid: undefined, isAuth: false, photoUrl: undefined };
+                // CORRECCIÓ: Utilitzem null en lloc d'undefined perquè Firestore no accepta undefined
+                return { ...u, linkedUid: null, isAuth: false, photoUrl: null };
             }
             return u;
         });
@@ -65,12 +66,14 @@ export const TripService = {
     
     const trip = snap.data() as TripData;
     const updatedUsers = trip.users.map(u => {
-        if (u.linkedUid === authUid) return { ...u, linkedUid: undefined, isAuth: false, photoUrl: undefined };
+        // CORRECCIÓ: Preventiva, també usem null aquí
+        if (u.linkedUid === authUid) return { ...u, linkedUid: null, isAuth: false, photoUrl: null };
         return u;
     });
 
     const finalUsers = updatedUsers.map(u => {
-        if (u.id === tripUserId) return { ...u, linkedUid: authUid, isAuth: true, photoUrl: photoUrl || undefined };
+        // CORRECCIÓ: Assegurar que photoUrl sigui null si no existeix
+        if (u.id === tripUserId) return { ...u, linkedUid: authUid, isAuth: true, photoUrl: photoUrl || null };
         return u;
     });
 
