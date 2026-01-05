@@ -12,9 +12,9 @@ interface ExpensesListProps {
   setSearchQuery: (q: string) => void;
   filterCategory: CategoryId | 'all';
   setFilterCategory: (c: CategoryId | 'all') => void;
-  onEdit: (e: Expense | null) => void; // Canviat de onEditExpense a onEdit per consistència
+  onEdit: (e: Expense | null) => void;
   currency: Currency;
-  users: TripUser[]; // Afegit users
+  users: TripUser[];
 }
 
 export default function ExpensesList({ 
@@ -22,7 +22,17 @@ export default function ExpensesList({
 }: ExpensesListProps) {
   
   const getCategory = (id: string) => CATEGORIES.find(c => c.id === id) || CATEGORIES.find(c => c.id === 'other') || CATEGORIES[0];
-  const getUser = (id: string) => users.find(u => u.id === id);
+  
+  // Funció millorada: busca per ID, però si no troba res, torna el text original (per si és un nom antic)
+  const getUserName = (idOrName: string) => {
+      const u = users.find(u => u.id === idOrName);
+      return u ? u.name : idOrName; // Fallback al nom original
+  };
+
+  const getUserPhoto = (idOrName: string) => {
+      const u = users.find(u => u.id === idOrName);
+      return u?.photoUrl;
+  };
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -47,8 +57,10 @@ export default function ExpensesList({
             {expenses.map((expense) => { 
                 const category = getCategory(expense.category); 
                 const isTransfer = expense.category === 'transfer'; 
-                const payer = getUser(expense.payer);
-                const payerName = payer ? payer.name : '???';
+                
+                // Obtenim dades amb el sistema híbrid
+                const payerName = getUserName(expense.payer);
+                const photoUrl = getUserPhoto(expense.payer);
                 
                 return (
                   <Card key={expense.id} className={`hover:shadow-md transition-all group ${isTransfer ? 'bg-slate-50' : 'bg-white'}`} onClick={() => onEdit(expense)}>
@@ -64,10 +76,16 @@ export default function ExpensesList({
                         <div className="flex items-center gap-2 mt-0.5">
                             {/* MINI AVATAR */}
                             <div className="w-4 h-4 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center text-[8px] font-bold text-slate-600">
-                                {payer?.photoUrl ? <img src={payer.photoUrl} className="w-full h-full object-cover"/> : payerName.charAt(0)}
+                                {photoUrl ? <img src={photoUrl} className="w-full h-full object-cover"/> : payerName.charAt(0)}
                             </div>
                             <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">{payerName}</span>
-                            <span className="text-xs text-slate-500">{isTransfer ? '→' : '•'} {isTransfer ? (expense.involved[0] ? getUser(expense.involved[0])?.name : 'Tothom') : (expense.splitType === 'equal' ? `${expense.involved.length} pers.` : (expense.splitType === 'exact' ? 'Exacte' : 'Parts'))}</span>
+                            
+                            <span className="text-xs text-slate-500">
+                                {isTransfer ? '→' : '•'} 
+                                {isTransfer 
+                                    ? (expense.involved[0] ? getUserName(expense.involved[0]) : 'Tothom') 
+                                    : (expense.splitType === 'equal' ? `${expense.involved.length} pers.` : (expense.splitType === 'exact' ? 'Exacte' : 'Parts'))}
+                            </span>
                         </div>
                       </div>
                       <div className="flex flex-col items-end pl-2">

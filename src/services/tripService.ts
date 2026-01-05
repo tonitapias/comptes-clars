@@ -27,17 +27,37 @@ export const TripService = {
     await updateDoc(getTripRef(tripId), data);
   },
 
-  // 1. Aquesta és la funció per ABANDONAR el grup
+  // --- REVISAT: ABANDONAR GRUP COMPLETAMENT ---
   leaveTrip: async (tripId: string, userId: string) => {
-    await updateDoc(getTripRef(tripId), { memberUids: arrayRemove(userId) });
+    const tripRef = getTripRef(tripId);
+    const snap = await getDoc(tripRef);
+    
+    if (snap.exists()) {
+        const trip = snap.data() as TripData;
+        
+        // 1. Et traiem de la llista de membres (ja no et surt a la home)
+        const newMemberUids = (trip.memberUids || []).filter(uid => uid !== userId);
+        
+        // 2. Desvinculem el teu usuari dins del grup (treiem foto i link)
+        // Així si recarregues la pàgina, veuràs el nom però sense la teva foto/identitat
+        const newUsers = trip.users.map(u => {
+            if (u.linkedUid === userId) {
+                return { ...u, linkedUid: undefined, isAuth: false, photoUrl: undefined };
+            }
+            return u;
+        });
+
+        await updateDoc(tripRef, { 
+            memberUids: newMemberUids,
+            users: newUsers
+        });
+    }
   },
 
-  // 2. Aquesta és la funció que faltava per UNIR-SE automàticament
   linkAuthUser: async (tripId: string, uid: string) => {
     await updateDoc(getTripRef(tripId), { memberUids: arrayUnion(uid) });
   },
 
-  // 3. Aquesta és per VINCULAR el perfil ("Sóc jo")
   linkUserToProfile: async (tripId: string, tripUserId: string, authUid: string, photoUrl?: string | null) => {
     const tripRef = getTripRef(tripId);
     const snap = await getDoc(tripRef);
