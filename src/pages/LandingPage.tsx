@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Plus, ArrowRight, Wallet, Loader2, LogOut, ChevronRight, MapPin, 
   User as UserIcon, Trash2, Sparkles, KeyRound, Mail, Lock, Eye, EyeOff, 
-  CreditCard, PieChart, ShieldCheck 
+  CreditCard, PieChart, ShieldCheck, FolderGit2 
 } from 'lucide-react';
 import { 
   GoogleAuthProvider, 
@@ -29,7 +29,7 @@ interface LandingPageProps {
 type ActionState = 'idle' | 'creating' | 'joining';
 type AuthMode = 'initial' | 'login-email' | 'signup-email';
 
-// --- NOU COMPONENT VISUAL: FEATURE CARD (ESTIL BENTO) ---
+// --- COMPONENT VISUAL: FEATURE CARD (ESTIL BENTO) ---
 function BentoCard({ icon: Icon, title, desc, color }: any) {
     return (
       <div className="group relative overflow-hidden bg-white/60 backdrop-blur-md p-6 rounded-3xl border border-white/50 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
@@ -48,7 +48,7 @@ export default function LandingPage({ user }: LandingPageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const inviteCode = searchParams.get('join');
   
-  // Estats (LÒGICA EXACTAMENT IGUAL)
+  // Estats
   const [myTrips, setMyTrips] = useState<TripData[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(false);
   const [actionState, setActionState] = useState<ActionState>('idle');
@@ -72,11 +72,12 @@ export default function LandingPage({ user }: LandingPageProps) {
   const [isJoining, setIsJoining] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // --- EFFECTS (LÒGICA IGUAL) ---
+  // --- 1. LÒGICA DE SALUTACIÓ REVISADA ---
   useEffect(() => {
     const hour = new Date().getHours();
-    if (hour < 13) setGreeting('Bon dia');
-    else if (hour < 20) setGreeting('Bona tarda');
+    // Ajustem els horaris segons l'ús habitual a Catalunya
+    if (hour >= 5 && hour < 14) setGreeting('Bon dia');       // Fins a l'hora de dinar
+    else if (hour >= 14 && hour < 21) setGreeting('Bona tarda'); // Fins a l'hora de sopar
     else setGreeting('Bona nit');
   }, []);
 
@@ -124,7 +125,7 @@ export default function LandingPage({ user }: LandingPageProps) {
     handleAutoJoin();
   }, [user, inviteCode, navigate, setSearchParams]);
 
-  // --- HANDLERS (LÒGICA IGUAL) ---
+  // --- HANDLERS ---
   const handleGoogleLogin = async () => {
     setLoginLoading(true);
     setAuthError('');
@@ -249,25 +250,24 @@ export default function LandingPage({ user }: LandingPageProps) {
   };
 
   const resetAction = () => { setActionState('idle'); setInputValue(''); setCreatorName(''); };
-  const userName = user?.displayName ? user.displayName.split(' ')[0] : (user?.email?.split('@')[0] || 'Viatger');
+  const userName = user?.displayName ? user.displayName.split(' ')[0] : (user?.email?.split('@')[0] || 'Usuari');
 
   if (isJoining) return <div className="min-h-screen flex items-center justify-center bg-indigo-50"><Loader2 className="animate-spin text-indigo-600 w-10 h-10"/></div>;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center p-4 md:p-8 font-sans selection:bg-indigo-100 relative overflow-x-hidden">
       
-      {/* --- NOU FONS ANIMAT (Aurora) --- */}
+      {/* FONS ANIMAT (Aurora) */}
       <div className="fixed inset-0 pointer-events-none z-0">
          <div className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] bg-purple-200/40 rounded-full blur-[120px] mix-blend-multiply animate-pulse-slow"></div>
          <div className="absolute top-[20%] right-[-10%] w-[60%] h-[60%] bg-indigo-200/40 rounded-full blur-[120px] mix-blend-multiply animate-pulse-slow" style={{animationDelay: '2s'}}></div>
          <div className="absolute bottom-[-10%] left-[20%] w-[50%] h-[50%] bg-pink-200/40 rounded-full blur-[120px] mix-blend-multiply animate-pulse-slow" style={{animationDelay: '4s'}}></div>
-         {/* Grid subtil */}
          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
       </div>
 
       <div className="w-full max-w-6xl relative z-10 flex flex-col gap-8 h-full">
         
-        {/* --- NAVBAR MODERNA --- */}
+        {/* NAVBAR */}
         <nav className="flex items-center justify-between py-4">
            <div className="flex items-center gap-3">
               <div className="bg-white/80 backdrop-blur-md p-2.5 rounded-2xl shadow-sm border border-white/50">
@@ -293,28 +293,25 @@ export default function LandingPage({ user }: LandingPageProps) {
            )}
         </nav>
 
-        {/* --- CONTINGUT PRINCIPAL --- */}
         <main className="flex-1 flex flex-col justify-center">
             
             {/* 1. ESTAT NO LOGUEJAT (Landing Visual) */}
             {!user && (
                 <div className="flex flex-col items-center text-center gap-10 py-10 md:py-20 animate-fade-in">
                     
-                    {/* HERO TEXT */}
                     <div className="max-w-3xl space-y-6">
                         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100 text-xs font-bold uppercase tracking-wider mb-4 animate-fade-in">
-                            <Sparkles size={14}/> La forma fàcil de compartir despeses
+                            <Sparkles size={14}/> Gestió de projectes i despeses
                         </div>
                         <h1 className="text-5xl md:text-7xl font-black text-slate-900 leading-[1.1] tracking-tight">
                             Divideix despeses,<br/>
-                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500">multiplica moments.</span>
+                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500">multiplica resultats.</span>
                         </h1>
                         <p className="text-lg md:text-xl text-slate-500 max-w-2xl mx-auto leading-relaxed">
-                            L'eina definitiva per gestionar els comptes de viatges, sopars i pisos compartits. Sense excels complicats, tot clar.
+                            L'eina definitiva per gestionar els comptes de projectes, viatges i esdeveniments. Sense excels complicats, tot clar.
                         </p>
                     </div>
 
-                    {/* ACTION BOX */}
                     <div className="w-full max-w-md bg-white p-2 rounded-3xl shadow-2xl shadow-indigo-200/50 border border-indigo-50 transform hover:scale-[1.01] transition-transform">
                         <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
                              <form onSubmit={handleJoinManual} className="flex gap-2 mb-4">
@@ -336,7 +333,7 @@ export default function LandingPage({ user }: LandingPageProps) {
 
                              <div className="relative flex py-2 items-center">
                                 <div className="flex-grow border-t border-slate-200"></div>
-                                <span className="flex-shrink-0 mx-4 text-slate-400 text-xs font-bold uppercase tracking-wider">o crea el teu grup</span>
+                                <span className="flex-shrink-0 mx-4 text-slate-400 text-xs font-bold uppercase tracking-wider">o crea el teu projecte</span>
                                 <div className="flex-grow border-t border-slate-200"></div>
                              </div>
 
@@ -349,9 +346,8 @@ export default function LandingPage({ user }: LandingPageProps) {
                         </div>
                     </div>
 
-                    {/* FEATURE GRID (BENTO) */}
                     <div className="grid md:grid-cols-3 gap-4 w-full max-w-5xl mt-8">
-                        <BentoCard icon={CreditCard} title="Comptes Clars" desc="Afegeix tiquets en segons. Reparteix a parts iguals o personalitzades." color="bg-blue-500"/>
+                        <BentoCard icon={CreditCard} title="Comptes Clars" desc="Afegeix despeses en segons. Reparteix a parts iguals o personalitzades." color="bg-blue-500"/>
                         <BentoCard icon={PieChart} title="Temps Real" desc="Tothom veu el mateix. Sincronització instantània sense conflictes." color="bg-indigo-500"/>
                         <BentoCard icon={ShieldCheck} title="Liquidació Fàcil" desc="L'algoritme calcula els mínims pagaments per saldar el deute." color="bg-teal-500"/>
                     </div>
@@ -366,13 +362,13 @@ export default function LandingPage({ user }: LandingPageProps) {
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
                         <div>
                             <h2 className="text-3xl md:text-4xl font-black text-slate-800 mb-1">{greeting}, <span className="text-indigo-600">{userName}.</span></h2>
-                            <p className="text-slate-500 font-medium">Aquí tens els teus viatges actius.</p>
+                            {/* CANVI TEXT: Viatges -> Projectes */}
+                            <p className="text-slate-500 font-medium">Aquí tens els teus projectes actius.</p>
                         </div>
                         <div className="flex gap-2">
-                             {/* Botó alternar creació */}
                              {actionState === 'idle' ? (
                                 <button onClick={() => setActionState('creating')} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-indigo-200 transition-all hover:-translate-y-1 flex items-center gap-2">
-                                    <Plus size={20} /> Nou Grup
+                                    <Plus size={20} /> Nou Projecte
                                 </button>
                              ) : (
                                 <button onClick={resetAction} className="bg-white hover:bg-slate-50 text-slate-500 px-6 py-3 rounded-2xl font-bold border border-slate-200 transition-all">
@@ -388,24 +384,26 @@ export default function LandingPage({ user }: LandingPageProps) {
                         </div>
                     </div>
 
-                    {/* ZONA D'ACCIONS RÀPIDES (Creating/Joining) */}
+                    {/* ZONA D'ACCIONS RÀPIDES */}
                     {(actionState === 'creating' || actionState === 'joining') && (
                         <div className="mb-8 animate-fade-in">
                             <div className="bg-white p-6 rounded-3xl shadow-xl shadow-indigo-100/50 border border-indigo-50 relative overflow-hidden">
                                 <div className="absolute top-0 left-0 w-2 h-full bg-indigo-500"></div>
                                 <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                                    {actionState === 'creating' ? <><MapPin size={20} className="text-indigo-500"/> Crear nou viatge</> : <><KeyRound size={20} className="text-indigo-500"/> Unir-se a un grup</>}
+                                    {/* CANVI TEXT: Viatge -> Projecte */}
+                                    {actionState === 'creating' ? <><FolderGit2 size={20} className="text-indigo-500"/> Crear nou projecte</> : <><KeyRound size={20} className="text-indigo-500"/> Unir-se a un grup</>}
                                 </h3>
                                 
                                 <form onSubmit={handleQuickAction} className="flex flex-col md:flex-row gap-4">
                                     <div className="flex-1 space-y-3">
                                         <label className="text-xs font-bold text-slate-400 uppercase ml-1">
-                                            {actionState === 'creating' ? 'Nom del destí / projecte' : 'Codi d\'invitació'}
+                                            {/* CANVI TEXT */}
+                                            {actionState === 'creating' ? 'Nom del projecte' : 'Codi d\'invitació'}
                                         </label>
                                         <input 
                                             autoFocus type="text" 
                                             className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:bg-white text-lg font-bold text-slate-800 transition placeholder:text-slate-300" 
-                                            placeholder={actionState === 'creating' ? "Ex: Costa Brava 2024" : "XXX-YYY-ZZZ"} 
+                                            placeholder={actionState === 'creating' ? "Ex: Sopar Estiu 2025" : "XXX-YYY-ZZZ"} 
                                             value={inputValue} 
                                             onChange={e => setInputValue(e.target.value)}
                                         />
@@ -413,7 +411,7 @@ export default function LandingPage({ user }: LandingPageProps) {
                                     
                                     {actionState === 'creating' && (
                                         <div className="flex-1 space-y-3">
-                                            <label className="text-xs font-bold text-slate-400 uppercase ml-1">El teu àlies al grup</label>
+                                            <label className="text-xs font-bold text-slate-400 uppercase ml-1">El teu àlies</label>
                                             <input 
                                                 type="text" 
                                                 className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:bg-white text-lg font-bold text-slate-800 transition" 
@@ -433,7 +431,7 @@ export default function LandingPage({ user }: LandingPageProps) {
                         </div>
                     )}
 
-                    {/* GRID DE VIATGES */}
+                    {/* GRID DE PROJECTES */}
                     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
                         {loadingTrips ? (
                             [1,2,3].map(i => <div key={i} className="h-40 bg-white/50 animate-pulse rounded-3xl"></div>)
@@ -446,16 +444,14 @@ export default function LandingPage({ user }: LandingPageProps) {
                                     onClick={() => navigate(`/trip/${trip.id}`)} 
                                     className="group relative bg-white hover:bg-white/80 p-6 rounded-3xl border border-white/60 shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer hover:-translate-y-1 overflow-hidden"
                                 >
-                                    {/* Decoració fons */}
                                     <div className="absolute -right-6 -top-6 w-32 h-32 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
 
                                     <div className="relative z-10">
                                         <div className="flex justify-between items-start mb-4">
                                             <div className="bg-indigo-50 text-indigo-600 p-2.5 rounded-xl">
-                                                <MapPin size={24} />
+                                                <FolderGit2 size={24} />
                                             </div>
                                             
-                                            {/* Botó Esborrar (Hover) */}
                                             <button 
                                                 onClick={(e) => handleLeaveTrip(e, trip.id, currentUserInfo?.id, trip.name)}
                                                 className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors opacity-0 group-hover:opacity-100"
@@ -490,7 +486,7 @@ export default function LandingPage({ user }: LandingPageProps) {
                                     <Sparkles size={40} />
                                 </div>
                                 <h3 className="text-xl font-bold text-slate-700">Tot a punt per començar!</h3>
-                                <p className="text-slate-400 mt-2">Crea el teu primer grup amb el botó "Nou Grup".</p>
+                                <p className="text-slate-400 mt-2">Crea el teu primer projecte amb el botó "Nou Projecte".</p>
                             </div>
                         )}
                     </div>
@@ -499,7 +495,7 @@ export default function LandingPage({ user }: LandingPageProps) {
         </main>
       </div>
 
-      {/* --- MODAL D'AUTENTICACIÓ (ESTIL NET) --- */}
+      {/* MODAL D'AUTENTICACIÓ */}
       <Modal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} title={authMode === 'initial' || authMode === 'login-email' ? "Benvingut/da" : "Crear Compte"}>
         <div className="space-y-4 px-2">
             
