@@ -256,7 +256,7 @@ export default function LandingPage({ user }: LandingPageProps) {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center p-4 md:p-8 font-sans selection:bg-indigo-100 relative overflow-x-hidden">
       
-      {/* FONS ANIMAT */}
+      {/* FONS ANIMAT (Aurora) */}
       <div className="fixed inset-0 pointer-events-none z-0">
          <div className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] bg-purple-200/40 rounded-full blur-[120px] mix-blend-multiply animate-pulse-slow"></div>
          <div className="absolute top-[20%] right-[-10%] w-[60%] h-[60%] bg-indigo-200/40 rounded-full blur-[120px] mix-blend-multiply animate-pulse-slow" style={{animationDelay: '2s'}}></div>
@@ -294,7 +294,7 @@ export default function LandingPage({ user }: LandingPageProps) {
 
         <main className="flex-1 flex flex-col justify-center">
             
-            {/* 1. ESTAT NO LOGUEJAT */}
+            {/* 1. ESTAT NO LOGUEJAT (Landing Visual) */}
             {!user && (
                 <div className="flex flex-col items-center text-center gap-10 py-10 md:py-20 animate-fade-in">
                     
@@ -450,8 +450,6 @@ export default function LandingPage({ user }: LandingPageProps) {
                                             
                                             <button 
                                                 onClick={(e) => handleLeaveTrip(e, trip.id, currentUserInfo?.id, trip.name)}
-                                                // CLASSE CORREGIDA PER A MÒBIL: Sempre visible (opacity-100) en mòbil
-                                                // En PC (md:), invisible fins al hover.
                                                 className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 z-20"
                                                 title="Treure de la llista"
                                             >
@@ -529,7 +527,7 @@ export default function LandingPage({ user }: LandingPageProps) {
                         </div>
                         
                         {authMode === 'login-email' && (
-                            <div className="flex justify-end"><button type="button" onClick={handleResetPassword} className="text-xs font-bold text-slate-400 hover:text-indigo-600 transition">Has oblidat la contrasenya?</button></div>
+                            <div className="flex justify-end"><button type="button" onClick={handleResetPassword} className="text-xs font-bold text-slate-400 hover:text-indigo-600 transition">He oblidat la contrasenya</button></div>
                         )}
                         
                         {authMode === 'signup-email' && (
