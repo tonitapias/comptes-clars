@@ -72,12 +72,11 @@ export default function LandingPage({ user }: LandingPageProps) {
   const [isJoining, setIsJoining] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // --- 1. LÒGICA DE SALUTACIÓ REVISADA ---
+  // --- LÒGICA DE SALUTACIÓ ---
   useEffect(() => {
     const hour = new Date().getHours();
-    // Ajustem els horaris segons l'ús habitual a Catalunya
-    if (hour >= 5 && hour < 14) setGreeting('Bon dia');       // Fins a l'hora de dinar
-    else if (hour >= 14 && hour < 21) setGreeting('Bona tarda'); // Fins a l'hora de sopar
+    if (hour >= 5 && hour < 14) setGreeting('Bon dia');
+    else if (hour >= 14 && hour < 21) setGreeting('Bona tarda');
     else setGreeting('Bona nit');
   }, []);
 
@@ -257,7 +256,7 @@ export default function LandingPage({ user }: LandingPageProps) {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center p-4 md:p-8 font-sans selection:bg-indigo-100 relative overflow-x-hidden">
       
-      {/* FONS ANIMAT (Aurora) */}
+      {/* FONS ANIMAT */}
       <div className="fixed inset-0 pointer-events-none z-0">
          <div className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] bg-purple-200/40 rounded-full blur-[120px] mix-blend-multiply animate-pulse-slow"></div>
          <div className="absolute top-[20%] right-[-10%] w-[60%] h-[60%] bg-indigo-200/40 rounded-full blur-[120px] mix-blend-multiply animate-pulse-slow" style={{animationDelay: '2s'}}></div>
@@ -295,17 +294,17 @@ export default function LandingPage({ user }: LandingPageProps) {
 
         <main className="flex-1 flex flex-col justify-center">
             
-            {/* 1. ESTAT NO LOGUEJAT (Landing Visual) */}
+            {/* 1. ESTAT NO LOGUEJAT */}
             {!user && (
                 <div className="flex flex-col items-center text-center gap-10 py-10 md:py-20 animate-fade-in">
                     
                     <div className="max-w-3xl space-y-6">
                         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100 text-xs font-bold uppercase tracking-wider mb-4 animate-fade-in">
-                            <Sparkles size={14}/> Gestió de projectes i despeses
+                            <Sparkles size={14}/> Gestió de despeses en grup
                         </div>
                         <h1 className="text-5xl md:text-7xl font-black text-slate-900 leading-[1.1] tracking-tight">
                             Divideix despeses,<br/>
-                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500">multiplica resultats.</span>
+                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500">multiplica vivències.</span>
                         </h1>
                         <p className="text-lg md:text-xl text-slate-500 max-w-2xl mx-auto leading-relaxed">
                             L'eina definitiva per gestionar els comptes de projectes, viatges i esdeveniments. Sense excels complicats, tot clar.
@@ -362,7 +361,6 @@ export default function LandingPage({ user }: LandingPageProps) {
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
                         <div>
                             <h2 className="text-3xl md:text-4xl font-black text-slate-800 mb-1">{greeting}, <span className="text-indigo-600">{userName}.</span></h2>
-                            {/* CANVI TEXT: Viatges -> Projectes */}
                             <p className="text-slate-500 font-medium">Aquí tens els teus projectes actius.</p>
                         </div>
                         <div className="flex gap-2">
@@ -390,14 +388,12 @@ export default function LandingPage({ user }: LandingPageProps) {
                             <div className="bg-white p-6 rounded-3xl shadow-xl shadow-indigo-100/50 border border-indigo-50 relative overflow-hidden">
                                 <div className="absolute top-0 left-0 w-2 h-full bg-indigo-500"></div>
                                 <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                                    {/* CANVI TEXT: Viatge -> Projecte */}
                                     {actionState === 'creating' ? <><FolderGit2 size={20} className="text-indigo-500"/> Crear nou projecte</> : <><KeyRound size={20} className="text-indigo-500"/> Unir-se a un grup</>}
                                 </h3>
                                 
                                 <form onSubmit={handleQuickAction} className="flex flex-col md:flex-row gap-4">
                                     <div className="flex-1 space-y-3">
                                         <label className="text-xs font-bold text-slate-400 uppercase ml-1">
-                                            {/* CANVI TEXT */}
                                             {actionState === 'creating' ? 'Nom del projecte' : 'Codi d\'invitació'}
                                         </label>
                                         <input 
@@ -454,7 +450,9 @@ export default function LandingPage({ user }: LandingPageProps) {
                                             
                                             <button 
                                                 onClick={(e) => handleLeaveTrip(e, trip.id, currentUserInfo?.id, trip.name)}
-                                                className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors opacity-0 group-hover:opacity-100"
+                                                // CLASSE CORREGIDA PER A MÒBIL: Sempre visible (opacity-100) en mòbil
+                                                // En PC (md:), invisible fins al hover.
+                                                className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 z-20"
                                                 title="Treure de la llista"
                                             >
                                                 <Trash2 size={18} />
