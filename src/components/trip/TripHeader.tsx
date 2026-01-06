@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import Card from '../Card';
 import { formatCurrency } from '../../utils/formatters';
 import { Currency } from '../../types';
-// NO cal importar TripService si només fem logout local
 
 interface TripHeaderProps {
   tripId: string;
@@ -18,12 +17,12 @@ interface TripHeaderProps {
   onOpenSettings: () => void;
   onOpenGroup: () => void;
   onExportPDF: () => void;
-  onCopyCode: () => void;
+  onOpenShare: () => void; // <--- NOM NOU
 }
 
 export default function TripHeader({
   tripId, name, createdAt, userCount, displayedTotal, totalGroupSpending, currency,
-  isFiltered, onOpenSettings, onOpenGroup, onExportPDF, onCopyCode
+  isFiltered, onOpenSettings, onOpenGroup, onExportPDF, onOpenShare
 }: TripHeaderProps) {
   const navigate = useNavigate();
 
@@ -35,11 +34,7 @@ export default function TripHeader({
             <div className="flex items-center gap-2 mb-2">
               <button 
                 className="bg-white/20 p-1.5 rounded-lg backdrop-blur-sm hover:bg-white/30 transition-colors" 
-                onClick={() => { 
-                    // LOGOUT LOCAL SEGUR
-                    localStorage.removeItem('cc-last-trip-id'); 
-                    navigate('/'); 
-                }}
+                onClick={() => { localStorage.removeItem('cc-last-trip-id'); navigate('/'); }}
               >
                 <LogOut className="text-indigo-100" size={16} />
               </button>
@@ -53,7 +48,10 @@ export default function TripHeader({
           <div className="flex gap-2">
             <button onClick={onExportPDF} className="bg-white/20 hover:bg-white/30 p-2.5 rounded-xl transition-colors backdrop-blur-md text-indigo-100" title="Exportar PDF"><Download size={20} /></button>
             <button onClick={onOpenSettings} className="bg-white/20 hover:bg-white/30 p-2.5 rounded-xl transition-colors backdrop-blur-md text-indigo-100"><Settings size={20} /></button>
-            <button onClick={onCopyCode} className="bg-white/20 hover:bg-white/30 p-2.5 rounded-xl transition-colors backdrop-blur-md text-indigo-100"><Share2 size={20} /></button>
+            
+            {/* BOTÓ COMPARTIR ARA OBRE EL MODAL */}
+            <button onClick={onOpenShare} className="bg-white/20 hover:bg-white/30 p-2.5 rounded-xl transition-colors backdrop-blur-md text-indigo-100"><Share2 size={20} /></button>
+            
             <button onClick={onOpenGroup} className="bg-white text-indigo-600 hover:bg-indigo-50 py-2 px-3 rounded-xl transition-colors shadow-lg font-bold text-sm flex items-center gap-2"><Users size={16} /> {userCount}</button>
           </div>
         </div>

@@ -1,8 +1,8 @@
 import { 
   collection, doc, addDoc, updateDoc, deleteDoc, setDoc, 
-  arrayUnion, query, where, getDocs, getDoc
-} from 'firebase/firestore';
-import { User } from 'firebase/auth'; // <--- Importació necessària
+  arrayUnion, arrayRemove, query, where, getDocs, getDoc 
+} from 'firebase/firestore'; // <--- ASSEGURA'T QUE arrayRemove ESTÀ IMPORTAT
+import { User } from 'firebase/auth';
 import { db, appId } from '../config/firebase';
 import { Expense, TripData, Settlement, TripUser } from '../types';
 
@@ -28,38 +28,106 @@ export const TripService = {
     await updateDoc(getTripRef(tripId), data);
   },
 
-  // --- ABANDONAR GRUP (Usuari surt pel seu propi peu) ---
-  leaveTrip: async (tripId: string, userId: string) => {
+  // --- NOVETAT 1: UNIR-SE VIA ENLLAÇ (Automàtic) ---
+  joinTripViaLink: async (tripId: string, user: User) => {
+    const tripRef = getTripRef(tripId);
+    const snap = await getDoc(tripRef);
+    
+    if (!snap.exists()) throw new Error("El grup no existeix");
+    
+    const trip = snap.data() as TripData;
+    
+    // 1. Si ja té permís d'accés (memberUids), no fem res
+    if (trip.memberUids?.includes(user.uid)) return;
+
+    // 2. Mirem si el seu compte de Google ja està vinculat a algun perfil existent
+    // (Per exemple, si algú el va crear manualment i ara entra ell)
+    const existingProfileIndex = trip.users.findIndex(u => u.linkedUid === user.uid);
+    
+    if (existingProfileIndex === -1) {
+        // CAS A: Usuari totalment nou -> El creem
+        const newTripUser: TripUser = {
+            id: generateId(),
+            name: user.displayName || 'Anònim',
+            email: user.email || undefined,
+            isAuth: true,
+            linkedUid: user.uid,
+            photoUrl: user.photoURL || null,
+            isDeleted: false
+        };
+        
+        await updateDoc(tripRef, {
+            users: arrayUnion(newTripUser),
+            memberUids: arrayUnion(user.uid)
+        });
+    } else {
+        // CAS B: Ja existia però no tenia permís a memberUids (cas rar, però possible)
+        await updateDoc(tripRef, { memberUids: arrayUnion(user.uid) });
+    }
+  },
+
+  // --- NOVETAT 2: SORTIDA SEGURA (Substitueix removeUserFromTrip) ---
+  // Aquesta funció protegeix els càlculs:
+  // - Si l'usuari NO té moviments -> L'esborra del tot.
+  // - Si l'usuari TÉ moviments -> El marca com a 'isDeleted' i li treu l'accés.
+  leaveTrip: async (tripId: string, userIdToRemove: string) => {
     const tripRef = getTripRef(tripId);
     const snap = await getDoc(tripRef);
     
     if (snap.exists()) {
         const trip = snap.data() as TripData;
         
-        // 1. Et traiem de la llista de membres (ja no et surt a la home)
-        const newMemberUids = (trip.memberUids || []).filter(uid => uid !== userId);
-        
-        // 2. Desvinculem el teu usuari dins del grup
-        const newUsers = trip.users.map(u => {
-            if (u.linkedUid === userId) {
-                // IMPORTANT: Use null, no undefined
-                return { ...u, linkedUid: null, isAuth: false, photoUrl: null };
-            }
-            return u;
-        });
+        // Comprovem si ha participat en alguna despesa (pagant o rebent)
+        const hasHistory = trip.expenses.some(e => 
+            e.payer === userIdToRemove || e.involved.includes(userIdToRemove)
+        );
 
-        await updateDoc(tripRef, { 
-            memberUids: newMemberUids,
-            users: newUsers
-        });
+        // Usuari que volem treure
+        const userObj = trip.users.find(u => u.id === userIdToRemove);
+        if (!userObj) return;
+
+        // Recuperem el seu UID de Google si en té, per treure'l de memberUids
+        const authUidToRemove = userObj.linkedUid;
+
+        if (hasHistory) {
+            // OPCIÓ A: SOFT DELETE (Té historial, no podem esborrar-lo)
+            const updatedUsers = trip.users.map(u => {
+                if (u.id === userIdToRemove) {
+                    return { 
+                        ...u, 
+                        linkedUid: null,  // Li treiem l'accés
+                        isAuth: false,
+                        photoUrl: null,   // Li treiem la foto
+                        name: `${u.name} (Ex-membre)`, // Opcional: Marquem el nom
+                        isDeleted: true   // MARCA CLAU PER FILTRAR A LA UI
+                    };
+                }
+                return u;
+            });
+
+            const updates: any = { users: updatedUsers };
+            if (authUidToRemove) {
+                updates.memberUids = arrayRemove(authUidToRemove);
+            }
+            await updateDoc(tripRef, updates);
+
+        } else {
+            // OPCIÓ B: HARD DELETE (No té historial, neteja total)
+            const updates: any = { users: arrayRemove(userObj) };
+            if (authUidToRemove) {
+                updates.memberUids = arrayRemove(authUidToRemove);
+            }
+            await updateDoc(tripRef, updates);
+        }
     }
   },
+
+  // --- Funcions existents que mantenim o adaptem lleugerament ---
 
   linkAuthUser: async (tripId: string, uid: string) => {
     await updateDoc(getTripRef(tripId), { memberUids: arrayUnion(uid) });
   },
 
-  // --- FUNCIÓ ARREGLADA I RENOMBRADA PER AL MODAL ---
   linkUserToAccount: async (tripId: string, tripUserId: string, user: User) => {
     const tripRef = getTripRef(tripId);
     const snap = await getDoc(tripRef);
@@ -69,16 +137,15 @@ export const TripService = {
     const authUid = user.uid;
     const photoUrl = user.photoURL || null;
 
-    // 1. Si aquest compte de Google ja estava vinculat a un altre perfil del grup, el desvinculem
-    // (Per evitar duplicats si canvies de "personatge")
     const updatedUsers = trip.users.map(u => {
+        // Desvinculem si ja estava en un altre lloc
         if (u.linkedUid === authUid) return { ...u, linkedUid: null, isAuth: false, photoUrl: null };
         return u;
     });
 
-    // 2. Vinculem el compte al perfil seleccionat
     const finalUsers = updatedUsers.map(u => {
-        if (u.id === tripUserId) return { ...u, linkedUid: authUid, isAuth: true, photoUrl: photoUrl };
+        // Vinculem al nou lloc
+        if (u.id === tripUserId) return { ...u, linkedUid: authUid, isAuth: true, photoUrl: photoUrl, isDeleted: false };
         return u;
     });
 
@@ -86,19 +153,8 @@ export const TripService = {
   },
 
   addUser: async (tripId: string, userName: string) => {
-    const newUser: TripUser = { id: generateId(), name: userName };
+    const newUser: TripUser = { id: generateId(), name: userName, isDeleted: false };
     await updateDoc(getTripRef(tripId), { users: arrayUnion(newUser) });
-  },
-
-  // --- RENOMBRAT PER COINCIDIR AMB EL MODAL ---
-  removeUserFromTrip: async (tripId: string, userId: string) => {
-    const tripRef = getTripRef(tripId);
-    const snap = await getDoc(tripRef);
-    if (snap.exists()) {
-        const trip = snap.data() as TripData;
-        const newUsers = trip.users.filter(u => u.id !== userId);
-        await updateDoc(tripRef, { users: newUsers });
-    }
   },
 
   renameUser: async (tripId: string, userId: string, newName: string) => {
@@ -133,5 +189,12 @@ export const TripService = {
       splitType: 'equal' as const
     };
     await addDoc(getExpensesCol(tripId), repayment);
+  },
+  // --- NOVETAT: TREURE ACCÉS (Emergència) ---
+  // Serveix per quan l'usuari vol treure el grup de la llista "Els meus viatges"
+  // però no trobem el seu perfil intern per fer el "Soft Delete".
+  removeMemberAccess: async (tripId: string, authUid: string) => {
+    const tripRef = getTripRef(tripId);
+    await updateDoc(tripRef, { memberUids: arrayRemove(authUid) });
   },
 };

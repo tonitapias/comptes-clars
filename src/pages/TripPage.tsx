@@ -29,18 +29,25 @@ export default function TripPage({ user }: TripPageProps) {
   const { tripId } = useParams<{ tripId: string }>();
   const navigate = useNavigate();
   
+  // Hooks de dades
   const { tripData, expenses, loading, error } = useTripData(tripId);
 
+  // Estats de la Pàgina
   const [activeTab, setActiveTab] = useState<'expenses' | 'balances' | 'settle'>('expenses');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<CategoryId | 'all'>('all');
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
-  const showToast = (msg: string, type: ToastType = 'success') => setToast({ msg, type });
-
+  
+  // Estats dels Modals
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
-  const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [settleModalOpen, setSettleModalOpen] = useState<Settlement | null>(null);
+  
+  // --- NOU: ESTATS PER AL MODAL DE GRUP (Pestanyes) ---
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
+  const [groupModalTab, setGroupModalTab] = useState<'members' | 'share'>('members');
+
+  // Estats d'Edició/Acció
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ type: string; id?: string | number; title: string; message: string } | null>(null);
   const [settleMethod, setSettleMethod] = useState('Bizum');
@@ -48,7 +55,9 @@ export default function TripPage({ user }: TripPageProps) {
   const [editTripName, setEditTripName] = useState('');
   const [editTripDate, setEditTripDate] = useState('');
 
-  // 1. Comprovem si l'usuari és membre realment
+  const showToast = (msg: string, type: ToastType = 'success') => setToast({ msg, type });
+
+  // 1. Comprovem si l'usuari és membre realment (per mostrar banner convidat)
   const isMember = user && tripData?.memberUids?.includes(user.uid);
 
   useEffect(() => {
@@ -58,12 +67,10 @@ export default function TripPage({ user }: TripPageProps) {
     }
   }, [tripData]);
 
+  // Guardem l'últim viatge visitat
   useEffect(() => { if (tripId) localStorage.setItem('cc-last-trip-id', tripId); }, [tripId]);
 
-  // --- ⚠️ HEM ELIMINAT L'AUTO-LINK (useEffect) ---
-  // Això arregla el bug. Ja no t'afegirà automàticament mai més.
-
-  // --- MIGRATE ON LOAD ---
+  // --- MIGRATE ON LOAD (Legacy support) ---
   useEffect(() => {
       if (!tripData || !tripId) return;
       if (tripData.users.length > 0 && typeof tripData.users[0] === 'string') {
@@ -83,13 +90,16 @@ export default function TripPage({ user }: TripPageProps) {
   }, [tripData, tripId]);
 
   const { users, currency = CURRENCIES[0], name, createdAt } = tripData || { users: [], expenses: [] };
+  
+  // Càlculs
   const { filteredExpenses, balances, categoryStats, settlements, totalGroupSpending, displayedTotal } = useTripCalculations(expenses, users || [], searchQuery, filterCategory);
 
-  // 2. Funció per unir-se manualment
+  // --- ACCIONS ---
+
   const handleJoinTrip = async () => {
       if (!user || !tripId) return;
       try {
-          await TripService.linkAuthUser(tripId, user.uid);
+          await TripService.joinTripViaLink(tripId, user);
           showToast("T'has unit al grup!", 'success');
       } catch (e) {
           showToast("Error al unir-se", 'error');
@@ -124,43 +134,32 @@ export default function TripPage({ user }: TripPageProps) {
     } catch (e: any) { showToast("Error liquidant", 'error'); }
   };
 
-  const handleAddUser = async (userName: string) => {
-    if (!tripId) return;
-    try {
-      await TripService.addUser(tripId, userName);
-      showToast(`Usuari ${userName} afegit`, 'success');
-    } catch (e: any) { showToast("Error afegint usuari", 'error'); }
-  };
-
-  const handleRenameUser = async (oldName: string, newName: string) => {
-    if (!tripId) return;
-    try {
-        await TripService.renameUser(tripId, oldName, newName);
-        showToast("Usuari reanomenat correctament", 'success');
-    } catch (e: any) { showToast("Error reanomenant: " + e.message, 'error'); }
-  };
-
-  const requestDeleteUser = (userId: string) => {
-    const hasExpenses = expenses.some(e => e.payer === userId || e.involved.includes(userId));
-    const userBalance = balances.find(b => b.userId === userId)?.amount || 0;
-    if (hasExpenses || Math.abs(userBalance) > 5) {
-        showToast(`No es pot eliminar: Té despeses o balanç pendent`, 'error');
-    } else {
-        const uName = users.find(u => u.id === userId)?.name || '???';
-        setConfirmAction({ type: 'delete_user', id: userId, title: 'Eliminar Participant', message: `Segur que vols eliminar a ${uName}?` });
-    }
-  };
-
+  // Funció segura per sortir del grup
   const handleLeaveTrip = async () => {
       if (!confirm("Segur que vols deixar de veure aquest grup?")) return;
+      if (!user || !tripId) return;
+
       try {
-          if (user && tripId) {
-              await TripService.leaveTrip(tripId, user.uid);
+          // Busquem l'ID intern de l'usuari actual
+          const currentUser = users.find(u => u.linkedUid === user.uid);
+          
+          if (currentUser) {
+            await TripService.leaveTrip(tripId, currentUser.id);
+            localStorage.removeItem('cc-last-trip-id');
+            window.location.href = '/'; 
+          } else {
+             // Si no trobem l'usuari intern però té accés, li treiem l'accés d'emergència
+             // @ts-ignore
+             if (TripService.removeMemberAccess) {
+                 // @ts-ignore
+                 await TripService.removeMemberAccess(tripId, user.uid);
+                 window.location.href = '/';
+             } else {
+                 showToast("No s'ha trobat el teu usuari al grup", 'error');
+             }
           }
-          localStorage.removeItem('cc-last-trip-id');
-          // Tornem a l'inici forçant recàrrega per netejar estat
-          window.location.href = '/'; 
       } catch (error) { 
+          console.error(error);
           showToast("Error al sortir del grup", 'error'); 
       }
   };
@@ -202,9 +201,6 @@ export default function TripPage({ user }: TripPageProps) {
       if (confirmAction.type === 'delete_expense') {
         await TripService.deleteExpense(tripId, String(confirmAction.id));
         showToast("Despesa eliminada", 'success');
-      } else if (confirmAction.type === 'delete_user') {
-        await TripService.removeUser(tripId, String(confirmAction.id));
-        showToast("Usuari eliminat", 'success');
       }
     } catch (e: any) { showToast("Error: " + e.message, 'error'); }
     setConfirmAction(null); 
@@ -221,25 +217,33 @@ export default function TripPage({ user }: TripPageProps) {
       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
       
       <TripHeader 
-        tripId={tripId!} name={name} createdAt={createdAt} userCount={users.length}
+        tripId={tripId!} name={name} createdAt={createdAt} userCount={users.filter(u => !u.isDeleted).length}
         displayedTotal={displayedTotal} totalGroupSpending={totalGroupSpending} currency={currency}
         isFiltered={!!searchQuery || filterCategory !== 'all'}
         onOpenSettings={() => setSettingsModalOpen(true)}
-        onOpenGroup={() => setGroupModalOpen(true)}
+        
+        // Obre modal en pestanya 'Membres'
+        onOpenGroup={() => {
+            setGroupModalTab('members');
+            setGroupModalOpen(true);
+        }}
+        
         onExportPDF={() => generatePDF(name, expenses, balances, settlements, users, currency.symbol)}
-        onCopyCode={() => { navigator.clipboard.writeText(tripId || '').then(() => showToast("Codi copiat!", 'success')); }}
+        
+        // Obre modal en pestanya 'Compartir'
+        onOpenShare={() => { 
+            setGroupModalTab('share');
+            setGroupModalOpen(true);
+        }}
       />
 
-      {/* 3. BARRA D'AVÍS PER A CONVIDATS (NOU) */}
+      {/* BANNER DE CONVIDAT */}
       {!isMember && user && (
           <div className="bg-indigo-600 text-white px-4 py-3 text-center shadow-md relative z-30 animate-fade-in">
               <div className="max-w-3xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2">
                   <p className="text-sm font-medium">Estàs veient aquest viatge com a convidat.</p>
-                  <button 
-                    onClick={handleJoinTrip}
-                    className="bg-white text-indigo-600 px-4 py-1.5 rounded-full text-xs font-bold shadow-sm hover:bg-indigo-50 transition-colors flex items-center gap-1"
-                  >
-                    <UserPlus size={14}/> Guardar a "Els meus viatges"
+                  <button onClick={handleJoinTrip} className="bg-white text-indigo-600 px-4 py-1.5 rounded-full text-xs font-bold shadow-sm hover:bg-indigo-50 transition-colors flex items-center gap-1">
+                    <UserPlus size={14}/> Unir-me al grup
                   </button>
               </div>
           </div>
@@ -258,8 +262,19 @@ export default function TripPage({ user }: TripPageProps) {
       </main>
       
       <button onClick={() => { setEditingExpense(null); setIsExpenseModalOpen(true); }} className="fixed bottom-6 right-6 md:right-[calc(50%-350px)] bg-indigo-600 text-white p-4 rounded-2xl shadow-xl hover:bg-indigo-700 transition-all z-40 shadow-indigo-200"><Plus size={28} /></button>
+      
+      {/* MODALS */}
       <ExpenseModal isOpen={isExpenseModalOpen} onClose={() => setIsExpenseModalOpen(false)} initialData={editingExpense} users={users} currency={currency} tripId={tripId!} onDelete={(id) => setConfirmAction({ type: 'delete_expense', id, title: 'Eliminar?', message: 'Segur?' })} showToast={showToast} />
-      <GroupModal isOpen={groupModalOpen} onClose={() => setGroupModalOpen(false)} trip={tripData} showToast={showToast} />
+      
+      {/* GROUP MODAL AMB PESTANYA INICIAL */}
+      <GroupModal 
+        isOpen={groupModalOpen} 
+        onClose={() => setGroupModalOpen(false)} 
+        trip={tripData} 
+        showToast={showToast} 
+        onUpdateTrip={() => { /* Firebase auto-updates */ }} 
+        initialTab={groupModalTab}
+      />
       
       <Modal isOpen={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} title="Configuració del Grup">
         <div className="space-y-6">
@@ -276,11 +291,9 @@ export default function TripPage({ user }: TripPageProps) {
 
           <div className="border-t border-slate-100 pt-4 space-y-3">
              <h4 className="text-xs font-bold text-slate-400 uppercase">Zona de Perill</h4>
-             {/* BOTÓ DE REPARACIÓ */}
              <button onClick={handleForceMigration} className="w-full p-3 flex items-center justify-center gap-2 text-amber-600 bg-amber-50 hover:bg-amber-100 font-bold rounded-xl transition-colors">
                 <Wrench size={18}/> Reparar Dades Antigues
              </button>
-             {/* BOTÓ ABANDONAR */}
              <button onClick={handleLeaveTrip} className="w-full p-3 flex items-center justify-center gap-2 text-rose-600 bg-rose-50 hover:bg-rose-100 font-bold rounded-xl transition-colors">
                 <LogOut size={18}/> Abandonar Grup
              </button>

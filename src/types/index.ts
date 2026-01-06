@@ -26,6 +26,7 @@ export interface TripUser {
   isAuth?: boolean;
   linkedUid?: string;
   photoUrl?: string; // <--- LA FOTO
+  isDeleted?: boolean; // <--- NOVA PROPIETAT
 }
 
 export type SplitType = 'equal' | 'exact' | 'shares';

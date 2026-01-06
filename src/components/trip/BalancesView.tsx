@@ -8,12 +8,11 @@ interface BalancesViewProps {
   balances: Balance[];
   categoryStats: CategoryStat[];
   currency: Currency;
-  users: TripUser[]; // <--- Ara necessitem els usuaris per buscar la foto/nom
+  users: TripUser[];
 }
 
 export default function BalancesView({ balances, categoryStats, currency, users }: BalancesViewProps) {
   
-  // Funció per trobar l'objecte usuari a partir de la seva ID
   const getUser = (id: string) => users.find(u => u.id === id);
 
   return (
@@ -39,14 +38,14 @@ export default function BalancesView({ balances, categoryStats, currency, users 
        {/* LLISTA DE BALANÇOS */}
        <div className="grid gap-3">
            {balances.map((b) => {
-               // Busquem l'usuari real usant l'ID del balanç
                const user = getUser(b.userId); 
                const name = user ? user.name : 'Desconegut';
                const photoUrl = user?.photoUrl;
+               const isDeleted = user?.isDeleted; // <--- Comprovem si és eliminat
                const isPositive = b.amount >= 0;
                
                return (
-               <Card key={b.userId} className="p-0 overflow-hidden">
+               <Card key={b.userId} className={`p-0 overflow-hidden ${isDeleted ? 'opacity-60 grayscale-[0.5]' : ''}`}>
                    <div className="p-5 relative z-10">
                        <div className="flex items-center justify-between">
                            <div className="flex items-center gap-3">
@@ -59,7 +58,9 @@ export default function BalancesView({ balances, categoryStats, currency, users 
                                     )}
                                </div>
                                <div>
-                                   <p className="font-bold text-slate-800">{name}</p>
+                                   <p className="font-bold text-slate-800 flex items-center gap-2">
+                                     {name} {isDeleted && <span className="text-[10px] bg-slate-200 text-slate-500 px-1 rounded">Ex</span>}
+                                   </p>
                                    <p className={`text-xs font-bold uppercase ${isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
                                        {isPositive ? 'Recupera' : 'Ha de pagar'}
                                    </p>

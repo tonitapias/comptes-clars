@@ -1,7 +1,15 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { 
-  getFirestore, 
+  getAuth, 
+  setPersistence, 
+  browserLocalPersistence, 
+  GoogleAuthProvider, 
+  signInWithPopup,
+  createUserWithEmailAndPassword, // <--- NOU
+  signInWithEmailAndPassword,     // <--- NOU
+  updateProfile                   // <--- NOU
+} from "firebase/auth";
+import { 
   initializeFirestore, 
   persistentLocalCache, 
   persistentMultipleTabManager 
@@ -20,6 +28,7 @@ const app = initializeApp(firebaseConfig);
 
 // --- AUTENTICACIÓ ---
 export const auth = getAuth(app);
+
 setPersistence(auth, browserLocalPersistence)
   .then(() => {
      console.log("✅ Sessió configurada: LOCAL");
@@ -28,11 +37,48 @@ setPersistence(auth, browserLocalPersistence)
      console.error("❌ Error persistència Auth:", error);
   });
 
-// --- FIRESTORE AMB PERSISTÈNCIA OFFLINE ---
-// Utilitzem 'initializeFirestore' en lloc de 'getFirestore' per configurar la cache
+// --- FUNCIONS D'AUTENTICACIÓ EXPORTADES ---
+const googleProvider = new GoogleAuthProvider();
+// Forcem que Google pregunti quin compte utilitzar
+googleProvider.setCustomParameters({ prompt: 'select_account' }); 
+
+export const signInWithGoogle = async () => {
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    return result.user;
+  } catch (error) {
+    console.error("Error Google Login:", error);
+    throw error;
+  }
+};
+
+// Registre amb Email (amb nom d'usuari)
+export const registerWithEmail = async (email: string, pass: string, name: string) => {
+  try {
+    const result = await createUserWithEmailAndPassword(auth, email, pass);
+    if (name) {
+      await updateProfile(result.user, { displayName: name });
+    }
+    return result.user;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Login amb Email
+export const loginWithEmail = async (email: string, pass: string) => {
+  try {
+    const result = await signInWithEmailAndPassword(auth, email, pass);
+    return result.user;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// --- FIRESTORE ---
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager() // Permet tenir l'app oberta en múltiples pestanyes sense error
+    tabManager: persistentMultipleTabManager() 
   })
 });
 

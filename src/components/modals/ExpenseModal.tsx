@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Trash2, AlertCircle } from 'lucide-react'; // Icona extra per avisar
 import Button from '../Button';
 import Modal from '../Modal';
 import { CATEGORIES } from '../../utils/constants';
@@ -19,6 +19,19 @@ interface ExpenseModalProps {
 }
 
 export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initialData, users, currency, showToast }: ExpenseModalProps) {
+  
+  // 1. FILTRE INTEL·LIGENT:
+  // Mostrem usuaris actius O usuaris eliminats que ja formaven part d'aquesta despesa concreta.
+  const visibleUsers = useMemo(() => {
+    return users.filter(u => 
+      !u.isDeleted || 
+      (initialData && (u.id === initialData.payer || initialData.involved.includes(u.id)))
+    );
+  }, [users, initialData]);
+
+  // Si estem creant de zero, el pagador per defecte ha de ser el primer ACTIU
+  const defaultPayerId = visibleUsers.length > 0 ? visibleUsers[0].id : '';
+
   const [formData, setFormData] = useState<{
     title: string; amount: string; payer: string; category: CategoryId; involved: string[]; date: string;
     splitType: SplitType; splitDetails: Record<string, number>;
@@ -47,20 +60,19 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
       } else {
         const defaultDetails: Record<string, number> = {};
         setFormData({ 
-          title: '', amount: '', payer: users.length > 0 ? users[0].id : '', category: 'food', involved: [], 
+          title: '', amount: '', payer: defaultPayerId, category: 'food', involved: [], 
           date: new Date().toISOString().split('T')[0], splitType: 'equal', splitDetails: defaultDetails
         });
       }
     }
-  }, [isOpen, initialData, users]);
+  }, [isOpen, initialData, users, defaultPayerId]);
 
   const safeParseFloat = (str: string) => { const val = parseFloat(str.replace(',', '.')); return isNaN(val) ? 0 : val; };
   const currentTotalCents = Math.round(safeParseFloat(formData.amount) * 100);
   const currentSplitSumCents = formData.splitType === 'exact' ? Object.values(formData.splitDetails).reduce((sum, val) => sum + Math.round((Number(val) || 0) * 100), 0) : 0;
   
-  // En mode exacte, com que sumem automàticament, la diferència hauria de ser sempre 0 (o molt propera per decimals)
   const diffCents = currentTotalCents - currentSplitSumCents;
-  const isExactValid = Math.abs(diffCents) < 2; // Marge petit per error de coma flotant
+  const isExactValid = Math.abs(diffCents) < 2; 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,7 +87,8 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
         let finalSplitDetails = { ...formData.splitDetails };
         if (formData.splitType === 'exact') Object.keys(finalSplitDetails).forEach(k => finalSplitDetails[k] = Math.round((finalSplitDetails[k] || 0) * 100));
         
-        const finalInvolved = formData.involved.length > 0 ? formData.involved : users.map(u => u.id);
+        // Si és "equal" i no hi ha ningú seleccionat explícitament, vol dir TOTS els visibles
+        const finalInvolved = formData.involved.length > 0 ? formData.involved : visibleUsers.map(u => u.id);
 
         const expensePayload = {
           title: formData.title.trim(), amount: currentTotalCents, payer: formData.payer, category: formData.category,
@@ -96,33 +109,32 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
   };
 
   const toggleInvolved = (userId: string) => {
-    const allIds = users.map(u => u.id);
+    // La lògica de "Tots" ara es basa en visibleUsers
+    const allIds = visibleUsers.map(u => u.id);
     const current = formData.involved.length === 0 ? [...allIds] : formData.involved;
     const updated = current.includes(userId) ? current.filter(id => id !== userId) : [...current, userId];
     setFormData({ ...formData, involved: updated });
   };
 
-  // NOU: Actualitza el detall i, si és "Exacte", recalcula el TOTAL automàticament
   const updateSplitDetail = (userId: string, value: string) => {
       const numVal = value === '' ? 0 : parseFloat(value.replace(',', '.'));
       const safeVal = isNaN(numVal) ? 0 : numVal;
       
       setFormData(prev => {
           const newDetails = { ...prev.splitDetails, [userId]: safeVal };
-          
-          let newAmount = prev.amount;
-          // Si estem en mode 'exact', el total és la suma de les parts
           if (prev.splitType === 'exact') {
               const totalSum = Object.values(newDetails).reduce((acc, curr) => acc + (curr || 0), 0);
+              let newAmount = prev.amount;
               newAmount = totalSum === 0 ? '' : totalSum.toFixed(2);
+              return { ...prev, splitDetails: newDetails, amount: newAmount };
           }
-          
-          return { ...prev, splitDetails: newDetails, amount: newAmount };
+          return { ...prev, splitDetails: newDetails };
       });
   };
 
   const isTransfer = formData.category === 'transfer';
-  const isAllInvolved = formData.involved.length === 0 || formData.involved.length === users.length;
+  // Revisem si estan tots seleccionats comparant amb visibleUsers
+  const isAllInvolved = formData.involved.length === 0 || visibleUsers.every(u => formData.involved.includes(u.id));
   const isExactMode = formData.splitType === 'exact';
 
   return (
@@ -135,7 +147,7 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
             inputMode="decimal" 
             placeholder="0.00" 
             autoFocus={!initialData && !isExactMode} 
-            readOnly={isExactMode} // Bloquejat si és mode exacte
+            readOnly={isExactMode}
             className={`w-full pl-10 pr-4 py-4 border-2 rounded-2xl text-4xl font-bold text-slate-800 text-center outline-none transition-all ${
                 isExactMode 
                 ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed' 
@@ -157,9 +169,11 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
         <div>
           <label className="block text-xs font-bold text-slate-500 uppercase mb-2">{isTransfer ? 'Qui paga (Origen)?' : 'Pagador'}</label>
           <div className="flex flex-wrap gap-2">
-            {users.map(u => (
-              <button type="button" key={u.id} onClick={() => setFormData({...formData, payer: u.id})} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold border-2 transition-all ${formData.payer === u.id ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-200 text-slate-600'}`}>
-                <div className="w-5 h-5 rounded-full overflow-hidden bg-black/10 flex items-center justify-center text-[8px]">{u.photoUrl ? <img src={u.photoUrl} className="w-full h-full object-cover" /> : u.name.charAt(0)}</div>{u.name}
+            {visibleUsers.map(u => (
+              <button type="button" key={u.id} onClick={() => setFormData({...formData, payer: u.id})} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold border-2 transition-all relative ${formData.payer === u.id ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-200 text-slate-600'}`}>
+                {u.isDeleted && <span className="absolute -top-1 -right-1 flex h-3 w-3 bg-red-500 rounded-full border-2 border-white"></span>}
+                <div className="w-5 h-5 rounded-full overflow-hidden bg-black/10 flex items-center justify-center text-[8px]">{u.photoUrl ? <img src={u.photoUrl} className="w-full h-full object-cover" /> : u.name.charAt(0)}</div>
+                {u.name}
               </button>
             ))}
           </div>
@@ -169,29 +183,31 @@ export default function ExpenseModal({ isOpen, onClose, tripId, onDelete, initia
           <div className="flex justify-between items-center mb-4">
             <label className="block text-xs font-bold text-slate-500 uppercase">{isTransfer ? 'Receptor' : 'Repartiment'}</label>
             {!isTransfer && (<div className="flex bg-slate-200 p-1 rounded-lg">{['equal', 'exact', 'shares'].map(t => (<button type="button" key={t} onClick={() => setFormData({...formData, splitType: t as SplitType})} className={`px-2 py-1 rounded text-xs font-bold transition-all ${formData.splitType === t ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>{t === 'equal' ? 'Igual' : t === 'exact' ? 'Exacte' : 'Parts'}</button>))}</div>)}
-            {formData.splitType === 'equal' && !isTransfer && (<button type="button" onClick={() => setFormData({...formData, involved: isAllInvolved ? [] : users.map(u => u.id)})} className="text-xs font-bold text-indigo-600">{isAllInvolved ? 'Desmarcar' : 'Tothom'}</button>)}
+            {formData.splitType === 'equal' && !isTransfer && (<button type="button" onClick={() => setFormData({...formData, involved: isAllInvolved ? [] : visibleUsers.map(u => u.id)})} className="text-xs font-bold text-indigo-600">{isAllInvolved ? 'Desmarcar' : 'Tothom'}</button>)}
           </div>
 
           <div className="space-y-2">
             {formData.splitType === 'equal' && (
                 <div className="grid grid-cols-2 gap-2">
-                    {users.map(u => {
+                    {visibleUsers.map(u => {
                     const isSelected = formData.involved.length === 0 || formData.involved.includes(u.id);
                     const isSelf = isTransfer && u.id === formData.payer;
                     return (
                         <button type="button" key={u.id} disabled={isSelf} onClick={() => !isSelf && toggleInvolved(u.id)} className={`flex items-center gap-2 p-2 rounded-lg text-sm font-medium transition-all ${isSelf ? 'opacity-30 cursor-not-allowed' : ''} ${isSelected && !isSelf ? 'bg-white text-indigo-700 shadow-sm border border-indigo-200' : 'text-slate-400 opacity-50'}`}>
                         <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected && !isSelf ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}>{isSelected && !isSelf && <div className="w-1.5 h-1.5 bg-white rounded-full"/>}</div> 
-                        <span className="truncate">{u.name}</span>
+                        <span className="truncate flex items-center gap-1">
+                            {u.name} {u.isDeleted && <AlertCircle size={10} className="text-red-400"/>}
+                        </span>
                         </button>
                     )})}
                 </div>
             )}
             {(formData.splitType === 'exact' || formData.splitType === 'shares') && !isTransfer && (
                 <div className="space-y-2">
-                    {users.map(u => (
+                    {visibleUsers.map(u => (
                         <div key={u.id} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-200">
                              <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 overflow-hidden shrink-0">{u.photoUrl ? <img src={u.photoUrl} className="w-full h-full object-cover"/> : u.name.charAt(0)}</div>
-                             <span className="flex-1 text-sm font-medium text-slate-700 truncate">{u.name}</span>
+                             <span className="flex-1 text-sm font-medium text-slate-700 truncate">{u.name} {u.isDeleted && '(Ex)'}</span>
                              <div className="flex items-center gap-2">
                                 <input type="number" step={formData.splitType === 'exact' ? "0.01" : "1"} min="0" placeholder="0" className={`w-20 p-1 text-right font-bold text-slate-800 bg-slate-50 rounded border outline-none ${formData.splitType === 'exact' ? 'pr-6' : ''} ${isExactMode ? 'focus:border-indigo-500' : (formData.splitType === 'exact' && !isExactValid ? 'focus:border-rose-500 border-rose-200' : 'focus:border-indigo-500')}`} value={formData.splitDetails[u.id] ?? ''} onChange={(e) => updateSplitDetail(u.id, e.target.value)} />
                                 {formData.splitType === 'exact' && <span className="text-xs font-bold text-slate-400 absolute right-6">{currency.symbol}</span>}
