@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Plus, ArrowRight, Wallet, Loader2, LogOut, ChevronRight, MapPin, 
-  User as UserIcon, Trash2, Sparkles, KeyRound, Mail, Lock, Eye, EyeOff 
+  User as UserIcon, Trash2, Sparkles, KeyRound, Mail, Lock, Eye, EyeOff, 
+  CreditCard, PieChart, ShieldCheck 
 } from 'lucide-react';
 import { 
   GoogleAuthProvider, 
@@ -28,17 +29,30 @@ interface LandingPageProps {
 type ActionState = 'idle' | 'creating' | 'joining';
 type AuthMode = 'initial' | 'login-email' | 'signup-email';
 
+// --- NOU COMPONENT VISUAL: FEATURE CARD (ESTIL BENTO) ---
+function BentoCard({ icon: Icon, title, desc, color }: any) {
+    return (
+      <div className="group relative overflow-hidden bg-white/60 backdrop-blur-md p-6 rounded-3xl border border-white/50 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+        <div className={`absolute top-0 right-0 p-20 rounded-full blur-3xl opacity-10 transition-opacity group-hover:opacity-20 ${color}`}></div>
+        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 shadow-sm ${color} text-white`}>
+          <Icon size={24} strokeWidth={2.5} />
+        </div>
+        <h3 className="font-bold text-slate-800 text-lg mb-2">{title}</h3>
+        <p className="text-sm text-slate-500 leading-relaxed font-medium">{desc}</p>
+      </div>
+    );
+}
+
 export default function LandingPage({ user }: LandingPageProps) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const inviteCode = searchParams.get('join');
   
-  // Estats de l'aplicació
+  // Estats (LÒGICA EXACTAMENT IGUAL)
   const [myTrips, setMyTrips] = useState<TripData[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(false);
   const [actionState, setActionState] = useState<ActionState>('idle');
   
-  // Estats d'Autenticació
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>('initial');
   const [loginLoading, setLoginLoading] = useState(false);
@@ -48,11 +62,9 @@ export default function LandingPage({ user }: LandingPageProps) {
   const [authError, setAuthError] = useState('');
   const [resetSent, setResetSent] = useState(false);
 
-  // Estats visibilitat contrasenya
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Estats de Creació/Unió
   const [inputValue, setInputValue] = useState('');
   const [creatorName, setCreatorName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,7 +72,7 @@ export default function LandingPage({ user }: LandingPageProps) {
   const [isJoining, setIsJoining] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // 1. Salutació basada en l'hora
+  // --- EFFECTS (LÒGICA IGUAL) ---
   useEffect(() => {
     const hour = new Date().getHours();
     if (hour < 13) setGreeting('Bon dia');
@@ -68,14 +80,12 @@ export default function LandingPage({ user }: LandingPageProps) {
     else setGreeting('Bona nit');
   }, []);
 
-  // 2. Pre-omplir nom del creador
   useEffect(() => {
     if (actionState === 'creating' && user?.displayName) {
         setCreatorName(user.displayName.split(' ')[0]);
     }
   }, [actionState, user]);
 
-  // 3. Càrrega de viatges
   useEffect(() => {
     async function fetchMyTrips() {
       if (!user) {
@@ -92,12 +102,10 @@ export default function LandingPage({ user }: LandingPageProps) {
     fetchMyTrips();
   }, [user]);
 
-  // 4. AUTO-JOIN: Si tenim user i inviteCode, ens unim automàticament
   useEffect(() => {
     const handleAutoJoin = async () => {
       if (user && inviteCode) {
         setIsJoining(true);
-        // Tanquem el modal si estava obert
         setIsAuthModalOpen(false); 
         try {
           await TripService.joinTripViaLink(inviteCode, user);
@@ -116,16 +124,13 @@ export default function LandingPage({ user }: LandingPageProps) {
     handleAutoJoin();
   }, [user, inviteCode, navigate, setSearchParams]);
 
-  // --- GESTIÓ DEL LOGIN AMB GOOGLE (CORREGIT) ---
+  // --- HANDLERS (LÒGICA IGUAL) ---
   const handleGoogleLogin = async () => {
     setLoginLoading(true);
     setAuthError('');
     try { 
       await signInWithPopup(auth, new GoogleAuthProvider());
-      
-      // ✅ CORRECCIÓ: Tanquem el modal explícitament un cop ha anat bé
       setIsAuthModalOpen(false);
-      
     } catch (e: any) { 
       console.error(e); 
       setAuthError('Error iniciant sessió amb Google.');
@@ -170,8 +175,6 @@ export default function LandingPage({ user }: LandingPageProps) {
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
-      
-      // ✅ CORRECCIÓ: Tanquem el modal també aquí
       setIsAuthModalOpen(false);
 
     } catch (error: any) {
@@ -248,246 +251,324 @@ export default function LandingPage({ user }: LandingPageProps) {
   const resetAction = () => { setActionState('idle'); setInputValue(''); setCreatorName(''); };
   const userName = user?.displayName ? user.displayName.split(' ')[0] : (user?.email?.split('@')[0] || 'Viatger');
 
-  if (isJoining) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600"/></div>;
+  if (isJoining) return <div className="min-h-screen flex items-center justify-center bg-indigo-50"><Loader2 className="animate-spin text-indigo-600 w-10 h-10"/></div>;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 relative overflow-hidden font-sans selection:bg-indigo-100">
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center p-4 md:p-8 font-sans selection:bg-indigo-100 relative overflow-x-hidden">
       
-      {/* FONS */}
-      <div className="absolute top-[-10%] left-[-10%] w-[120%] h-[50%] bg-indigo-200/20 rounded-full blur-[100px] pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[100%] h-[50%] bg-purple-200/20 rounded-full blur-[100px] pointer-events-none"></div>
+      {/* --- NOU FONS ANIMAT (Aurora) --- */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+         <div className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] bg-purple-200/40 rounded-full blur-[120px] mix-blend-multiply animate-pulse-slow"></div>
+         <div className="absolute top-[20%] right-[-10%] w-[60%] h-[60%] bg-indigo-200/40 rounded-full blur-[120px] mix-blend-multiply animate-pulse-slow" style={{animationDelay: '2s'}}></div>
+         <div className="absolute bottom-[-10%] left-[20%] w-[50%] h-[50%] bg-pink-200/40 rounded-full blur-[120px] mix-blend-multiply animate-pulse-slow" style={{animationDelay: '4s'}}></div>
+         {/* Grid subtil */}
+         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"></div>
+      </div>
 
-      <div className="w-full max-w-lg relative z-10 flex flex-col gap-6">
+      <div className="w-full max-w-6xl relative z-10 flex flex-col gap-8 h-full">
         
-        {/* ENCAPÇALAMENT */}
-        <div className="flex items-center justify-between px-2">
-           <div>
-             {user && (
-                 <div className="flex items-center gap-2 mb-2">
-                    <div className="bg-gradient-to-br from-indigo-600 to-purple-600 p-2 rounded-xl text-white shadow-lg shadow-indigo-200"><Wallet size={20} strokeWidth={2.5} /></div>
-                    <span className="font-bold text-slate-600 tracking-tight text-sm uppercase">Comptes Clars</span>
-                 </div>
-             )}
-             <h1 className="text-3xl md:text-4xl font-black text-slate-900 leading-tight tracking-tight">
-               {user ? (
-                 <span className="bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700">{greeting}, {userName}.</span>
-               ) : (
-                 <span className="flex items-center gap-3">
-                    <span className="bg-gradient-to-br from-indigo-600 to-purple-600 text-white p-3 rounded-2xl shadow-lg shadow-indigo-200 block"><Wallet size={32} strokeWidth={2.5} /></span>
-                    <span>Comptes Clars</span>
-                 </span>
-               )}
-             </h1>
+        {/* --- NAVBAR MODERNA --- */}
+        <nav className="flex items-center justify-between py-4">
+           <div className="flex items-center gap-3">
+              <div className="bg-white/80 backdrop-blur-md p-2.5 rounded-2xl shadow-sm border border-white/50">
+                <Wallet size={24} className="text-indigo-600" strokeWidth={2.5} />
+              </div>
+              <span className="font-extrabold text-xl text-slate-800 tracking-tight hidden md:block">Comptes Clars</span>
            </div>
            
-           {user && (
-             <button onClick={() => { signOut(auth); window.location.reload(); }} className="bg-white/80 backdrop-blur-sm p-3 rounded-2xl border border-white text-slate-400 hover:text-red-500 hover:scale-105 transition-all shadow-sm"><LogOut size={24} /></button>
+           {user ? (
+             <div className="flex items-center gap-3 bg-white/60 backdrop-blur-md px-2 py-1.5 rounded-full border border-white/50 shadow-sm">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 p-0.5">
+                    <img src={user.photoURL || `https://ui-avatars.com/api/?name=${userName}`} className="w-full h-full rounded-full object-cover border-2 border-white" alt="Avatar"/>
+                </div>
+                <span className="text-sm font-bold text-slate-700 pr-2 hidden sm:block">{userName}</span>
+                <button onClick={() => { signOut(auth); window.location.reload(); }} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors" title="Tancar Sessió">
+                    <LogOut size={16} strokeWidth={2.5}/>
+                </button>
+             </div>
+           ) : (
+             <button onClick={() => setIsAuthModalOpen(true)} className="px-5 py-2.5 bg-white text-indigo-600 font-bold rounded-xl shadow-sm hover:shadow-md transition-all text-sm border border-white/50">
+                Iniciar Sessió
+             </button>
            )}
-        </div>
+        </nav>
 
-        {/* TARGETA PRINCIPAL */}
-        <div className="bg-white/80 backdrop-blur-xl rounded-[2rem] shadow-2xl shadow-indigo-900/5 border border-white p-3 ring-1 ring-white/50">
-            <div className="p-4 md:p-6">
-                
-                {/* 1. NO LOGUEJAT */}
-                {!user && (
-                    <div className="flex flex-col gap-6 text-center py-4">
-                        <p className="text-slate-600 font-medium text-lg leading-relaxed px-4">
-                            L'eina definitiva per gestionar despeses de viatges i sortides en grup.
+        {/* --- CONTINGUT PRINCIPAL --- */}
+        <main className="flex-1 flex flex-col justify-center">
+            
+            {/* 1. ESTAT NO LOGUEJAT (Landing Visual) */}
+            {!user && (
+                <div className="flex flex-col items-center text-center gap-10 py-10 md:py-20 animate-fade-in">
+                    
+                    {/* HERO TEXT */}
+                    <div className="max-w-3xl space-y-6">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100 text-xs font-bold uppercase tracking-wider mb-4 animate-fade-in">
+                            <Sparkles size={14}/> La forma fàcil de compartir despeses
+                        </div>
+                        <h1 className="text-5xl md:text-7xl font-black text-slate-900 leading-[1.1] tracking-tight">
+                            Divideix despeses,<br/>
+                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500">multiplica moments.</span>
+                        </h1>
+                        <p className="text-lg md:text-xl text-slate-500 max-w-2xl mx-auto leading-relaxed">
+                            L'eina definitiva per gestionar els comptes de viatges, sopars i pisos compartits. Sense excels complicats, tot clar.
                         </p>
-                        
-                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 flex flex-col gap-4">
-                             <div className="text-left">
-                                <label className="text-xs font-bold text-slate-400 uppercase ml-1 block mb-2">Tens un codi d'invitació?</label>
-                                <form onSubmit={handleJoinManual} className="flex gap-2">
-                                    <input 
-                                        type="text" 
-                                        placeholder="Codi del grup..." 
-                                        className="flex-1 px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 font-mono text-slate-800 transition"
-                                        value={inputValue}
-                                        onChange={(e) => setInputValue(e.target.value)}
-                                    />
-                                    <button 
-                                        type="submit" 
-                                        disabled={!inputValue}
-                                        className="bg-indigo-600 text-white px-5 rounded-xl font-bold shadow-md hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                                    >
-                                        <ArrowRight size={20}/>
-                                    </button>
-                                </form>
-                             </div>
-                             
-                             <div className="relative flex py-1 items-center">
+                    </div>
+
+                    {/* ACTION BOX */}
+                    <div className="w-full max-w-md bg-white p-2 rounded-3xl shadow-2xl shadow-indigo-200/50 border border-indigo-50 transform hover:scale-[1.01] transition-transform">
+                        <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
+                             <form onSubmit={handleJoinManual} className="flex gap-2 mb-4">
+                                <input 
+                                    type="text" 
+                                    placeholder="Tens un codi? Enganxa'l aquí..." 
+                                    className="flex-1 px-4 py-3.5 rounded-xl border-2 border-slate-200 focus:border-indigo-500 focus:outline-none bg-white font-mono text-slate-800 transition"
+                                    value={inputValue}
+                                    onChange={(e) => setInputValue(e.target.value)}
+                                />
+                                <button 
+                                    type="submit" 
+                                    disabled={!inputValue}
+                                    className="bg-indigo-600 text-white px-5 rounded-xl font-bold hover:bg-indigo-700 transition disabled:opacity-50 flex items-center"
+                                >
+                                    <ArrowRight size={24}/>
+                                </button>
+                             </form>
+
+                             <div className="relative flex py-2 items-center">
                                 <div className="flex-grow border-t border-slate-200"></div>
-                                <span className="flex-shrink-0 mx-4 text-slate-400 text-xs font-bold uppercase">o comença de zero</span>
+                                <span className="flex-shrink-0 mx-4 text-slate-400 text-xs font-bold uppercase tracking-wider">o crea el teu grup</span>
                                 <div className="flex-grow border-t border-slate-200"></div>
                              </div>
 
                              <button 
                                 onClick={() => setIsAuthModalOpen(true)} 
-                                className="w-full py-4 bg-white border-2 border-slate-100 text-slate-700 font-bold text-lg rounded-xl hover:border-indigo-200 hover:text-indigo-600 transition shadow-sm"
+                                className="w-full mt-2 py-4 bg-slate-900 text-white font-bold text-lg rounded-xl hover:bg-black transition shadow-lg flex items-center justify-center gap-2 group"
                              >
-                                Iniciar Sessió / Registrar-se
+                                Començar Gratis <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform"/>
                              </button>
                         </div>
                     </div>
-                )}
 
-                {/* 2. LOGUEJAT */}
-                {user && (
-                    <div className="flex flex-col h-full min-h-[400px]">
-                        <div className="flex items-center justify-between mb-6 px-1">
-                            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Els teus grups</h3>
-                            <button onClick={() => setActionState(actionState === 'creating' ? 'idle' : 'creating')} className="group flex items-center gap-2 bg-indigo-50 hover:bg-indigo-600 text-indigo-600 hover:text-white pl-4 pr-3 py-2 rounded-full transition-all shadow-sm">
-                                <span className="text-xs font-bold">NOU</span><div className="bg-white/20 rounded-full p-0.5"><Plus size={18} /></div>
-                            </button>
+                    {/* FEATURE GRID (BENTO) */}
+                    <div className="grid md:grid-cols-3 gap-4 w-full max-w-5xl mt-8">
+                        <BentoCard icon={CreditCard} title="Comptes Clars" desc="Afegeix tiquets en segons. Reparteix a parts iguals o personalitzades." color="bg-blue-500"/>
+                        <BentoCard icon={PieChart} title="Temps Real" desc="Tothom veu el mateix. Sincronització instantània sense conflictes." color="bg-indigo-500"/>
+                        <BentoCard icon={ShieldCheck} title="Liquidació Fàcil" desc="L'algoritme calcula els mínims pagaments per saldar el deute." color="bg-teal-500"/>
+                    </div>
+                </div>
+            )}
+
+            {/* 2. ESTAT LOGUEJAT (Dashboard Modern) */}
+            {user && (
+                <div className="w-full max-w-5xl mx-auto py-6 animate-fade-in">
+                    
+                    {/* Header Dashboard */}
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+                        <div>
+                            <h2 className="text-3xl md:text-4xl font-black text-slate-800 mb-1">{greeting}, <span className="text-indigo-600">{userName}.</span></h2>
+                            <p className="text-slate-500 font-medium">Aquí tens els teus viatges actius.</p>
                         </div>
+                        <div className="flex gap-2">
+                             {/* Botó alternar creació */}
+                             {actionState === 'idle' ? (
+                                <button onClick={() => setActionState('creating')} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-indigo-200 transition-all hover:-translate-y-1 flex items-center gap-2">
+                                    <Plus size={20} /> Nou Grup
+                                </button>
+                             ) : (
+                                <button onClick={resetAction} className="bg-white hover:bg-slate-50 text-slate-500 px-6 py-3 rounded-2xl font-bold border border-slate-200 transition-all">
+                                    Cancel·lar
+                                </button>
+                             )}
+                             
+                             {actionState === 'idle' && (
+                                <button onClick={() => setActionState('joining')} className="bg-white hover:bg-slate-50 text-indigo-600 px-6 py-3 rounded-2xl font-bold border border-indigo-100 shadow-sm transition-all flex items-center gap-2">
+                                    <KeyRound size={20} /> Tinc codi
+                                </button>
+                             )}
+                        </div>
+                    </div>
 
-                        {/* CREAR */}
-                        {actionState === 'creating' && (
-                            <form onSubmit={handleQuickAction} className="animate-fade-in mb-6 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                                <div className="space-y-4">
-                                    <div>
-                                        <div className="flex justify-between items-center mb-1"><label className="block text-xs font-bold text-slate-400 uppercase ml-1">Nom del viatge</label><button type="button" onClick={resetAction} className="text-xs font-bold text-slate-400 hover:text-slate-600">Cancel·lar</button></div>
-                                        <input autoFocus type="text" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none text-base font-bold text-slate-800 focus:ring-2 focus:ring-indigo-100 transition" placeholder="Ex: Menorca" value={inputValue} onChange={e => setInputValue(e.target.value)}/>
+                    {/* ZONA D'ACCIONS RÀPIDES (Creating/Joining) */}
+                    {(actionState === 'creating' || actionState === 'joining') && (
+                        <div className="mb-8 animate-fade-in">
+                            <div className="bg-white p-6 rounded-3xl shadow-xl shadow-indigo-100/50 border border-indigo-50 relative overflow-hidden">
+                                <div className="absolute top-0 left-0 w-2 h-full bg-indigo-500"></div>
+                                <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                    {actionState === 'creating' ? <><MapPin size={20} className="text-indigo-500"/> Crear nou viatge</> : <><KeyRound size={20} className="text-indigo-500"/> Unir-se a un grup</>}
+                                </h3>
+                                
+                                <form onSubmit={handleQuickAction} className="flex flex-col md:flex-row gap-4">
+                                    <div className="flex-1 space-y-3">
+                                        <label className="text-xs font-bold text-slate-400 uppercase ml-1">
+                                            {actionState === 'creating' ? 'Nom del destí / projecte' : 'Codi d\'invitació'}
+                                        </label>
+                                        <input 
+                                            autoFocus type="text" 
+                                            className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:bg-white text-lg font-bold text-slate-800 transition placeholder:text-slate-300" 
+                                            placeholder={actionState === 'creating' ? "Ex: Costa Brava 2024" : "XXX-YYY-ZZZ"} 
+                                            value={inputValue} 
+                                            onChange={e => setInputValue(e.target.value)}
+                                        />
                                     </div>
-                                    <div className="flex gap-3">
-                                        <div className="relative flex-1">
-                                             <UserIcon size={20} className="absolute left-3 top-3.5 text-slate-400"/>
-                                             <input type="text" className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-3 outline-none text-base font-medium focus:ring-2 focus:ring-indigo-100 transition" placeholder="El teu nom" value={creatorName} onChange={e => setCreatorName(e.target.value)}/>
+                                    
+                                    {actionState === 'creating' && (
+                                        <div className="flex-1 space-y-3">
+                                            <label className="text-xs font-bold text-slate-400 uppercase ml-1">El teu àlies al grup</label>
+                                            <input 
+                                                type="text" 
+                                                className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:bg-white text-lg font-bold text-slate-800 transition" 
+                                                value={creatorName} 
+                                                onChange={e => setCreatorName(e.target.value)}
+                                            />
                                         </div>
-                                        <button disabled={!inputValue || !creatorName || isSubmitting} className="bg-indigo-600 text-white px-5 rounded-xl font-bold shadow-md hover:bg-indigo-700 transition"><ArrowRight size={24}/></button>
+                                    )}
+
+                                    <div className="flex items-end">
+                                        <button disabled={!inputValue || (actionState === 'creating' && !creatorName) || isSubmitting} className="h-[54px] px-8 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-md transition disabled:opacity-50 flex items-center gap-2">
+                                            {isSubmitting ? <Loader2 className="animate-spin"/> : <ArrowRight size={24}/>}
+                                        </button>
                                     </div>
-                                </div>
-                            </form>
-                        )}
-                        
-                        {/* UNIR-SE (LOGUEJAT) */}
-                        {actionState === 'joining' && (
-                            <div className="animate-fade-in mb-6 bg-white p-4 rounded-2xl border border-indigo-100 shadow-sm ring-4 ring-indigo-50">
-                                <div className="flex justify-between items-center mb-3"><label className="text-xs font-bold text-indigo-500 uppercase tracking-wider flex items-center gap-1"><KeyRound size={14}/> Codi d'invitació</label><button type="button" onClick={resetAction} className="text-xs font-bold text-slate-400 hover:text-slate-600">Tancar</button></div>
-                                <form onSubmit={handleQuickAction} className="flex gap-2">
-                                    <input autoFocus type="text" className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition text-base font-bold text-slate-800 placeholder:font-normal uppercase tracking-widest font-mono" placeholder="XXX-YYY" value={inputValue} onChange={e => setInputValue(e.target.value)}/>
-                                    <button disabled={!inputValue || isSubmitting} className="bg-indigo-600 text-white px-5 rounded-xl font-bold shadow-md hover:bg-indigo-700 transition">{isSubmitting ? <Loader2 className="animate-spin" size={20}/> : <ArrowRight size={20}/>}</button>
                                 </form>
                             </div>
-                        )}
+                        </div>
+                    )}
 
-                        {/* LLISTA DE VIATGES */}
-                        <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar -mr-2">
-                             {loadingTrips ? (
-                                <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-3"><Loader2 className="animate-spin" size={32}/><span className="text-sm font-medium">Carregant grups...</span></div>
-                            ) : myTrips.length > 0 ? (
-                                <div className="space-y-4 pb-4">
-                                    {myTrips.map(trip => {
-                                        const currentUserInfo = trip.users.find(u => u.linkedUid === user.uid);
-                                        return (
-                                        <div key={trip.id} onClick={() => navigate(`/trip/${trip.id}`)} className="relative overflow-hidden bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-lg hover:border-indigo-200 cursor-pointer transition-all group">
-                                            <div className="absolute right-0 top-0 w-24 h-24 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-bl-[4rem] -z-0 group-hover:scale-150 transition-transform duration-500 origin-top-right"></div>
+                    {/* GRID DE VIATGES */}
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+                        {loadingTrips ? (
+                            [1,2,3].map(i => <div key={i} className="h-40 bg-white/50 animate-pulse rounded-3xl"></div>)
+                        ) : myTrips.length > 0 ? (
+                            myTrips.map(trip => {
+                                const currentUserInfo = trip.users.find(u => u.linkedUid === user.uid);
+                                return (
+                                <div 
+                                    key={trip.id} 
+                                    onClick={() => navigate(`/trip/${trip.id}`)} 
+                                    className="group relative bg-white hover:bg-white/80 p-6 rounded-3xl border border-white/60 shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer hover:-translate-y-1 overflow-hidden"
+                                >
+                                    {/* Decoració fons */}
+                                    <div className="absolute -right-6 -top-6 w-32 h-32 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
+
+                                    <div className="relative z-10">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div className="bg-indigo-50 text-indigo-600 p-2.5 rounded-xl">
+                                                <MapPin size={24} />
+                                            </div>
                                             
+                                            {/* Botó Esborrar (Hover) */}
                                             <button 
                                                 onClick={(e) => handleLeaveTrip(e, trip.id, currentUserInfo?.id, trip.name)}
-                                                className="absolute top-3 right-3 p-2 bg-slate-50 hover:bg-red-50 text-slate-300 hover:text-red-500 rounded-full transition-colors z-20 shadow-sm"
-                                                title="Eliminar de la meva llista"
+                                                className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors opacity-0 group-hover:opacity-100"
+                                                title="Treure de la llista"
                                             >
-                                                <Trash2 size={16} />
+                                                <Trash2 size={18} />
                                             </button>
-
-                                            <div className="relative z-10 flex justify-between items-center">
-                                                <div>
-                                                    <h4 className="font-bold text-slate-800 text-xl group-hover:text-indigo-700 transition-colors mb-1">{trip.name}</h4>
-                                                    <div className="flex items-center gap-3"><span className="text-xs font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-md border border-slate-100 flex items-center gap-1"><MapPin size={12} /> {trip.currency.code}</span><span className="text-xs text-slate-400 font-medium">{new Date(trip.createdAt).toLocaleDateString()}</span></div>
-                                                </div>
-                                                <div className="flex items-center gap-3 pr-8">
-                                                    <div className="bg-slate-50 p-3 rounded-full text-slate-300 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-sm"><ChevronRight size={20} /></div>
-                                                </div>
+                                        </div>
+                                        
+                                        <h3 className="text-xl font-extrabold text-slate-800 mb-1 truncate pr-2">{trip.name}</h3>
+                                        <p className="text-sm text-slate-400 font-medium mb-4">Creat el {new Date(trip.createdAt).toLocaleDateString()}</p>
+                                        
+                                        <div className="flex items-center justify-between mt-auto">
+                                            <div className="flex -space-x-2">
+                                                {trip.users.slice(0, 3).map((u, i) => (
+                                                    <div key={i} className="w-8 h-8 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500 overflow-hidden shadow-sm">
+                                                        {u.photoUrl ? <img src={u.photoUrl} className="w-full h-full object-cover"/> : u.name[0]}
+                                                    </div>
+                                                ))}
+                                                {trip.users.length > 3 && <div className="w-8 h-8 rounded-full border-2 border-white bg-slate-50 flex items-center justify-center text-[10px] font-bold text-slate-400 shadow-sm">+{trip.users.length - 3}</div>}
+                                            </div>
+                                            <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                                <ChevronRight size={18} />
                                             </div>
                                         </div>
-                                    )})}
+                                    </div>
                                 </div>
-                            ) : (
-                                <div className="h-full flex flex-col items-center justify-center p-8 text-center border-2 border-dashed border-slate-100 rounded-3xl bg-slate-50/50">
-                                    <div className="bg-white p-4 rounded-full shadow-sm mb-4"><Sparkles className="text-indigo-400" size={32} /></div>
-                                    <p className="text-lg font-bold text-slate-600">Comencem?</p>
-                                    <p className="text-sm text-slate-400 mt-2 max-w-[200px] leading-relaxed">Crea el teu primer grup amb el botó "Nou".</p>
+                            )})
+                        ) : (
+                            <div className="col-span-full py-16 text-center bg-white/50 backdrop-blur-sm rounded-[2rem] border-2 border-dashed border-slate-200">
+                                <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-300">
+                                    <Sparkles size={40} />
                                 </div>
-                            )}
-                        </div>
-
-                        {actionState === 'idle' && (
-                             <div className="mt-4 pt-4 border-t border-slate-100 text-center">
-                                <button onClick={() => setActionState('joining')} className="text-sm font-bold text-slate-400 hover:text-indigo-600 transition flex items-center justify-center gap-2 w-full"><KeyRound size={16}/> Tens un codi d'invitació?</button>
-                             </div>
+                                <h3 className="text-xl font-bold text-slate-700">Tot a punt per començar!</h3>
+                                <p className="text-slate-400 mt-2">Crea el teu primer grup amb el botó "Nou Grup".</p>
+                            </div>
                         )}
                     </div>
-                )}
-            </div>
-        </div>
+                </div>
+            )}
+        </main>
       </div>
 
-      <Modal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} title={authMode === 'initial' || authMode === 'login-email' ? "Iniciar Sessió" : "Crear Compte"}>
-        <div className="space-y-4">
+      {/* --- MODAL D'AUTENTICACIÓ (ESTIL NET) --- */}
+      <Modal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} title={authMode === 'initial' || authMode === 'login-email' ? "Benvingut/da" : "Crear Compte"}>
+        <div className="space-y-4 px-2">
+            
             {authMode === 'initial' && (
                 <>
-                    <button onClick={handleGoogleLogin} disabled={loginLoading} className="w-full flex items-center justify-center gap-3 bg-[#1a1a1a] text-white hover:bg-black font-bold py-4 rounded-xl transition-all shadow-lg shadow-slate-200">
+                    <button onClick={handleGoogleLogin} disabled={loginLoading} className="w-full flex items-center justify-center gap-3 bg-slate-900 text-white hover:bg-black font-bold py-4 rounded-xl transition-all shadow-lg hover:shadow-xl transform active:scale-[0.98]">
                         {loginLoading ? <Loader2 className="animate-spin text-white/50" /> : <><img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="G" /> Continuar amb Google</>}
                     </button>
-                    <div className="relative my-2">
-                        <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200"></div></div>
-                        <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-2 text-slate-400">O</span></div>
+                    <div className="relative my-4">
+                        <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
+                        <div className="relative flex justify-center text-xs uppercase font-bold tracking-widest"><span className="bg-white px-2 text-slate-300">OPCIONS</span></div>
                     </div>
-                    <button onClick={() => setAuthMode('login-email')} className="w-full py-3.5 bg-white border-2 border-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-50 transition flex items-center justify-center gap-2">
-                        <Mail size={20} className="text-slate-400"/> Fer servir correu
+                    <button onClick={() => setAuthMode('login-email')} className="w-full py-3.5 bg-white border-2 border-slate-100 text-slate-600 font-bold rounded-xl hover:border-indigo-200 hover:text-indigo-600 transition flex items-center justify-center gap-2">
+                        <Mail size={20}/> Fer servir correu
                     </button>
-                    <div className="text-center mt-2">
-                        <p className="text-xs text-slate-400">En continuar, acceptes els nostres termes d'ús.</p>
-                    </div>
                 </>
             )}
 
             {(authMode === 'login-email' || authMode === 'signup-email') && (
                 <form onSubmit={handleEmailAuth} className="flex flex-col gap-4 animate-fade-in">
-                    {authError && <div className="bg-red-50 text-red-500 p-3 rounded-xl text-sm font-medium border border-red-100">{authError}</div>}
-                    {resetSent && <div className="bg-emerald-50 text-emerald-600 p-3 rounded-xl text-sm font-medium border border-emerald-100">Correu de recuperació enviat!</div>}
+                    {authError && <div className="bg-red-50 text-red-500 p-3 rounded-xl text-sm font-bold border border-red-100">{authError}</div>}
+                    {resetSent && <div className="bg-emerald-50 text-emerald-600 p-3 rounded-xl text-sm font-bold border border-emerald-100">Revisa el teu correu!</div>}
 
                     <div className="space-y-3">
-                        <div className="relative">
-                            <Mail className="absolute left-4 top-4 text-slate-400" size={20}/>
-                            <input autoFocus type="email" placeholder="El teu correu" className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-12 pr-4 py-3.5 outline-none focus:ring-2 focus:ring-indigo-100 transition font-medium text-slate-700" value={email} onChange={e => setEmail(e.target.value)} required/>
+                        <div className="relative group">
+                            <Mail className="absolute left-4 top-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={20}/>
+                            <input autoFocus type="email" placeholder="El teu correu" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl pl-12 pr-4 py-3.5 outline-none focus:border-indigo-500 focus:bg-white transition font-bold text-slate-700" value={email} onChange={e => setEmail(e.target.value)} required/>
                         </div>
-                        <div className="relative">
-                            <Lock className="absolute left-4 top-4 text-slate-400" size={20}/>
-                            <input type={showPassword ? "text" : "password"} placeholder="Contrasenya" className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-12 pr-12 py-3.5 outline-none focus:ring-2 focus:ring-indigo-100 transition font-medium text-slate-700" value={password} onChange={e => setPassword(e.target.value)} required minLength={6}/>
-                            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-4 text-slate-400 hover:text-slate-600">{showPassword ? <EyeOff size={20} /> : <Eye size={20} />}</button>
+                        <div className="relative group">
+                            <Lock className="absolute left-4 top-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={20}/>
+                            <input type={showPassword ? "text" : "password"} placeholder="Contrasenya" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl pl-12 pr-12 py-3.5 outline-none focus:border-indigo-500 focus:bg-white transition font-bold text-slate-700" value={password} onChange={e => setPassword(e.target.value)} required minLength={6}/>
+                            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-4 text-slate-300 hover:text-indigo-600">{showPassword ? <EyeOff size={20} /> : <Eye size={20} />}</button>
                         </div>
+                        
                         {authMode === 'login-email' && (
-                            <div className="flex justify-end"><button type="button" onClick={handleResetPassword} className="text-xs font-bold text-slate-400 hover:text-indigo-600 transition">He oblidat la contrasenya</button></div>
+                            <div className="flex justify-end"><button type="button" onClick={handleResetPassword} className="text-xs font-bold text-slate-400 hover:text-indigo-600 transition">Has oblidat la contrasenya?</button></div>
                         )}
+                        
                         {authMode === 'signup-email' && (
-                            <div className="relative animate-fade-in">
-                                <Lock className="absolute left-4 top-4 text-slate-400" size={20}/>
-                                <input type={showConfirmPassword ? "text" : "password"} placeholder="Repeteix la contrasenya" className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-12 pr-12 py-3.5 outline-none focus:ring-2 focus:ring-indigo-100 transition font-medium text-slate-700" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required minLength={6}/>
-                                <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-4 top-4 text-slate-400 hover:text-slate-600">{showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}</button>
+                            <div className="relative group animate-fade-in">
+                                <Lock className="absolute left-4 top-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={20}/>
+                                <input type={showConfirmPassword ? "text" : "password"} placeholder="Repeteix la contrasenya" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl pl-12 pr-12 py-3.5 outline-none focus:border-indigo-500 focus:bg-white transition font-bold text-slate-700" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required minLength={6}/>
+                                <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-4 top-4 text-slate-300 hover:text-indigo-600">{showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}</button>
                             </div>
                         )}
                     </div>
 
-                    <button disabled={loginLoading} className="mt-2 w-full bg-slate-800 text-white py-4 rounded-xl font-bold text-lg hover:bg-black transition flex items-center justify-center gap-2 shadow-lg shadow-slate-200">
+                    <button disabled={loginLoading} className="mt-2 w-full bg-indigo-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-indigo-700 transition flex items-center justify-center gap-2 shadow-lg shadow-indigo-200">
                         {loginLoading ? <Loader2 className="animate-spin" /> : (authMode === 'login-email' ? 'Entrar' : 'Registrar-me')}
                     </button>
 
                     <div className="flex flex-col gap-3 mt-2 text-center">
-                        <button type="button" onClick={() => { setAuthMode(authMode === 'login-email' ? 'signup-email' : 'login-email'); setAuthError(''); setResetSent(false); }} className="text-indigo-600 font-bold hover:text-indigo-800 text-sm transition">
-                            {authMode === 'login-email' ? "No tens compte? Registra't" : "Ja tens compte? Inicia sessió"}
+                        <button type="button" onClick={() => { setAuthMode(authMode === 'login-email' ? 'signup-email' : 'login-email'); setAuthError(''); setResetSent(false); }} className="text-slate-600 font-bold hover:text-indigo-600 text-sm transition">
+                            {authMode === 'login-email' ? "No tens compte? Registra't gratis" : "Ja tens compte? Inicia sessió"}
                         </button>
-                        <button type="button" onClick={() => { setAuthMode('initial'); setAuthError(''); }} className="text-slate-400 hover:text-slate-600 text-sm font-medium transition">← Tornar</button>
+                        <button type="button" onClick={() => { setAuthMode('initial'); setAuthError(''); }} className="text-slate-400 hover:text-slate-600 text-xs font-bold uppercase tracking-wider transition">Tornar enrere</button>
                     </div>
                 </form>
             )}
         </div>
       </Modal>
 
-      <style>{` .custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } `}</style>
+      <style>{` 
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; } 
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; } 
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } 
+        @keyframes pulse-slow { 0%, 100% { opacity: 0.4; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.1); } }
+        .animate-pulse-slow { animation: pulse-slow 8s infinite ease-in-out; }
+      `}</style>
     </div>
   );
 }
