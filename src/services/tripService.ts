@@ -2,6 +2,7 @@ import {
   collection, doc, addDoc, updateDoc, deleteDoc, setDoc, 
   arrayUnion, query, where, getDocs, getDoc
 } from 'firebase/firestore';
+import { User } from 'firebase/auth'; // <--- Importació necessària
 import { db, appId } from '../config/firebase';
 import { Expense, TripData, Settlement, TripUser } from '../types';
 
@@ -27,7 +28,7 @@ export const TripService = {
     await updateDoc(getTripRef(tripId), data);
   },
 
-  // --- REVISAT: ABANDONAR GRUP COMPLETAMENT ---
+  // --- ABANDONAR GRUP (Usuari surt pel seu propi peu) ---
   leaveTrip: async (tripId: string, userId: string) => {
     const tripRef = getTripRef(tripId);
     const snap = await getDoc(tripRef);
@@ -38,11 +39,10 @@ export const TripService = {
         // 1. Et traiem de la llista de membres (ja no et surt a la home)
         const newMemberUids = (trip.memberUids || []).filter(uid => uid !== userId);
         
-        // 2. Desvinculem el teu usuari dins del grup (treiem foto i link)
-        // Així si recarregues la pàgina, veuràs el nom però sense la teva foto/identitat
+        // 2. Desvinculem el teu usuari dins del grup
         const newUsers = trip.users.map(u => {
             if (u.linkedUid === userId) {
-                // CORRECCIÓ: Utilitzem null en lloc d'undefined perquè Firestore no accepta undefined
+                // IMPORTANT: Use null, no undefined
                 return { ...u, linkedUid: null, isAuth: false, photoUrl: null };
             }
             return u;
@@ -59,21 +59,26 @@ export const TripService = {
     await updateDoc(getTripRef(tripId), { memberUids: arrayUnion(uid) });
   },
 
-  linkUserToProfile: async (tripId: string, tripUserId: string, authUid: string, photoUrl?: string | null) => {
+  // --- FUNCIÓ ARREGLADA I RENOMBRADA PER AL MODAL ---
+  linkUserToAccount: async (tripId: string, tripUserId: string, user: User) => {
     const tripRef = getTripRef(tripId);
     const snap = await getDoc(tripRef);
     if (!snap.exists()) throw new Error("Grup no trobat");
     
     const trip = snap.data() as TripData;
+    const authUid = user.uid;
+    const photoUrl = user.photoURL || null;
+
+    // 1. Si aquest compte de Google ja estava vinculat a un altre perfil del grup, el desvinculem
+    // (Per evitar duplicats si canvies de "personatge")
     const updatedUsers = trip.users.map(u => {
-        // CORRECCIÓ: Preventiva, també usem null aquí
         if (u.linkedUid === authUid) return { ...u, linkedUid: null, isAuth: false, photoUrl: null };
         return u;
     });
 
+    // 2. Vinculem el compte al perfil seleccionat
     const finalUsers = updatedUsers.map(u => {
-        // CORRECCIÓ: Assegurar que photoUrl sigui null si no existeix
-        if (u.id === tripUserId) return { ...u, linkedUid: authUid, isAuth: true, photoUrl: photoUrl || null };
+        if (u.id === tripUserId) return { ...u, linkedUid: authUid, isAuth: true, photoUrl: photoUrl };
         return u;
     });
 
@@ -85,7 +90,8 @@ export const TripService = {
     await updateDoc(getTripRef(tripId), { users: arrayUnion(newUser) });
   },
 
-  removeUser: async (tripId: string, userId: string) => {
+  // --- RENOMBRAT PER COINCIDIR AMB EL MODAL ---
+  removeUserFromTrip: async (tripId: string, userId: string) => {
     const tripRef = getTripRef(tripId);
     const snap = await getDoc(tripRef);
     if (snap.exists()) {
