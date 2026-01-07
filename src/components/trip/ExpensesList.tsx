@@ -17,20 +17,19 @@ interface ExpensesListProps {
   users: TripUser[];
 }
 
-// Helper per generar colors consistents basats en el nom
-// Això assigna sempre el mateix color a la mateixa persona (ex: Toni -> Blau)
+// Helper actualitzat amb classes 'dark:' per als avatars
 const getAvatarColor = (name: string) => {
   const colors = [
-    'bg-red-100 text-red-600', 
-    'bg-blue-100 text-blue-600', 
-    'bg-green-100 text-green-600', 
-    'bg-yellow-100 text-yellow-600', 
-    'bg-purple-100 text-purple-600', 
-    'bg-pink-100 text-pink-600',
-    'bg-indigo-100 text-indigo-600',
-    'bg-orange-100 text-orange-600',
-    'bg-teal-100 text-teal-600',
-    'bg-cyan-100 text-cyan-600'
+    'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-300', 
+    'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300', 
+    'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-300', 
+    'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-300', 
+    'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-300', 
+    'bg-pink-100 text-pink-600 dark:bg-pink-900/30 dark:text-pink-300',
+    'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-300',
+    'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-300',
+    'bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-300',
+    'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-300'
   ];
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
@@ -57,19 +56,30 @@ export default function ExpensesList({
 
   return (
     <div className="space-y-4 animate-fade-in">
+       {/* BARRA DE CERCA I FILTRE */}
        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-        <div className="bg-white p-2 rounded-xl border border-slate-200 flex items-center gap-2 flex-1 min-w-[150px] shadow-sm">
+        <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center gap-2 flex-1 min-w-[150px] shadow-sm transition-colors">
             <Search size={16} className="text-slate-400 ml-1" />
-            <input type="text" placeholder="Buscar..." className="w-full bg-transparent outline-none text-sm font-medium text-slate-700" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+            <input 
+                type="text" 
+                placeholder="Buscar..." 
+                className="w-full bg-transparent outline-none text-sm font-medium text-slate-700 dark:text-slate-200 placeholder:text-slate-400" 
+                value={searchQuery} 
+                onChange={(e) => setSearchQuery(e.target.value)} 
+            />
         </div>
-        <select className="bg-white px-3 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 outline-none shadow-sm" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value as any)}>
+        <select 
+            className="bg-white dark:bg-slate-900 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-sm font-bold text-slate-600 dark:text-slate-300 outline-none shadow-sm transition-colors" 
+            value={filterCategory} 
+            onChange={(e) => setFilterCategory(e.target.value as any)}
+        >
             {CATEGORIES.map(c => (<option key={c.id} value={c.id}>{c.label}</option>))}
         </select>
       </div>
 
       {expenses.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-3xl border border-dashed border-slate-200">
-            <Receipt size={32} className="text-indigo-300 mx-auto mb-4" />
+        <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800 transition-colors">
+            <Receipt size={32} className="text-indigo-300 dark:text-indigo-400/50 mx-auto mb-4" />
             <p className="text-slate-400 text-sm">No hi ha despeses.</p>
             {!searchQuery && filterCategory === 'all' && <Button onClick={() => onEdit(null)} className="mx-auto mt-4" icon={Plus}>Afegir Despesa</Button>}
         </div>
@@ -81,43 +91,48 @@ export default function ExpensesList({
                 
                 const payerName = getUserName(expense.payer);
                 const photoUrl = getUserPhoto(expense.payer);
-                
-                // Determinem el color de l'avatar:
-                // Si té foto, posem bg-white (neutre). Si no, calculem color.
                 const avatarClass = photoUrl ? 'bg-white' : getAvatarColor(payerName);
                 
                 return (
-                  <Card key={expense.id} className={`hover:shadow-md transition-all group ${isTransfer ? 'bg-slate-50' : 'bg-white'}`} onClick={() => onEdit(expense)}>
+                  <Card key={expense.id} className={`hover:shadow-md transition-all group ${isTransfer ? 'bg-slate-50 dark:bg-slate-800/50' : 'bg-white dark:bg-slate-900'}`} onClick={() => onEdit(expense)}>
                     <div className="flex items-center p-4 cursor-pointer">
+                      
+                      {/* ICONA CATEGORIA: Els colors venen de constants, però afegim dark:brightness si calgués en el futur */}
                       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mr-4 shadow-sm ${category.color}`}>
                           {isTransfer ? <ArrowRightLeft size={20}/> : <category.icon size={22} />}
                       </div>
+                      
                       <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-start">
-                            <h4 className={`font-bold truncate ${isTransfer ? 'text-slate-600 italic' : 'text-slate-800'}`}>{expense.title}</h4>
-                            <span className="text-xs text-slate-400 font-medium bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-100 ml-2 whitespace-nowrap">{formatDateDisplay(expense.date)}</span>
+                            {/* TÍTOL */}
+                            <h4 className={`font-bold truncate ${isTransfer ? 'text-slate-600 dark:text-slate-400 italic' : 'text-slate-800 dark:text-white'}`}>
+                                {expense.title}
+                            </h4>
+                            {/* DATA */}
+                            <span className="text-xs text-slate-400 dark:text-slate-500 font-medium bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-100 dark:border-slate-700 ml-2 whitespace-nowrap transition-colors">
+                                {formatDateDisplay(expense.date)}
+                            </span>
                         </div>
                         
                         {/* SECCIÓ QUI PAGA I DETALLS */}
                         <div className="flex items-center gap-2 mt-1.5">
-                            <div className="flex items-center gap-1.5 bg-slate-50 pl-1 pr-2 py-0.5 rounded-full border border-slate-100">
-                                {/* AVATAR DINÀMIC */}
-                                <div className={`w-5 h-5 rounded-full overflow-hidden flex items-center justify-center text-[9px] font-bold border border-white shadow-sm ${avatarClass}`}>
+                            <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 pl-1 pr-2 py-0.5 rounded-full border border-slate-100 dark:border-slate-700 transition-colors">
+                                {/* AVATAR */}
+                                <div className={`w-5 h-5 rounded-full overflow-hidden flex items-center justify-center text-[9px] font-bold border border-white dark:border-slate-600 shadow-sm ${avatarClass}`}>
                                     {photoUrl ? (
                                         <img src={photoUrl} className="w-full h-full object-cover" alt={payerName}/>
                                     ) : (
-                                        // Si no té foto, mostrem la inicial en majúscula sobre el color
                                         payerName.charAt(0).toUpperCase()
                                     )}
                                 </div>
-                                <span className="text-xs text-slate-600 font-bold">{payerName}</span>
+                                <span className="text-xs text-slate-600 dark:text-slate-300 font-bold">{payerName}</span>
                             </div>
                             
-                            <span className="text-xs text-slate-400">•</span>
+                            <span className="text-xs text-slate-400 dark:text-slate-600">•</span>
 
-                            <span className="text-xs text-slate-500 truncate">
+                            <span className="text-xs text-slate-500 dark:text-slate-400 truncate">
                                 {isTransfer ? '→' : 'Per a'} 
-                                <span className="ml-1 font-medium">
+                                <span className="ml-1 font-medium text-slate-600 dark:text-slate-300">
                                 {isTransfer 
                                     ? (expense.involved[0] ? getUserName(expense.involved[0]) : 'Tothom') 
                                     : (expense.splitType === 'equal' ? `${expense.involved.length} pers.` : (expense.splitType === 'exact' ? 'Exacte' : 'Parts'))}
@@ -125,8 +140,12 @@ export default function ExpensesList({
                             </span>
                         </div>
                       </div>
+                      
+                      {/* IMPORT */}
                       <div className="flex flex-col items-end pl-2">
-                        <span className={`font-bold text-lg ${isTransfer ? 'text-slate-500' : 'text-slate-800'}`}>{formatCurrency(expense.amount, currency)}</span>
+                        <span className={`font-bold text-lg ${isTransfer ? 'text-slate-500 dark:text-slate-500' : 'text-slate-800 dark:text-white'}`}>
+                            {formatCurrency(expense.amount, currency)}
+                        </span>
                       </div>
                     </div>
                   </Card>

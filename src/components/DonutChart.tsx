@@ -14,10 +14,7 @@ const DonutChart: React.FC<DonutChartProps> = ({ data }) => {
   const circumference = 2 * Math.PI * radius;
   let offset = 0;
 
-  // MILLORA: Mapa de colors complet amb la paleta estàndard de Tailwind.
-  // Això evita que el gràfic surti gris si canvies els colors a constants.ts
   const colorMap: Record<string, string> = {
-    // Colors actuals
     'bg-orange-500': '#f97316', 
     'bg-blue-500': '#3b82f6', 
     'bg-indigo-500': '#6366f1',
@@ -29,8 +26,6 @@ const DonutChart: React.FC<DonutChartProps> = ({ data }) => {
     'bg-emerald-500': '#10b981', 
     'bg-slate-500': '#64748b', 
     'bg-slate-400': '#94a3b8',
-
-    // Colors extres per si canvies la configuració en el futur
     'bg-red-500': '#ef4444',
     'bg-yellow-500': '#eab308',
     'bg-amber-500': '#f59e0b',
@@ -53,7 +48,6 @@ const DonutChart: React.FC<DonutChartProps> = ({ data }) => {
           const currentOffset = offset;
           offset += dashArray;
           
-          // Fallback segur: si el color no existeix, es pintarà d'un gris clar (#cbd5e1) en lloc de trencar-se o ser invisible
           const strokeColor = colorMap[item.barColor] || '#cbd5e1';
 
           return (
@@ -68,7 +62,11 @@ const DonutChart: React.FC<DonutChartProps> = ({ data }) => {
         })}
       </svg>
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <PieChartIcon className="text-slate-300" size={24} />
+        {/* AFEGIT: dark:text-slate-700 per enfosquir-la una mica si el fons és fosc, o deixar-la clara. 
+            En aquest cas, com que està dins d'un cercle buit, el fons serà el del card (slate-900). 
+            Per tant, la icona hauria de ser una mica visible. Slate-700 és molt fosc. 
+            Millor dark:text-slate-600. */}
+        <PieChartIcon className="text-slate-300 dark:text-slate-700" size={24} />
       </div>
     </div>
   );

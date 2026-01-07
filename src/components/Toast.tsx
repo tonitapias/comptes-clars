@@ -10,17 +10,17 @@ interface ToastProps {
   duration?: number;
 }
 
-// 1. El component visual (La "torrada")
 export default function Toast({ message, type, onClose, duration = 3000 }: ToastProps) {
   useEffect(() => {
     const timer = setTimeout(onClose, duration);
     return () => clearTimeout(timer);
   }, [duration, onClose]);
 
+  // AFEGIT: Variants 'dark:' per a cada tipus
   const styles = {
-    success: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-    error: 'bg-rose-50 text-rose-800 border-rose-200',
-    info: 'bg-indigo-50 text-indigo-800 border-indigo-200'
+    success: 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800',
+    error: 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-200 dark:border-rose-800',
+    info: 'bg-indigo-50 text-indigo-800 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-200 dark:border-indigo-800'
   };
 
   const icons = {
@@ -30,10 +30,11 @@ export default function Toast({ message, type, onClose, duration = 3000 }: Toast
   };
 
   return (
+    // AFEGIT: dark:bg-slate-900 (encara que els colors específics tenen prioritat, això és fallback)
     <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-3 rounded-xl border shadow-lg z-[100] animate-fade-in-up min-w-[300px] max-w-[90vw] ${styles[type]}`}>
       <div className="shrink-0">{icons[type]}</div>
       <p className="flex-1 text-sm font-bold">{message}</p>
-      <button onClick={onClose} className="p-1 hover:bg-black/5 rounded-full transition-colors opacity-60 hover:opacity-100">
+      <button onClick={onClose} className="p-1 hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition-colors opacity-60 hover:opacity-100">
         <X size={16} />
       </button>
       <style>{`
@@ -59,7 +60,6 @@ export function useToast() {
     setToastConfig(null);
   };
 
-  // Retornem el component llest per pintar ({toast}) i la funció per activar-lo
   const toast = toastConfig ? (
     <Toast
       message={toastConfig.message}
