@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import QRCode from 'react-qr-code';
-import { Share2, Copy, Check, User, Crown, Trash2, Link as LinkIcon, Users } from 'lucide-react';
+// AFEGIT: Edit2 i X als imports
+import { Share2, Copy, Check, User, Crown, Trash2, Link as LinkIcon, Users, Edit2, X } from 'lucide-react';
 import Modal from '../Modal';
 import { TripData, TripUser } from '../../types';
 import { TripService } from '../../services/tripService';
@@ -13,7 +14,7 @@ interface GroupModalProps {
   trip: TripData;
   showToast: (msg: string, type?: ToastType) => void;
   onUpdateTrip: () => void;
-  initialTab?: 'members' | 'share'; // <--- NOU PROPIETAT
+  initialTab?: 'members' | 'share';
 }
 
 const getAvatarColor = (name: string) => {
@@ -33,10 +34,13 @@ export default function GroupModal({ isOpen, onClose, trip, showToast, onUpdateT
   const [copiedLink, setCopiedLink] = useState(false);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
 
+  // --- NOUS ESTATS PER L'EDICIÓ ---
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [tempName, setTempName] = useState('');
+
   const currentUser = auth.currentUser;
   const shareUrl = `${window.location.origin}/?join=${trip.id}`;
 
-  // Quan s'obre el modal, posem la pestanya que ens demanen
   useEffect(() => {
     if (isOpen) {
         setActiveTab(initialTab);
@@ -85,6 +89,34 @@ export default function GroupModal({ isOpen, onClose, trip, showToast, onUpdateT
         showToast("Error en vincular", 'error');
     } finally {
         setLoadingAction(null);
+    }
+  };
+
+  // --- NOVES FUNCIONS D'EDICIÓ ---
+  const handleStartEdit = (u: TripUser) => {
+    setEditingUserId(u.id);
+    setTempName(u.name);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingUserId(null);
+    setTempName('');
+  };
+
+  const handleSaveName = async () => {
+    if (!editingUserId || !tempName.trim()) return;
+    
+    setLoadingAction(editingUserId);
+    try {
+      await TripService.renameUser(trip.id, editingUserId, tempName.trim());
+      showToast("Nom actualitzat", 'success');
+      onUpdateTrip();
+      handleCancelEdit();
+    } catch (error) {
+      console.error(error);
+      showToast("Error al canviar el nom", 'error');
+    } finally {
+      setLoadingAction(null);
     }
   };
 
@@ -159,17 +191,56 @@ export default function GroupModal({ isOpen, onClose, trip, showToast, onUpdateT
                         const isMe = currentUser && u.linkedUid === currentUser.uid;
 
                         return (
-                            <div key={u.id} className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm">
+                            // AFEGIT: 'group' per controlar el hover del botó d'editar
+                            <div key={u.id} className="group flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm">
                                 <div className="flex items-center gap-3">
                                     <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold border border-slate-100 overflow-hidden ${avatarClass}`}>
                                         {u.photoUrl ? <img src={u.photoUrl} alt={u.name} className="w-full h-full object-cover" /> : u.name.charAt(0).toUpperCase()}
                                     </div>
                                     <div>
+                                        {/* LÒGICA D'EDICIÓ INSERIDA AQUÍ */}
                                         <div className="flex items-center gap-1.5">
-                                            <p className={`font-bold text-sm ${isMe ? 'text-indigo-700' : 'text-slate-800'}`}>
-                                                {u.name} {isMe && '(Tu)'}
-                                            </p>
-                                            {u.id === adminId && <Crown size={12} className="text-yellow-500 fill-yellow-500" />}
+                                            {editingUserId === u.id ? (
+                                                /* MODE EDICIÓ */
+                                                <div className="flex items-center gap-1">
+                                                    <input 
+                                                        type="text" 
+                                                        value={tempName}
+                                                        autoFocus
+                                                        onChange={(e) => setTempName(e.target.value)}
+                                                        className="border-b-2 border-indigo-500 outline-none text-sm font-bold text-indigo-700 w-32 bg-transparent px-1"
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') handleSaveName();
+                                                            if (e.key === 'Escape') handleCancelEdit();
+                                                        }}
+                                                    />
+                                                    <button onClick={handleSaveName} className="text-green-600 hover:bg-green-50 p-1 rounded">
+                                                        <Check size={14} />
+                                                    </button>
+                                                    <button onClick={handleCancelEdit} className="text-red-500 hover:bg-red-50 p-1 rounded">
+                                                        <X size={14} />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                /* MODE VISUALITZACIÓ */
+                                                <div className="flex items-center gap-2">
+                                                    <p className={`font-bold text-sm ${isMe ? 'text-indigo-700' : 'text-slate-800'}`}>
+                                                        {u.name} {isMe && '(Tu)'}
+                                                    </p>
+                                                    {u.id === adminId && <Crown size={12} className="text-yellow-500 fill-yellow-500" />}
+                                                    
+                                                    {/* Botó per editar (Només visible en hover i si ets tu o un usuari no vinculat) */}
+                                                    {(isMe || !u.linkedUid) && (
+                                                        <button 
+                                                            onClick={() => handleStartEdit(u)} 
+                                                            className="text-slate-300 hover:text-indigo-600 transition-colors opacity-0 group-hover:opacity-100 p-0.5"
+                                                            title="Canviar àlies"
+                                                        >
+                                                            <Edit2 size={12} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                         <p className="text-[10px] text-slate-400">
                                             {isLinked ? 'Verificat' : 'Convidat'}
