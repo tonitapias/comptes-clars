@@ -97,7 +97,7 @@ export default function ExpensesList({
                   <Card key={expense.id} className={`hover:shadow-md transition-all group ${isTransfer ? 'bg-slate-50 dark:bg-slate-800/50' : 'bg-white dark:bg-slate-900'}`} onClick={() => onEdit(expense)}>
                     <div className="flex items-center p-4 cursor-pointer">
                       
-                      {/* ICONA CATEGORIA: Els colors venen de constants, però afegim dark:brightness si calgués en el futur */}
+                      {/* ICONA CATEGORIA */}
                       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mr-4 shadow-sm ${category.color}`}>
                           {isTransfer ? <ArrowRightLeft size={20}/> : <category.icon size={22} />}
                       </div>
@@ -120,7 +120,8 @@ export default function ExpensesList({
                                 {/* AVATAR */}
                                 <div className={`w-5 h-5 rounded-full overflow-hidden flex items-center justify-center text-[9px] font-bold border border-white dark:border-slate-600 shadow-sm ${avatarClass}`}>
                                     {photoUrl ? (
-                                        <img src={photoUrl} className="w-full h-full object-cover" alt={payerName}/>
+                                        // CORRECCIÓ: Afegit referrerPolicy
+                                        <img src={photoUrl} className="w-full h-full object-cover" alt={payerName} referrerPolicy="no-referrer"/>
                                     ) : (
                                         payerName.charAt(0).toUpperCase()
                                     )}

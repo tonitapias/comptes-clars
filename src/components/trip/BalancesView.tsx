@@ -19,18 +19,15 @@ export default function BalancesView({ balances, categoryStats, currency, users 
      <div className="space-y-6 animate-fade-in">
        {/* GRÀFIC DE CATEGORIES */}
        {categoryStats.length > 0 && (
-           // AFEGIT: dark:bg-slate-900 dark:border-slate-800
            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex items-center gap-6 transition-colors duration-300">
                <DonutChart data={categoryStats} />
                <div className="flex-1 space-y-2">
                    {categoryStats.slice(0, 3).map(stat => (
                        <div key={stat.id} className="flex justify-between items-center text-sm">
-                           {/* AFEGIT: dark:text-slate-300 */}
                            <span className="flex items-center gap-2 font-medium text-slate-600 dark:text-slate-300">
                                <div className={`w-3 h-3 rounded-full ${stat.barColor}`}></div>
                                {stat.label}
                            </span>
-                           {/* AFEGIT: dark:text-white */}
                            <span className="font-bold text-slate-800 dark:text-white">{Math.round(stat.percentage)}%</span>
                        </div>
                    ))}
@@ -48,31 +45,28 @@ export default function BalancesView({ balances, categoryStats, currency, users 
                const isPositive = b.amount >= 0;
                
                return (
-               // Card ja té dark mode integrat
                <Card key={b.userId} className={`p-0 overflow-hidden ${isDeleted ? 'opacity-60 grayscale-[0.5]' : ''}`}>
                    <div className="p-5 relative z-10">
                        <div className="flex items-center justify-between">
                            <div className="flex items-center gap-3">
-                               {/* AVATAR: Els fons emerald/rose funcionen bé en dark, no cal canviar */}
+                               {/* AVATAR */}
                                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white shadow-sm overflow-hidden ${isPositive ? 'bg-emerald-500' : 'bg-rose-500'}`}>
                                     {photoUrl ? (
-                                        <img src={photoUrl} alt={name} className="w-full h-full object-cover"/>
+                                        // CORRECCIÓ: Afegit referrerPolicy
+                                        <img src={photoUrl} alt={name} className="w-full h-full object-cover" referrerPolicy="no-referrer"/>
                                     ) : (
                                         name.charAt(0)
                                     )}
                                </div>
                                <div>
-                                   {/* AFEGIT: dark:text-white i ajustat el badge "Ex" */}
                                    <p className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
                                      {name} {isDeleted && <span className="text-[10px] bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-300 px-1 rounded">Ex</span>}
                                    </p>
-                                   {/* AFEGIT: Canviem text-XXX-600 per text-XXX-400 en dark mode per més contrast */}
                                    <p className={`text-xs font-bold uppercase ${isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                        {isPositive ? 'Recupera' : 'Ha de pagar'}
                                    </p>
                                </div>
                            </div>
-                           {/* AFEGIT: Mateix canvi a tons 400 */}
                            <span className={`text-xl font-black ${isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                {isPositive ? '+' : ''}{formatCurrency(b.amount, currency)}
                            </span>

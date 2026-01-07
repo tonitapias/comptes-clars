@@ -130,11 +130,9 @@ export default function GroupModal({ isOpen, onClose, trip, showToast, onUpdateT
     <Modal isOpen={isOpen} onClose={onClose} title="Gestió del Grup">
       
       {/* PESTANYES SUPERIORS */}
-      {/* AFEGIT: dark:border-slate-800 */}
       <div className="flex border-b border-slate-100 dark:border-slate-800 mb-4 transition-colors">
         <button 
             onClick={() => setActiveTab('members')}
-            // AFEGIT: dark:text-indigo-400 (actiu) i dark:text-slate-500 (inactiu)
             className={`flex-1 pb-3 text-sm font-bold flex items-center justify-center gap-2 transition-colors 
             ${activeTab === 'members' 
                 ? 'text-indigo-600 border-b-2 border-indigo-600 dark:text-indigo-400 dark:border-indigo-400' 
@@ -157,17 +155,15 @@ export default function GroupModal({ isOpen, onClose, trip, showToast, onUpdateT
           {activeTab === 'share' ? (
             /* ZONA DE COMPARTIR */
             <div className="flex flex-col items-center gap-6 py-2 animate-fade-in">
-                {/* QR Container: MANTENIR bg-white per contrast del lector QR */}
+                {/* QR Container */}
                 <div className="bg-white p-4 rounded-xl border-2 border-slate-100 shadow-sm">
                     <QRCode value={shareUrl} size={140} />
                 </div>
 
                 <div className="w-full space-y-4">
-                    {/* AFEGIT: dark:bg-indigo-900/20 dark:border-indigo-800 */}
                     <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 dark:bg-indigo-900/20 dark:border-indigo-800/50">
                         <p className="text-xs font-bold text-indigo-500 dark:text-indigo-300 uppercase mb-2">Enllaç d'invitació</p>
                         <div className="flex gap-2">
-                            {/* AFEGIT: dark:bg-slate-800 dark:text-indigo-200 dark:border-indigo-800 */}
                             <div className="flex-1 bg-white px-3 py-2 rounded-lg text-sm text-indigo-900 font-medium truncate border border-indigo-200 opacity-70 dark:bg-slate-800 dark:text-indigo-200 dark:border-indigo-800">
                                 {shareUrl}
                             </div>
@@ -180,7 +176,6 @@ export default function GroupModal({ isOpen, onClose, trip, showToast, onUpdateT
                         </div>
                     </div>
                     
-                    {/* AFEGIT: dark:bg-slate-800 dark:border-slate-700 */}
                     <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200 dark:bg-slate-800 dark:border-slate-700 transition-colors">
                         <div>
                             <p className="text-[10px] font-bold text-slate-400 uppercase">Codi Manual</p>
@@ -206,19 +201,17 @@ export default function GroupModal({ isOpen, onClose, trip, showToast, onUpdateT
                         const isMe = currentUser && u.linkedUid === currentUser.uid;
 
                         return (
-                            // AFEGIT: dark:bg-slate-800 dark:border-slate-700
                             <div key={u.id} className="group flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm dark:bg-slate-800 dark:border-slate-700 transition-colors">
                                 <div className="flex items-center gap-3">
-                                    {/* AFEGIT: dark:border-slate-600 */}
                                     <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold border border-slate-100 overflow-hidden dark:border-slate-600 ${avatarClass}`}>
-                                        {u.photoUrl ? <img src={u.photoUrl} alt={u.name} className="w-full h-full object-cover" /> : u.name.charAt(0).toUpperCase()}
+                                        {/* CORRECCIÓ: Afegit referrerPolicy */}
+                                        {u.photoUrl ? <img src={u.photoUrl} alt={u.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : u.name.charAt(0).toUpperCase()}
                                     </div>
                                     <div>
                                         <div className="flex items-center gap-1.5">
                                             {editingUserId === u.id ? (
                                                 /* MODE EDICIÓ */
                                                 <div className="flex items-center gap-1">
-                                                    {/* AFEGIT: text-white en dark mode */}
                                                     <input 
                                                         type="text" 
                                                         value={tempName}
@@ -240,7 +233,6 @@ export default function GroupModal({ isOpen, onClose, trip, showToast, onUpdateT
                                             ) : (
                                                 /* MODE VISUALITZACIÓ */
                                                 <div className="flex items-center gap-2">
-                                                    {/* AFEGIT: dark:text-white */}
                                                     <p className={`font-bold text-sm ${isMe ? 'text-indigo-700 dark:text-indigo-400' : 'text-slate-800 dark:text-white'}`}>
                                                         {u.name} {isMe && '(Tu)'}
                                                     </p>
@@ -266,7 +258,6 @@ export default function GroupModal({ isOpen, onClose, trip, showToast, onUpdateT
                                 
                                 <div className="flex items-center gap-1">
                                     {!isLinked && currentUser && (
-                                        // AFEGIT: dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-300
                                         <button onClick={() => handleClaimUser(u.id)} disabled={loadingAction === u.id} className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded border border-indigo-100 dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-300">
                                             Sóc jo
                                         </button>
