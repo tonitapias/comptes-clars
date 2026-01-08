@@ -1,10 +1,11 @@
 import { 
   collection, doc, addDoc, updateDoc, deleteDoc, setDoc, 
   arrayUnion, arrayRemove, query, where, getDocs, getDoc 
-} from 'firebase/firestore'; // <--- ASSEGURA'T QUE arrayRemove ESTÀ IMPORTAT
+} from 'firebase/firestore'; 
 import { User } from 'firebase/auth';
-import { db, appId } from '../config/firebase';
-import { Expense, TripData, Settlement, TripUser } from '../types';
+import { db, appId, auth } from '../config/firebase';
+import { Expense, TripData, Settlement, TripUser, LogEntry } from '../types';
+import { ExpenseSchema, TripDataSchema, TripUserSchema } from '../utils/validation';
 
 const getTripRef = (tripId: string) => doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
 const getExpensesCol = (tripId: string) => collection(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`, 'expenses');
@@ -12,9 +13,36 @@ const getExpenseRef = (tripId: string, expenseId: string) => doc(db, 'artifacts'
 
 const generateId = () => crypto.randomUUID();
 
+const logAction = async (tripId: string, message: string, action: LogEntry['action']) => {
+  try {
+    const currentUser = auth.currentUser;
+    const userName = currentUser?.displayName || 'Algú';
+    const userId = currentUser?.uid || 'anonymous';
+
+    const log: LogEntry = {
+      id: generateId(),
+      action,
+      message,
+      userId,
+      userName,
+      timestamp: new Date().toISOString()
+    };
+
+    await updateDoc(getTripRef(tripId), {
+      logs: arrayUnion(log)
+    });
+  } catch (e) {
+    console.warn("No s'ha pogut guardar el log:", e);
+  }
+};
+
 export const TripService = {
   createTrip: async (trip: TripData) => {
-    await setDoc(getTripRef(trip.id), trip);
+    const validatedTrip = TripDataSchema.parse(trip);
+    validatedTrip.logs = [];
+    // Assegurem que no hi hagi undefineds fent una neteja ràpida
+    const cleanTrip = JSON.parse(JSON.stringify(validatedTrip));
+    await setDoc(getTripRef(cleanTrip.id), cleanTrip);
   },
 
   getUserTrips: async (userId: string) => {
@@ -26,103 +54,97 @@ export const TripService = {
 
   updateTrip: async (tripId: string, data: Partial<TripData>) => {
     await updateDoc(getTripRef(tripId), data);
+    if (data.name || data.currency) {
+      await logAction(tripId, "Ha actualitzat la configuració del grup", 'settings');
+    }
   },
 
-  // --- NOVETAT 1: UNIR-SE VIA ENLLAÇ (Automàtic) ---
   joinTripViaLink: async (tripId: string, user: User) => {
     const tripRef = getTripRef(tripId);
     const snap = await getDoc(tripRef);
-    
     if (!snap.exists()) throw new Error("El grup no existeix");
     
     const trip = snap.data() as TripData;
-    
-    // 1. Si ja té permís d'accés (memberUids), no fem res
     if (trip.memberUids?.includes(user.uid)) return;
 
-    // 2. Mirem si el seu compte de Google ja està vinculat a algun perfil existent
-    // (Per exemple, si algú el va crear manualment i ara entra ell)
     const existingProfileIndex = trip.users.findIndex(u => u.linkedUid === user.uid);
     
     if (existingProfileIndex === -1) {
-        // CAS A: Usuari totalment nou -> El creem
+        // CORRECCIÓ AQUÍ: Evitem 'undefined' usant spread operator condicional
         const newTripUser: TripUser = {
             id: generateId(),
             name: user.displayName || 'Anònim',
-            email: user.email || undefined,
             isAuth: true,
             linkedUid: user.uid,
-            photoUrl: user.photoURL || null,
-            isDeleted: false
+            isDeleted: false,
+            ...(user.email ? { email: user.email } : {}),
+            ...(user.photoURL ? { photoUrl: user.photoURL } : {})
         };
         
+        // Validem, però ja sabem que no té undefineds
+        TripUserSchema.parse(newTripUser);
+
         await updateDoc(tripRef, {
             users: arrayUnion(newTripUser),
             memberUids: arrayUnion(user.uid)
         });
+        await logAction(tripId, `${newTripUser.name} s'ha unit al grup`, 'join');
     } else {
-        // CAS B: Ja existia però no tenia permís a memberUids (cas rar, però possible)
         await updateDoc(tripRef, { memberUids: arrayUnion(user.uid) });
     }
   },
 
-  // --- NOVETAT 2: SORTIDA SEGURA (Substitueix removeUserFromTrip) ---
-  // Aquesta funció protegeix els càlculs:
-  // - Si l'usuari NO té moviments -> L'esborra del tot.
-  // - Si l'usuari TÉ moviments -> El marca com a 'isDeleted' i li treu l'accés.
   leaveTrip: async (tripId: string, userIdToRemove: string) => {
     const tripRef = getTripRef(tripId);
     const snap = await getDoc(tripRef);
     
     if (snap.exists()) {
         const trip = snap.data() as TripData;
-        
-        // Comprovem si ha participat en alguna despesa (pagant o rebent)
-        const hasHistory = trip.expenses.some(e => 
-            e.payer === userIdToRemove || e.involved.includes(userIdToRemove)
-        );
-
-        // Usuari que volem treure
         const userObj = trip.users.find(u => u.id === userIdToRemove);
         if (!userObj) return;
 
-        // Recuperem el seu UID de Google si en té, per treure'l de memberUids
+        try {
+            const currentUser = auth.currentUser;
+            const log: LogEntry = {
+                id: generateId(),
+                action: 'join',
+                message: `${userObj.name} ha marxat del grup`,
+                userId: currentUser?.uid || 'anonymous',
+                userName: userObj.name,
+                timestamp: new Date().toISOString()
+            };
+            await updateDoc(tripRef, { logs: arrayUnion(log) });
+        } catch (e) {
+            console.warn("No s'ha pogut guardar el log de sortida", e);
+        }
+
+        const hasHistory = trip.expenses.some(e => e.payer === userIdToRemove || e.involved.includes(userIdToRemove));
         const authUidToRemove = userObj.linkedUid;
 
         if (hasHistory) {
-            // OPCIÓ A: SOFT DELETE (Té historial, no podem esborrar-lo)
             const updatedUsers = trip.users.map(u => {
                 if (u.id === userIdToRemove) {
-                    return { 
-                        ...u, 
-                        linkedUid: null,  // Li treiem l'accés
-                        isAuth: false,
-                        photoUrl: null,   // Li treiem la foto
-                        name: `${u.name} (Ex-membre)`, // Opcional: Marquem el nom
-                        isDeleted: true   // MARCA CLAU PER FILTRAR A LA UI
-                    };
+                    return { ...u, linkedUid: null, isAuth: false, photoUrl: undefined, name: `${u.name} (Ex-membre)`, isDeleted: true };
                 }
                 return u;
             });
-
-            const updates: any = { users: updatedUsers };
-            if (authUidToRemove) {
-                updates.memberUids = arrayRemove(authUidToRemove);
-            }
+            
+            // neteja undefineds abans d'enviar
+            const cleanUsers = JSON.parse(JSON.stringify(updatedUsers));
+            const updates: any = { users: cleanUsers };
+            if (authUidToRemove) updates.memberUids = arrayRemove(authUidToRemove);
+            
             await updateDoc(tripRef, updates);
 
         } else {
-            // OPCIÓ B: HARD DELETE (No té historial, neteja total)
-            const updates: any = { users: arrayRemove(userObj) };
-            if (authUidToRemove) {
-                updates.memberUids = arrayRemove(authUidToRemove);
-            }
+            const newUsers = trip.users.filter(u => u.id !== userIdToRemove);
+            const updates: any = { users: newUsers };
+            if (authUidToRemove) updates.memberUids = arrayRemove(authUidToRemove);
+            
             await updateDoc(tripRef, updates);
         }
     }
   },
-
-  // --- Funcions existents que mantenim o adaptem lleugerament ---
 
   linkAuthUser: async (tripId: string, uid: string) => {
     await updateDoc(getTripRef(tripId), { memberUids: arrayUnion(uid) });
@@ -135,47 +157,60 @@ export const TripService = {
     
     const trip = snap.data() as TripData;
     const authUid = user.uid;
-    const photoUrl = user.photoURL || null;
+    // Evitem undefined a photoUrl
+    const photoUrl = user.photoURL || null; 
 
     const updatedUsers = trip.users.map(u => {
-        // Desvinculem si ja estava en un altre lloc
-        if (u.linkedUid === authUid) return { ...u, linkedUid: null, isAuth: false, photoUrl: null };
+        if (u.linkedUid === authUid) return { ...u, linkedUid: null, isAuth: false, photoUrl: undefined };
         return u;
     });
 
     const finalUsers = updatedUsers.map(u => {
-        // Vinculem al nou lloc
-        if (u.id === tripUserId) return { ...u, linkedUid: authUid, isAuth: true, photoUrl: photoUrl, isDeleted: false };
+        if (u.id === tripUserId) return { ...u, linkedUid: authUid, isAuth: true, photoUrl: photoUrl || undefined, isDeleted: false };
         return u;
     });
 
-    await updateDoc(tripRef, { users: finalUsers, memberUids: arrayUnion(authUid) });
+    // Neteja final per seguretat
+    const cleanUsers = JSON.parse(JSON.stringify(finalUsers));
+    await updateDoc(tripRef, { users: cleanUsers, memberUids: arrayUnion(authUid) });
+    await logAction(tripId, `${user.displayName} ha reclamat el perfil`, 'join');
   },
 
   addUser: async (tripId: string, userName: string) => {
-    const newUser: TripUser = { id: generateId(), name: userName, isDeleted: false };
+    if (!userName.trim()) throw new Error("El nom no pot estar buit");
+    const newUser: TripUser = { id: generateId(), name: userName.trim(), isDeleted: false };
+    TripUserSchema.parse(newUser);
     await updateDoc(getTripRef(tripId), { users: arrayUnion(newUser) });
+    await logAction(tripId, `Ha afegit el membre "${userName}"`, 'settings');
   },
 
   renameUser: async (tripId: string, userId: string, newName: string) => {
+    if (!newName.trim()) throw new Error("El nom no pot estar buit");
     const tripRef = getTripRef(tripId);
     const snap = await getDoc(tripRef);
     if (!snap.exists()) throw new Error("Grup no trobat");
     const trip = snap.data() as TripData;
-    const updatedUsers = trip.users.map(u => u.id === userId ? { ...u, name: newName } : u);
+    const updatedUsers = trip.users.map(u => u.id === userId ? { ...u, name: newName.trim() } : u);
     await updateDoc(tripRef, { users: updatedUsers });
   },
 
   addExpense: async (tripId: string, expense: Omit<Expense, 'id'>) => {
+    ExpenseSchema.parse(expense);
     await addDoc(getExpensesCol(tripId), expense);
+    await logAction(tripId, `Ha creat la despesa "${expense.title}" de ${(expense.amount / 100).toFixed(2)}€`, 'create');
   },
 
   updateExpense: async (tripId: string, expenseId: string, expense: Partial<Expense>) => {
+    if (expense.amount !== undefined && expense.amount <= 0) throw new Error("L'import ha de ser positiu");
+    if (expense.title !== undefined && !expense.title.trim()) throw new Error("El títol no pot estar buit");
+    
     await updateDoc(getExpenseRef(tripId, expenseId), expense);
+    await logAction(tripId, `Ha editat la despesa "${expense.title || 'existente'}"`, 'update');
   },
 
   deleteExpense: async (tripId: string, expenseId: string) => {
     await deleteDoc(getExpenseRef(tripId, expenseId));
+    await logAction(tripId, `Ha eliminat una despesa`, 'delete');
   },
 
   settleDebt: async (tripId: string, settlement: Settlement, method: string) => {
@@ -188,11 +223,12 @@ export const TripService = {
       date: new Date().toISOString(), 
       splitType: 'equal' as const
     };
+    
+    ExpenseSchema.parse(repayment);
     await addDoc(getExpensesCol(tripId), repayment);
+    await logAction(tripId, `Ha liquidat ${(settlement.amount / 100).toFixed(2)}€ via ${method}`, 'settle');
   },
-  // --- NOVETAT: TREURE ACCÉS (Emergència) ---
-  // Serveix per quan l'usuari vol treure el grup de la llista "Els meus viatges"
-  // però no trobem el seu perfil intern per fer el "Soft Delete".
+
   removeMemberAccess: async (tripId: string, authUid: string) => {
     const tripRef = getTripRef(tripId);
     await updateDoc(tripRef, { memberUids: arrayRemove(authUid) });

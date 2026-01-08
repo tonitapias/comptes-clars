@@ -18,15 +18,14 @@ export interface Category {
   barColor: string;
 }
 
-// --- USUARI COM A OBJECTE (IMPORTANT PER LES FOTOS) ---
 export interface TripUser {
   id: string;
   name: string;
   email?: string;
   isAuth?: boolean;
   linkedUid?: string;
-  photoUrl?: string; // <--- LA FOTO
-  isDeleted?: boolean; // <--- NOVA PROPIETAT
+  photoUrl?: string;
+  isDeleted?: boolean;
 }
 
 export type SplitType = 'equal' | 'exact' | 'shares';
@@ -35,22 +34,33 @@ export interface Expense {
   id: number | string;
   title: string;
   amount: number;
-  payer: string;        // Guardarà l'ID
+  payer: string;
   category: CategoryId;
-  involved: string[];   // Guardarà IDs
+  involved: string[];
   date: string;         
   splitType?: SplitType; 
   splitDetails?: Record<string, number>; 
 }
 
+// --- NOVETAT: ESTRUCTURA DEL LOG ---
+export interface LogEntry {
+  id: string;
+  action: 'create' | 'update' | 'delete' | 'join' | 'settle' | 'settings';
+  message: string;
+  userId: string;      // ID de l'usuari (TripUser)
+  userName: string;    // Nom en aquell moment
+  timestamp: string;
+}
+
 export interface TripData {
   id: string;
   name: string;
-  users: TripUser[];    // Array d'objectes
+  users: TripUser[];
   expenses: Expense[];
   currency: Currency;
   createdAt: string;
-  memberUids?: string[]; 
+  memberUids?: string[];
+  logs?: LogEntry[]; // <--- AFEGIT ARRAY DE LOGS
 }
 
 export interface Balance {

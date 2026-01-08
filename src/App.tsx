@@ -5,14 +5,12 @@ import { Loader2 } from 'lucide-react';
 import { auth } from './config/firebase';
 import LandingPage from './pages/LandingPage';
 import TripPage from './pages/TripPage';
+import ProtectedRoute from './components/ProtectedRoute'; // <--- IMPORTAT
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   
-  // Eliminem l'estat lastTripId d'aquí per evitar redireccions automàtiques
-  // El gestionarem dins de LandingPage o simplement deixarem que l'usuari navegui.
-
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -23,8 +21,8 @@ function App() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
-        <Loader2 className="h-10 w-10 text-indigo-600 animate-spin mb-4" />
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <Loader2 className="h-10 w-10 text-indigo-600 dark:text-indigo-400 animate-spin mb-4" />
         <p className="text-slate-400 text-sm font-medium">Carregant la teva sessió...</p>
       </div>
     );
@@ -33,10 +31,17 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* CANVI CRÍTIC: Eliminada la redirecció automàtica */}
         <Route path="/" element={<LandingPage user={user} />} />
         
-        <Route path="/trip/:tripId" element={<TripPage user={user} />} />
+        {/* RUTA PROTEGIDA */}
+        <Route 
+          path="/trip/:tripId" 
+          element={
+            <ProtectedRoute user={user}>
+              <TripPage user={user} />
+            </ProtectedRoute>
+          } 
+        />
         
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

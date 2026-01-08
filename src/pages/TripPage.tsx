@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Plus, Trash2, CheckCircle2, ArrowRightLeft, Loader2, AlertTriangle, Lock, LogOut, Wrench, UserPlus } from 'lucide-react';
+import { Plus, Trash2, CheckCircle2, ArrowRightLeft, Loader2, AlertTriangle, Lock, LogOut, UserPlus, Wallet, Receipt, History } from 'lucide-react'; 
 import { User } from 'firebase/auth';
 
 import Button from '../components/Button';
@@ -8,6 +8,7 @@ import Modal from '../components/Modal';
 import Toast, { ToastType } from '../components/Toast';
 import ExpenseModal from '../components/modals/ExpenseModal';
 import GroupModal from '../components/modals/GroupModal';
+import ActivityModal from '../components/modals/ActivityModal';
 import TripHeader from '../components/trip/TripHeader';
 import ExpensesList from '../components/trip/ExpensesList';
 import BalancesView from '../components/trip/BalancesView';
@@ -44,6 +45,7 @@ export default function TripPage({ user }: TripPageProps) {
   const [settleModalOpen, setSettleModalOpen] = useState<Settlement | null>(null);
   
   const [groupModalOpen, setGroupModalOpen] = useState(false);
+  const [activityModalOpen, setActivityModalOpen] = useState(false);
   const [groupModalTab, setGroupModalTab] = useState<'members' | 'share'>('members');
 
   // Estats d'Edició/Acció
@@ -56,41 +58,89 @@ export default function TripPage({ user }: TripPageProps) {
 
   const showToast = (msg: string, type: ToastType = 'success') => setToast({ msg, type });
 
-  // 1. Comprovem si l'usuari és membre realment (per mostrar banner convidat)
   const isMember = user && tripData?.memberUids?.includes(user.uid);
+
+  // --- EFECTES ---
 
   useEffect(() => {
     if (tripData) {
         setEditTripName(tripData.name);
-        setEditTripDate(tripData.createdAt ? new Date(tripData.createdAt).toISOString().split('T')[0] : '');
+        // Si createdAt no existeix (cas molt vell), posem avui
+        const dateStr = tripData.createdAt ? tripData.createdAt : new Date().toISOString();
+        setEditTripDate(dateStr.split('T')[0]);
     }
   }, [tripData]);
 
-  // Guardem l'últim viatge visitat
   useEffect(() => { if (tripId) localStorage.setItem('cc-last-trip-id', tripId); }, [tripId]);
 
-  // --- MIGRATE ON LOAD (Legacy support) ---
+  // --- MIGRACIÓ AUTOMÀTICA (SILENT FIX) ---
   useEffect(() => {
       if (!tripData || !tripId) return;
-      if (tripData.users.length > 0 && typeof tripData.users[0] === 'string') {
-          // @ts-ignore
-          const migratedUsers = tripData.users.map((name: any) => ({ id: crypto.randomUUID(), name: name }));
-          const migratedExpenses = tripData.expenses.map(exp => {
-              const payerUser = migratedUsers.find(u => u.name === exp.payer);
-              const newInvolved = exp.involved.map(invName => {
-                  const invUser = migratedUsers.find(u => u.name === invName);
-                  return invUser ? invUser.id : invName;
+
+      const performMigration = async () => {
+          let needsUpdate = false;
+          let newUsers = [...tripData.users];
+          let newExpenses = [...tripData.expenses];
+
+          // 1. Migració d'Usuaris (String -> Objecte)
+          if (newUsers.length > 0 && typeof newUsers[0] === 'string') {
+              // @ts-ignore
+              newUsers = newUsers.map((name: any) => ({ 
+                  id: crypto.randomUUID(), 
+                  name: name,
+                  isDeleted: false 
+              }));
+              needsUpdate = true;
+          }
+
+          // 2. Reparació de Despeses (Noms -> IDs)
+          const userIds = newUsers.map(u => u.id);
+          // Detectem si hi ha despeses on el pagador no és un ID conegut
+          const hasBrokenExpenses = newExpenses.some(exp => !userIds.includes(exp.payer));
+
+          if (hasBrokenExpenses) {
+              needsUpdate = true;
+              newExpenses = newExpenses.map(exp => {
+                  const payerUser = newUsers.find(u => u.name === exp.payer);
+                  
+                  const newInvolved = exp.involved.map(invVal => {
+                      const invUser = newUsers.find(u => u.name === invVal);
+                      return invUser ? invUser.id : invVal;
+                  });
+
+                  let newSplitDetails = {};
+                  if (exp.splitDetails) {
+                      newSplitDetails = Object.fromEntries(Object.entries(exp.splitDetails).map(([key, val]) => {
+                          const u = newUsers.find(user => user.name === key);
+                          return [u ? u.id : key, val];
+                      }));
+                  }
+
+                  return {
+                      ...exp,
+                      payer: payerUser ? payerUser.id : exp.payer,
+                      involved: newInvolved,
+                      splitDetails: newSplitDetails
+                  };
               });
-              return { ...exp, payer: payerUser ? payerUser.id : exp.payer, involved: newInvolved };
-          });
-          TripService.updateTrip(tripId, { users: migratedUsers, expenses: migratedExpenses })
-            .then(() => window.location.reload());
-      }
+          }
+
+          if (needsUpdate) {
+              console.log("🛠️ Reparació automàtica de dades antigues executada.");
+              try {
+                  await TripService.updateTrip(tripId, { users: newUsers, expenses: newExpenses });
+                  window.location.reload();
+              } catch (e) {
+                  console.error("Error en la migració automàtica", e);
+              }
+          }
+      };
+
+      performMigration();
   }, [tripData, tripId]);
 
-  const { users, currency = CURRENCIES[0], name, createdAt } = tripData || { users: [], expenses: [] };
+  const { users, currency = CURRENCIES[0], name, createdAt, logs = [] } = tripData || { users: [], expenses: [] };
   
-  // Càlculs
   const { filteredExpenses, balances, categoryStats, settlements, totalGroupSpending, displayedTotal } = useTripCalculations(expenses, users || [], searchQuery, filterCategory);
 
   // --- ACCIONS ---
@@ -147,7 +197,6 @@ export default function TripPage({ user }: TripPageProps) {
           } else {
              // @ts-ignore
              if (TripService.removeMemberAccess) {
-                 // @ts-ignore
                  await TripService.removeMemberAccess(tripId, user.uid);
                  window.location.href = '/';
              } else {
@@ -158,37 +207,6 @@ export default function TripPage({ user }: TripPageProps) {
           console.error(error);
           showToast("Error al sortir del grup", 'error'); 
       }
-  };
-
-  const handleForceMigration = async () => {
-      if (!tripData || !tripId) return;
-      if (!confirm("Això intentarà arreglar les despeses antigues que surten amb '???'. Continuar?")) return;
-      try {
-          const currentUsers = tripData.users as TripUser[];
-          const fixedExpenses = tripData.expenses.map(exp => {
-                const payerUser = currentUsers.find(u => u.name === exp.payer);
-                const newInvolved = exp.involved.map(invVal => {
-                    const invUser = currentUsers.find(u => u.name === invVal);
-                    return invUser ? invUser.id : invVal;
-                });
-                let newSplitDetails = {};
-                if (exp.splitDetails) {
-                    newSplitDetails = Object.fromEntries(Object.entries(exp.splitDetails).map(([key, val]) => {
-                        const u = currentUsers.find(user => user.name === key);
-                        return [u ? u.id : key, val];
-                    }));
-                }
-                return {
-                    ...exp,
-                    payer: payerUser ? payerUser.id : exp.payer,
-                    involved: newInvolved,
-                    splitDetails: newSplitDetails
-                };
-          });
-          await TripService.updateTrip(tripId, { expenses: fixedExpenses });
-          showToast("Reparació completada!", 'success');
-          setSettingsModalOpen(false);
-      } catch (e) { showToast("Error durant la reparació", 'error'); }
   };
 
   const executeConfirmation = async () => {
@@ -209,7 +227,6 @@ export default function TripPage({ user }: TripPageProps) {
   const canChangeCurrency = expenses.length === 0;
 
   return (
-    // AFEGIT: dark:bg-slate-950 dark:text-slate-100
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 pb-24 md:pb-10 transition-colors duration-300">
       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
       
@@ -218,21 +235,11 @@ export default function TripPage({ user }: TripPageProps) {
         displayedTotal={displayedTotal} totalGroupSpending={totalGroupSpending} currency={currency}
         isFiltered={!!searchQuery || filterCategory !== 'all'}
         onOpenSettings={() => setSettingsModalOpen(true)}
-        
-        onOpenGroup={() => {
-            setGroupModalTab('members');
-            setGroupModalOpen(true);
-        }}
-        
+        onOpenGroup={() => { setGroupModalTab('members'); setGroupModalOpen(true); }}
         onExportPDF={() => generatePDF(name, expenses, balances, settlements, users, currency.symbol)}
-        
-        onOpenShare={() => { 
-            setGroupModalTab('share');
-            setGroupModalOpen(true);
-        }}
+        onOpenShare={() => { setGroupModalTab('share'); setGroupModalOpen(true); }}
       />
 
-      {/* BANNER DE CONVIDAT */}
       {!isMember && user && (
           <div className="bg-indigo-600 dark:bg-indigo-700 text-white px-4 py-3 text-center shadow-md relative z-30 animate-fade-in">
               <div className="max-w-3xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2">
@@ -245,54 +252,66 @@ export default function TripPage({ user }: TripPageProps) {
       )}
 
       <main className="max-w-3xl mx-auto px-4 relative z-20 mt-6">
-        {/* PESTANYES (TABS) */}
-        {/* AFEGIT: dark:bg-slate-900 dark:border-slate-800 */}
         <div className="flex p-1.5 bg-white dark:bg-slate-900 rounded-2xl mb-6 shadow-sm border border-slate-200 dark:border-slate-800">
           {(['expenses', 'balances', 'settle'] as const).map(tab => (
             <button 
                 key={tab} 
                 onClick={() => setActiveTab(tab)} 
-                className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all 
+                className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2
                 ${activeTab === tab 
                     ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 shadow-sm' 
                     : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
                 }`}
             >
-                {tab === 'expenses' ? 'Despeses' : tab === 'balances' ? 'Balanç' : 'Liquidar'}
+                {tab === 'expenses' && <Receipt size={16} />}
+                {tab === 'balances' && <Wallet size={16} />}
+                {tab === 'settle' && <CheckCircle2 size={16} />}
+                <span className="hidden sm:inline">
+                    {tab === 'expenses' ? 'Despeses' : tab === 'balances' ? 'Balanç' : 'Liquidar'}
+                </span>
+                <span className="sm:hidden">
+                    {tab === 'expenses' ? 'Llista' : tab === 'balances' ? 'Balanç' : 'Deutes'}
+                </span>
             </button>
           ))}
         </div>
 
-        {activeTab === 'expenses' && <ExpensesList expenses={filteredExpenses} searchQuery={searchQuery} setSearchQuery={setSearchQuery} filterCategory={filterCategory} setFilterCategory={setFilterCategory} onEdit={(e) => { setEditingExpense(e); setIsExpenseModalOpen(true); }} currency={currency} users={users} />}
+        {/* --- EMPTY STATE --- */}
+        {activeTab === 'expenses' && expenses.length === 0 && !searchQuery && filterCategory === 'all' ? (
+             <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in">
+                <div className="bg-indigo-50 dark:bg-indigo-900/20 p-6 rounded-full mb-4">
+                    <Receipt size={48} className="text-indigo-400 dark:text-indigo-500" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-700 dark:text-slate-200 mb-2">No hi ha despeses</h3>
+                <p className="text-slate-500 dark:text-slate-400 max-w-xs mb-6">Afegeix la primera despesa per començar a dividir comptes.</p>
+                <Button onClick={() => { setEditingExpense(null); setIsExpenseModalOpen(true); }} icon={Plus}>Afegir Despesa</Button>
+             </div>
+        ) : (
+            <>
+                {activeTab === 'expenses' && <ExpensesList expenses={filteredExpenses} searchQuery={searchQuery} setSearchQuery={setSearchQuery} filterCategory={filterCategory} setFilterCategory={setFilterCategory} onEdit={(e) => { setEditingExpense(e); setIsExpenseModalOpen(true); }} currency={currency} users={users} />}
+            </>
+        )}
+
         {activeTab === 'balances' && <BalancesView balances={balances} categoryStats={categoryStats} currency={currency} users={users} />}
         {activeTab === 'settle' && <SettlementsView settlements={settlements} onSettle={setSettleModalOpen} currency={currency} users={users} />}
       </main>
       
-      {/* BOTÓ FLOTANT (FAB) */}
-      <button onClick={() => { setEditingExpense(null); setIsExpenseModalOpen(true); }} className="fixed bottom-6 right-6 md:right-[calc(50%-350px)] bg-indigo-600 text-white p-4 rounded-2xl shadow-xl hover:bg-indigo-700 transition-all z-40 shadow-indigo-200 dark:shadow-none"><Plus size={28} /></button>
+      <button onClick={() => { setEditingExpense(null); setIsExpenseModalOpen(true); }} className="fixed bottom-6 right-6 md:right-[calc(50%-350px)] bg-indigo-600 text-white p-4 rounded-2xl shadow-xl hover:bg-indigo-700 transition-all z-40 shadow-indigo-200 dark:shadow-none active:scale-95"><Plus size={28} /></button>
       
-      {/* MODALS */}
       <ExpenseModal isOpen={isExpenseModalOpen} onClose={() => setIsExpenseModalOpen(false)} initialData={editingExpense} users={users} currency={currency} tripId={tripId!} onDelete={(id) => setConfirmAction({ type: 'delete_expense', id, title: 'Eliminar?', message: 'Segur?' })} showToast={showToast} />
+      <GroupModal isOpen={groupModalOpen} onClose={() => setGroupModalOpen(false)} trip={tripData} showToast={showToast} onUpdateTrip={() => {}} initialTab={groupModalTab}/>
       
-      <GroupModal 
-        isOpen={groupModalOpen} 
-        onClose={() => setGroupModalOpen(false)} 
-        trip={tripData} 
-        showToast={showToast} 
-        onUpdateTrip={() => { /* Firebase auto-updates */ }} 
-        initialTab={groupModalTab}
-      />
-      
-      {/* MODAL CONFIGURACIÓ (Inline) */}
+      <ActivityModal isOpen={activityModalOpen} onClose={() => setActivityModalOpen(false)} logs={logs} />
+
       <Modal isOpen={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} title="Configuració del Grup">
         <div className="space-y-6">
           <div>
             <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">Nom</label>
-            <input type="text" className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:text-white rounded-xl outline-none" value={editTripName} onChange={e => setEditTripName(e.target.value)} />
+            <input type="text" className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:text-white rounded-xl outline-none focus:ring-2 ring-indigo-500/20 transition-all" value={editTripName} onChange={e => setEditTripName(e.target.value)} />
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">Data</label>
-            <input type="date" className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:text-white rounded-xl outline-none" value={editTripDate} onChange={e => setEditTripDate(e.target.value)} />
+            <input type="date" className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:text-white rounded-xl outline-none focus:ring-2 ring-indigo-500/20 transition-all" value={editTripDate} onChange={e => setEditTripDate(e.target.value)} />
           </div>
           
           <div>
@@ -312,11 +331,14 @@ export default function TripPage({ user }: TripPageProps) {
           </div>
           <Button onClick={handleUpdateTrip}>Guardar canvis</Button>
 
+          {/* HISTORIAL */}
+          <button onClick={() => { setSettingsModalOpen(false); setActivityModalOpen(true); }} className="w-full p-3 flex items-center justify-center gap-2 text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 font-bold rounded-xl transition-colors">
+              <History size={18}/> Veure Historial d'Activitat
+          </button>
+
           <div className="border-t border-slate-100 dark:border-slate-800 pt-4 space-y-3">
              <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase">Zona de Perill</h4>
-             <button onClick={handleForceMigration} className="w-full p-3 flex items-center justify-center gap-2 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/30 font-bold rounded-xl transition-colors">
-                <Wrench size={18}/> Reparar Dades Antigues
-             </button>
+             {/* BOTÓ REPARAR ELIMINAT */}
              <button onClick={handleLeaveTrip} className="w-full p-3 flex items-center justify-center gap-2 text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/30 font-bold rounded-xl transition-colors">
                 <LogOut size={18}/> Abandonar Grup
              </button>
@@ -326,7 +348,6 @@ export default function TripPage({ user }: TripPageProps) {
 
       <Modal isOpen={!!confirmAction} onClose={() => setConfirmAction(null)} title={confirmAction?.title || 'Confirmació'}><div className="space-y-6 text-center"><div className="py-2"><p className="text-slate-600 dark:text-slate-300">{confirmAction?.message}</p></div>{confirmAction?.type === 'info' ? <Button onClick={() => setConfirmAction(null)} className="w-full">Entesos</Button> : <div className="flex gap-3"><Button variant="secondary" onClick={() => setConfirmAction(null)} className="flex-1">Cancel·lar</Button><Button variant="danger" onClick={executeConfirmation} className="flex-1" icon={Trash2}>Eliminar</Button></div>}</div></Modal>
       
-      {/* MODAL LIQUIDAR (Inline) */}
       <Modal isOpen={!!settleModalOpen} onClose={() => setSettleModalOpen(null)} title="Confirmar Pagament">
         {settleModalOpen && (
           <div className="space-y-6 text-center">

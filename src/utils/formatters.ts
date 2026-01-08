@@ -4,16 +4,15 @@ import { Currency } from '../types';
 export const formatMoney = (amount: number, currency: Currency) => {
   if (amount === undefined || amount === null || isNaN(amount)) return '0.00';
   
+  // TORNEM A DIVIDIR PER 100 (Estàndard de Cèntims)
   return new Intl.NumberFormat(currency?.locale || 'ca-ES', { 
     style: 'currency', 
     currency: currency?.code || 'EUR' 
   }).format(amount / 100);
 };
 
-// Alias: permet que els components que busquen 'formatCurrency' també funcionin
 export const formatCurrency = formatMoney;
 
-// Formatador de dates curt (ex: "12 gen.")
 export const formatDate = (d: string) => {
   if (!d) return '';
   try {
@@ -23,5 +22,4 @@ export const formatDate = (d: string) => {
   }
 };
 
-// Alias: permet que ExpensesList trobi 'formatDateDisplay'
 export const formatDateDisplay = formatDate;

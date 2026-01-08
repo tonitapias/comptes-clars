@@ -29,7 +29,6 @@ interface LandingPageProps {
 type ActionState = 'idle' | 'creating' | 'joining';
 type AuthMode = 'initial' | 'login-email' | 'signup-email';
 
-// --- COMPONENT VISUAL: FEATURE CARD (ESTIL BENTO) ---
 function BentoCard({ icon: Icon, title, desc, color }: any) {
     return (
       <div className="group relative overflow-hidden bg-white/60 dark:bg-slate-800/60 backdrop-blur-md p-6 rounded-3xl border border-white/50 dark:border-white/10 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
@@ -205,7 +204,19 @@ export default function LandingPage({ user }: LandingPageProps) {
     if (!inputValue.trim()) return;
 
     if (actionState === 'joining') {
-        navigate(`/trip/${inputValue}`);
+        setIsSubmitting(true);
+        try {
+            if (user) {
+                await TripService.joinTripViaLink(inputValue.trim(), user);
+                navigate(`/trip/${inputValue.trim()}`);
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Error: No s'ha pogut trobar el grup o unir-s'hi. Revisa el codi.");
+        } finally {
+            setIsSubmitting(false);
+        }
+
     } else if (actionState === 'creating' && user) {
         const defaultName = user.displayName?.split(' ')[0] || user.email?.split('@')[0] || 'Admin';
         const finalName = creatorName.trim() || defaultName;
@@ -214,15 +225,15 @@ export default function LandingPage({ user }: LandingPageProps) {
         try {
             const newId = Math.random().toString(36).substring(2, 9);
             
-            // CREACIÓ DE L'USUARI (Corregit amb TripUser)
+            // CORRECCIÓ: Objecte net sense undefineds
             const newTripUser: TripUser = {
                 id: crypto.randomUUID(),
                 name: finalName,
-                email: user.email || undefined,
                 isAuth: true,
                 linkedUid: user.uid,
-                photoUrl: user.photoURL || null,
-                isDeleted: false
+                isDeleted: false,
+                ...(user.email ? { email: user.email } : {}),
+                ...(user.photoURL ? { photoUrl: user.photoURL } : {})
             };
 
             const newTrip: TripData = { 
@@ -296,7 +307,6 @@ export default function LandingPage({ user }: LandingPageProps) {
            {user ? (
              <div className="flex items-center gap-3 bg-white/60 dark:bg-slate-800/60 backdrop-blur-md px-2 py-1.5 rounded-full border border-white/50 dark:border-white/10 shadow-sm">
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 p-0.5">
-                    {/* SOLUCIÓ APLICADA AQUÍ (NAVBAR) */}
                     <img 
                       src={user.photoURL || `https://ui-avatars.com/api/?name=${userName}`} 
                       className="w-full h-full rounded-full object-cover border-2 border-white dark:border-slate-800" 
