@@ -7,7 +7,8 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'maskable-icon.png'],
+      // Aquesta llista força que s'incloguin al paquet final
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'maskable-icon-512x512.png', 'logo.svg'],
       manifest: {
         name: 'Comptes Clars',
         short_name: 'Comptes',
@@ -19,11 +20,6 @@ export default defineConfig({
         start_url: '/',
         icons: [
           {
-            src: 'pwa-64x64.png',
-            sizes: '64x64',
-            type: 'image/png'
-          },
-          {
             src: 'pwa-192x192.png',
             sizes: '192x192',
             type: 'image/png'
@@ -32,7 +28,7 @@ export default defineConfig({
             src: 'pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any'  
+            purpose: 'any'
           },
           {
             src: 'maskable-icon-512x512.png',
@@ -56,12 +52,5 @@ export default defineConfig({
         }
       }
     }
-  },
-  // --- CONFIGURACIÓ NETEJA (Sense headers) ---
-  server: {
-    // Deixem que el navegador faci servir els valors per defecte
-  },
-  preview: {
-    // Deixem que el navegador faci servir els valors per defecte
-  },
+  }
 });
