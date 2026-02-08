@@ -39,7 +39,11 @@ export interface Expense {
   involved: string[];
   date: string;         
   splitType?: SplitType; 
-  splitDetails?: Record<string, number>; 
+  splitDetails?: Record<string, number>;
+  receiptUrl?: string;
+  originalAmount?: number;      
+  originalCurrency?: CurrencyCode; 
+  exchangeRate?: number;        
 }
 
 // --- NOVETAT: ESTRUCTURA DEL LOG ---

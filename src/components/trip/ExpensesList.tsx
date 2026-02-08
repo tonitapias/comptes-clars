@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Receipt, Plus, ArrowRightLeft } from 'lucide-react';
+import { Search, Receipt, Plus, ArrowRightLeft, Paperclip } from 'lucide-react';
 import Card from '../Card';
 import Button from '../Button';
 import { CATEGORIES } from '../../utils/constants';
@@ -93,6 +93,10 @@ export default function ExpensesList({
                 const photoUrl = getUserPhoto(expense.payer);
                 const avatarClass = photoUrl ? 'bg-white' : getAvatarColor(payerName);
                 
+                // --- LÒGICA MULTI-DIVISA ---
+                // Mirem si hi ha una moneda original i si és diferent a la del grup
+                const hasForeignCurrency = expense.originalCurrency && expense.originalCurrency !== currency.code;
+
                 return (
                   <Card key={expense.id} className={`hover:shadow-md transition-all group ${isTransfer ? 'bg-slate-50 dark:bg-slate-800/50' : 'bg-white dark:bg-slate-900'}`} onClick={() => onEdit(expense)}>
                     <div className="flex items-center p-4 cursor-pointer">
@@ -104,10 +108,27 @@ export default function ExpensesList({
                       
                       <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-start">
-                            {/* TÍTOL */}
-                            <h4 className={`font-bold truncate ${isTransfer ? 'text-slate-600 dark:text-slate-400 italic' : 'text-slate-800 dark:text-white'}`}>
-                                {expense.title}
-                            </h4>
+                            {/* TÍTOL I TIQUET */}
+                            <div className="flex items-center gap-2 overflow-hidden">
+                                <h4 className={`font-bold truncate ${isTransfer ? 'text-slate-600 dark:text-slate-400 italic' : 'text-slate-800 dark:text-white'}`}>
+                                    {expense.title}
+                                </h4>
+                                
+                                {/* Icona de clip si hi ha URL */}
+                                {expense.receiptUrl && (
+                                    <a 
+                                        href={expense.receiptUrl} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => e.stopPropagation()} 
+                                        className="p-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded hover:bg-indigo-100 transition-colors shrink-0"
+                                        title="Veure tiquet"
+                                    >
+                                        <Paperclip size={12} strokeWidth={2.5}/>
+                                    </a>
+                                )}
+                            </div>
+
                             {/* DATA */}
                             <span className="text-xs text-slate-400 dark:text-slate-500 font-medium bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-100 dark:border-slate-700 ml-2 whitespace-nowrap transition-colors">
                                 {formatDateDisplay(expense.date)}
@@ -120,7 +141,6 @@ export default function ExpensesList({
                                 {/* AVATAR */}
                                 <div className={`w-5 h-5 rounded-full overflow-hidden flex items-center justify-center text-[9px] font-bold border border-white dark:border-slate-600 shadow-sm ${avatarClass}`}>
                                     {photoUrl ? (
-                                        // CORRECCIÓ: Afegit referrerPolicy
                                         <img src={photoUrl} className="w-full h-full object-cover" alt={payerName} referrerPolicy="no-referrer"/>
                                     ) : (
                                         payerName.charAt(0).toUpperCase()
@@ -147,6 +167,12 @@ export default function ExpensesList({
                         <span className={`font-bold text-lg ${isTransfer ? 'text-slate-500 dark:text-slate-500' : 'text-slate-800 dark:text-white'}`}>
                             {formatCurrency(expense.amount, currency)}
                         </span>
+                        {/* NOU: Mostrar import original si és divisa estrangera */}
+                        {hasForeignCurrency && (
+                            <span className="text-[10px] font-medium text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                                {expense.originalAmount?.toFixed(2)} {expense.originalCurrency}
+                            </span>
+                        )}
                       </div>
                     </div>
                   </Card>

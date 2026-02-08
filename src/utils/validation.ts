@@ -20,7 +20,11 @@ export const ExpenseSchema = z.object({
   involved: z.array(z.string()).min(1, "Hi ha d'haver almenys una persona involucrada"),
   date: z.string().datetime({ offset: true }).or(z.string().regex(/^\d{4}-\d{2}-\d{2}/)), 
   splitType: z.enum(['equal', 'exact', 'shares']).optional(),
-  splitDetails: z.record(z.string(), z.number()).optional()
+  splitDetails: z.record(z.string(), z.number()).optional(),
+  receiptUrl: z.string().url("L'enllaç de la imatge no és vàlid").optional().nullable(),
+  originalAmount: z.number().positive().optional(),
+  originalCurrency: z.enum(['EUR', 'USD', 'GBP', 'JPY', 'MXN']).optional(),
+  exchangeRate: z.number().positive().optional()
 });
 
 // Esquema per crear un viatge (CORREGIT)

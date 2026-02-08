@@ -94,7 +94,14 @@ export const TripService = {
     }
   },
 
-  leaveTrip: async (tripId: string, userIdToRemove: string) => {
+  leaveTrip: async (tripId: string, userIdToRemove: string, currentBalance: number = 0) => {
+    // 1. Validació de seguretat (NOU)
+    // Si rebem el balanç i no és zero, bloquegem l'operació.
+    // Utilitzem 0.01 com a marge d'error per decimals flotants.
+    if (Math.abs(currentBalance) > 0.01) {
+      throw new Error(`No es pot sortir del grup amb un saldo pendent de ${currentBalance.toFixed(2)}€. Si us plau, liquida els deutes abans de marxar.`);
+    }
+
     const tripRef = getTripRef(tripId);
     const snap = await getDoc(tripRef);
     
@@ -107,7 +114,7 @@ export const TripService = {
             const currentUser = auth.currentUser;
             const log: LogEntry = {
                 id: generateId(),
-                action: 'join',
+                action: 'join', // O 'leave' si tens aquest tipus definit, sinó 'join' o 'update'
                 message: `${userObj.name} ha marxat del grup`,
                 userId: currentUser?.uid || 'anonymous',
                 userName: userObj.name,
@@ -122,6 +129,7 @@ export const TripService = {
         const authUidToRemove = userObj.linkedUid;
 
         if (hasHistory) {
+            // Soft delete: L'usuari es queda però desactivat
             const updatedUsers = trip.users.map(u => {
                 if (u.id === userIdToRemove) {
                     return { ...u, linkedUid: null, isAuth: false, photoUrl: undefined, name: `${u.name} (Ex-membre)`, isDeleted: true };
@@ -129,7 +137,7 @@ export const TripService = {
                 return u;
             });
             
-            // neteja undefineds abans d'enviar
+            // neteja undefineds
             const cleanUsers = JSON.parse(JSON.stringify(updatedUsers));
             const updates: any = { users: cleanUsers };
             if (authUidToRemove) updates.memberUids = arrayRemove(authUidToRemove);
@@ -137,6 +145,7 @@ export const TripService = {
             await updateDoc(tripRef, updates);
 
         } else {
+            // Hard delete: Si no té historial, l'esborrem del tot
             const newUsers = trip.users.filter(u => u.id !== userIdToRemove);
             const updates: any = { users: newUsers };
             if (authUidToRemove) updates.memberUids = arrayRemove(authUidToRemove);

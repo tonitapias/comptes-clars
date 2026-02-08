@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, User as UserIcon, CheckSquare, Square, AlertCircle, Calculator, PieChart, Users, Lock } from 'lucide-react';
+import { X, Calendar, User as UserIcon, CheckSquare, Square, Calculator, PieChart, Users, Lock, Link, Globe, RefreshCcw } from 'lucide-react';
 import Modal from '../Modal';
 import Button from '../Button';
 import { CATEGORIES } from '../../utils/constants';
 import { TripService } from '../../services/tripService';
-import { TripUser, Currency, Expense, SplitType } from '../../types';
+import { TripUser, Currency, Expense, SplitType, CurrencyCode } from '../../types';
 import { ToastType } from '../Toast';
+
+// Llista de monedes suportades (ha de coincidir amb src/types/index.ts)
+const AVAILABLE_CURRENCIES: CurrencyCode[] = ['EUR', 'USD', 'GBP', 'JPY', 'MXN'];
 
 interface ExpenseModalProps {
   isOpen: boolean;
@@ -20,11 +23,20 @@ interface ExpenseModalProps {
 
 export default function ExpenseModal({ isOpen, onClose, initialData, users, currency, tripId, onDelete, showToast }: ExpenseModalProps) {
   const [title, setTitle] = useState('');
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState(''); // Import en moneda del GRUP (resultat)
   const [payer, setPayer] = useState('');
   const [category, setCategory] = useState(CATEGORIES[0].id);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   
+  // URL del tiquet
+  const [receiptUrl, setReceiptUrl] = useState('');
+
+  // --- Multi-divisa ---
+  const [isForeignCurrency, setIsForeignCurrency] = useState(false);
+  const [foreignAmount, setForeignAmount] = useState('');
+  const [foreignCurrency, setForeignCurrency] = useState<CurrencyCode>('USD');
+  const [exchangeRate, setExchangeRate] = useState('1.00');
+
   const [splitType, setSplitType] = useState<SplitType>('equal');
   const [involved, setInvolved] = useState<string[]>([]);
   const [splitDetails, setSplitDetails] = useState<Record<string, number>>({});
@@ -35,15 +47,28 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
     if (isOpen) {
       if (initialData) {
         setTitle(initialData.title);
-        // CONVERSIÓ CÈNTIMS -> UNITATS PER EDITAR
+        // L'import principal sempre es mostra en moneda del grup
         setAmount((initialData.amount / 100).toFixed(2));
         setPayer(initialData.payer);
         setCategory(initialData.category);
         setDate(initialData.date.split('T')[0]);
         setSplitType(initialData.splitType || 'equal');
         setInvolved(initialData.involved || []);
+        setReceiptUrl(initialData.receiptUrl || '');
 
-        // Si el repartiment és exacte, els detalls també venen en cèntims
+        // Càrrega Multi-divisa
+        if (initialData.originalCurrency && initialData.originalCurrency !== currency.code) {
+            setIsForeignCurrency(true);
+            setForeignAmount(initialData.originalAmount?.toString() || '');
+            setForeignCurrency(initialData.originalCurrency);
+            setExchangeRate(initialData.exchangeRate?.toString() || '1.00');
+        } else {
+            setIsForeignCurrency(false);
+            setForeignAmount('');
+            setForeignCurrency(currency.code === 'USD' ? 'EUR' : 'USD'); // Per defecte una diferent a la del grup
+            setExchangeRate('1.00');
+        }
+
         const details = initialData.splitDetails || {};
         if (initialData.splitType === 'exact') {
             const unitsDetails: Record<string, number> = {};
@@ -56,6 +81,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
         }
 
       } else {
+        // Reset per Nova Despesa
         setTitle('');
         setAmount('');
         const firstValidUser = users.find(u => !u.isDeleted);
@@ -65,13 +91,34 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
         setDate(new Date().toISOString().split('T')[0]);
         setSplitType('equal');
         setSplitDetails({});
+        setReceiptUrl('');
+        
+        // Reset Multi-divisa
+        setIsForeignCurrency(false);
+        setForeignAmount('');
+        setForeignCurrency(currency.code === 'USD' ? 'EUR' : 'USD');
+        setExchangeRate('1.00');
       }
     }
-  }, [isOpen, initialData, users]);
+  }, [isOpen, initialData, users, currency.code]);
+
+  // Càlcul automàtic quan canvien els valors estrangers
+  useEffect(() => {
+      if (isForeignCurrency) {
+          const fAmount = parseFloat(foreignAmount) || 0;
+          const rate = parseFloat(exchangeRate) || 0;
+          if (fAmount > 0 && rate > 0) {
+              // Calculem l'equivalent en moneda del grup
+              const calculated = fAmount * rate;
+              setAmount(calculated.toFixed(2));
+          }
+      }
+  }, [foreignAmount, exchangeRate, isForeignCurrency]);
 
   // Validació
   const currentTotalDetails = Object.values(splitDetails).reduce((a, b) => a + b, 0);
   const amountNum = parseFloat(amount) || 0;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const isExactMismatch = splitType === 'exact' && Math.abs(amountNum - currentTotalDetails) > 0.05;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -95,19 +142,16 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
         }
     }
 
-    // Auto-fix per arrodoniment
     if (splitType === 'exact' && Math.abs(amountNum - currentTotalDetails) > 0.05) {
          setAmount(currentTotalDetails.toFixed(2));
     }
 
     setIsSubmitting(true);
     try {
-      // PREPARAR DADES PER GUARDAR (CÈNTIMS)
       const finalAmountCents = Math.round(parseFloat(amount) * 100);
       
       let finalDetails = splitDetails;
       if (splitType === 'exact') {
-          // Convertim els detalls a cèntims també
           finalDetails = {};
           Object.entries(splitDetails).forEach(([uid, val]) => {
               finalDetails[uid] = Math.round(val * 100);
@@ -116,15 +160,22 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
           finalDetails = {};
       }
 
+      // Preparem objecte amb dades extra de divisa
       const expenseData = {
         title: title.trim(),
-        amount: finalAmountCents, // Guardem CÈNTIMS
+        amount: finalAmountCents,
         payer,
         category,
         involved: finalInvolved,
         date: new Date(date).toISOString(),
         splitType,
-        splitDetails: finalDetails
+        splitDetails: finalDetails,
+        receiptUrl: receiptUrl.trim() || null,
+        
+        // Camps Multi-divisa
+        originalAmount: isForeignCurrency ? parseFloat(foreignAmount) : undefined,
+        originalCurrency: isForeignCurrency ? foreignCurrency : undefined,
+        exchangeRate: isForeignCurrency ? parseFloat(exchangeRate) : undefined
       };
 
       if (initialData) {
@@ -166,13 +217,74 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
   const handleSelectOnlyPayer = () => { if (payer) setInvolved([payer]); };
 
   const activeUsers = users.filter(u => !u.isDeleted);
-  const isAutoSumMode = splitType === 'exact';
+  const isAutoSumMode = splitType === 'exact' || isForeignCurrency; // Bloqueja l'import final si és divisa estrangera
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={initialData ? 'Editar Despesa' : 'Nova Despesa'}>
       <form onSubmit={handleSubmit} className="space-y-5">
         
-        {/* Import i Títol */}
+        {/* Toggle Multi-divisa */}
+        <div className="flex justify-end">
+            <button 
+                type="button" 
+                onClick={() => setIsForeignCurrency(!isForeignCurrency)}
+                className={`text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-full transition-all ${isForeignCurrency ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}
+            >
+                <Globe size={12}/> {isForeignCurrency ? 'Moneda Estrangera Activa' : 'Canviar Divisa?'}
+            </button>
+        </div>
+
+        {/* INPUTS DE DIVISA ESTRANGERA (Condicional) */}
+        {isForeignCurrency && (
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 animate-fade-in">
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Import Original</label>
+                        <div className="flex gap-2">
+                             <select 
+                                value={foreignCurrency}
+                                onChange={(e) => setForeignCurrency(e.target.value as CurrencyCode)}
+                                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold p-2 outline-none"
+                             >
+                                 {AVAILABLE_CURRENCIES.filter(c => c !== currency.code).map(c => (
+                                     <option key={c} value={c}>{c}</option>
+                                 ))}
+                             </select>
+                             <input 
+                                type="number" step="0.01" min="0.01" placeholder="0.00"
+                                className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none font-bold"
+                                value={foreignAmount}
+                                onChange={(e) => setForeignAmount(e.target.value)}
+                                autoFocus
+                             />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 flex items-center gap-1">
+                            <RefreshCcw size={10}/> Tipus de Canvi
+                        </label>
+                        <div className="relative">
+                            <input 
+                                type="number" step="0.0001" min="0.0001" placeholder="1.00"
+                                className="w-full p-2 pl-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none font-bold"
+                                value={exchangeRate}
+                                onChange={(e) => setExchangeRate(e.target.value)}
+                            />
+                            <span className="absolute right-2 top-2.5 text-[10px] text-slate-400">
+                                1 {foreignCurrency} = {exchangeRate} {currency.code}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div className="text-right">
+                     <p className="text-xs text-slate-400">
+                        Total calculat: <span className="font-bold text-indigo-600 dark:text-indigo-400">{amount || '0.00'} {currency.symbol}</span>
+                     </p>
+                </div>
+            </div>
+        )}
+
+        {/* Import i Títol ESTÀNDARD */}
         <div className="flex gap-3">
             <div className="flex-1">
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Concepte</label>
@@ -180,7 +292,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
             </div>
             <div className="w-1/3">
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 flex items-center gap-1">
-                    Import {isAutoSumMode && <Lock size={10} className="text-indigo-500"/>}
+                    Total ({currency.code}) {isAutoSumMode && <Lock size={10} className="text-indigo-500"/>}
                 </label>
                 <div className="relative">
                     <input 
@@ -189,7 +301,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                         step="0.01" 
                         min="0.01" 
                         placeholder="0.00" 
-                        readOnly={isAutoSumMode}
+                        readOnly={isAutoSumMode} // Es bloqueja si és automàtic o divisa estrangera
                         className={`w-full p-3 pl-8 border border-slate-200 dark:border-slate-700 dark:text-white rounded-xl outline-none transition-all font-mono font-bold
                         ${isAutoSumMode 
                             ? 'bg-slate-100 dark:bg-slate-900 text-slate-500 cursor-not-allowed border-indigo-200 dark:border-indigo-900/50' 
@@ -236,6 +348,20 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
             </div>
         </div>
 
+        {/* INPUT DE TIQUET */}
+        <div>
+            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 flex items-center gap-1">
+                <Link size={12}/> Enllaç del Tiquet / Foto
+            </label>
+            <input 
+                type="url" 
+                placeholder="https://..." 
+                className="w-full p-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:text-white rounded-xl outline-none focus:ring-2 ring-indigo-500/20 transition-all placeholder:text-slate-400" 
+                value={receiptUrl} 
+                onChange={e => setReceiptUrl(e.target.value)} 
+            />
+        </div>
+
         {/* REPARTIMENT */}
         <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
             <div className="flex items-center justify-between mb-3">
@@ -252,7 +378,6 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                 </div>
             </div>
 
-            {/* Contingut Repartiment (Igual que abans, però la lògica d'estat ja gestiona unitats vs cèntims al Submit) */}
             {splitType === 'equal' && (
                 <div className="animate-fade-in">
                      <div className="flex justify-end gap-1 mb-2">
