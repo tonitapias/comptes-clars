@@ -7,7 +7,7 @@ import { TripService } from '../../services/tripService';
 import { TripUser, Currency, Expense, SplitType, CurrencyCode } from '../../types';
 import { ToastType } from '../Toast';
 
-// Llista de monedes suportades (ha de coincidir amb src/types/index.ts)
+// Llista de monedes suportades
 const AVAILABLE_CURRENCIES: CurrencyCode[] = ['EUR', 'USD', 'GBP', 'JPY', 'MXN'];
 
 interface ExpenseModalProps {
@@ -23,7 +23,7 @@ interface ExpenseModalProps {
 
 export default function ExpenseModal({ isOpen, onClose, initialData, users, currency, tripId, onDelete, showToast }: ExpenseModalProps) {
   const [title, setTitle] = useState('');
-  const [amount, setAmount] = useState(''); // Import en moneda del GRUP (resultat)
+  const [amount, setAmount] = useState(''); // Import en moneda del GRUP
   const [payer, setPayer] = useState('');
   const [category, setCategory] = useState(CATEGORIES[0].id);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -47,7 +47,6 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
     if (isOpen) {
       if (initialData) {
         setTitle(initialData.title);
-        // L'import principal sempre es mostra en moneda del grup
         setAmount((initialData.amount / 100).toFixed(2));
         setPayer(initialData.payer);
         setCategory(initialData.category);
@@ -65,7 +64,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
         } else {
             setIsForeignCurrency(false);
             setForeignAmount('');
-            setForeignCurrency(currency.code === 'USD' ? 'EUR' : 'USD'); // Per defecte una diferent a la del grup
+            setForeignCurrency(currency.code === 'USD' ? 'EUR' : 'USD');
             setExchangeRate('1.00');
         }
 
@@ -81,7 +80,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
         }
 
       } else {
-        // Reset per Nova Despesa
+        // Reset
         setTitle('');
         setAmount('');
         const firstValidUser = users.find(u => !u.isDeleted);
@@ -93,7 +92,6 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
         setSplitDetails({});
         setReceiptUrl('');
         
-        // Reset Multi-divisa
         setIsForeignCurrency(false);
         setForeignAmount('');
         setForeignCurrency(currency.code === 'USD' ? 'EUR' : 'USD');
@@ -102,29 +100,23 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
     }
   }, [isOpen, initialData, users, currency.code]);
 
-  // Càlcul automàtic quan canvien els valors estrangers
+  // Càlcul automàtic
   useEffect(() => {
       if (isForeignCurrency) {
           const fAmount = parseFloat(foreignAmount) || 0;
           const rate = parseFloat(exchangeRate) || 0;
           if (fAmount > 0 && rate > 0) {
-              // Calculem l'equivalent en moneda del grup
               const calculated = fAmount * rate;
               setAmount(calculated.toFixed(2));
           }
       }
   }, [foreignAmount, exchangeRate, isForeignCurrency]);
 
-  // Validació
-  const currentTotalDetails = Object.values(splitDetails).reduce((a, b) => a + b, 0);
-  const amountNum = parseFloat(amount) || 0;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const isExactMismatch = splitType === 'exact' && Math.abs(amountNum - currentTotalDetails) > 0.05;
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title || !amount || !payer) return;
 
+    // ... (validacions anteriors iguals)
     if (splitType === 'equal' && involved.length === 0) {
         showToast("Selecciona almenys una persona", 'error');
         return;
@@ -142,6 +134,8 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
         }
     }
 
+    const amountNum = parseFloat(amount) || 0;
+    const currentTotalDetails = Object.values(splitDetails).reduce((a, b) => a + b, 0);
     if (splitType === 'exact' && Math.abs(amountNum - currentTotalDetails) > 0.05) {
          setAmount(currentTotalDetails.toFixed(2));
     }
@@ -160,8 +154,8 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
           finalDetails = {};
       }
 
-      // Preparem objecte amb dades extra de divisa
-      const expenseData = {
+      // CORRECCIÓ: Construïm l'objecte pas a pas per evitar 'undefined'
+      const expenseData: any = {
         title: title.trim(),
         amount: finalAmountCents,
         payer,
@@ -170,13 +164,15 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
         date: new Date(date).toISOString(),
         splitType,
         splitDetails: finalDetails,
-        receiptUrl: receiptUrl.trim() || null,
-        
-        // Camps Multi-divisa
-        originalAmount: isForeignCurrency ? parseFloat(foreignAmount) : undefined,
-        originalCurrency: isForeignCurrency ? foreignCurrency : undefined,
-        exchangeRate: isForeignCurrency ? parseFloat(exchangeRate) : undefined
+        receiptUrl: receiptUrl.trim() || null
       };
+
+      // Només afegim les claus si realment tenen valor
+      if (isForeignCurrency) {
+          expenseData.originalAmount = parseFloat(foreignAmount);
+          expenseData.originalCurrency = foreignCurrency;
+          expenseData.exchangeRate = parseFloat(exchangeRate);
+      }
 
       if (initialData) {
         await TripService.updateExpense(tripId, String(initialData.id), expenseData);
@@ -195,6 +191,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
     }
   };
 
+  // ... (resta de funcions toggleInvolved, handleDetailChange... iguals)
   const toggleInvolved = (userId: string) => {
     setInvolved(prev => 
       prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
@@ -217,7 +214,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
   const handleSelectOnlyPayer = () => { if (payer) setInvolved([payer]); };
 
   const activeUsers = users.filter(u => !u.isDeleted);
-  const isAutoSumMode = splitType === 'exact' || isForeignCurrency; // Bloqueja l'import final si és divisa estrangera
+  const isAutoSumMode = splitType === 'exact' || isForeignCurrency;
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={initialData ? 'Editar Despesa' : 'Nova Despesa'}>
@@ -301,7 +298,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                         step="0.01" 
                         min="0.01" 
                         placeholder="0.00" 
-                        readOnly={isAutoSumMode} // Es bloqueja si és automàtic o divisa estrangera
+                        readOnly={isAutoSumMode} 
                         className={`w-full p-3 pl-8 border border-slate-200 dark:border-slate-700 dark:text-white rounded-xl outline-none transition-all font-mono font-bold
                         ${isAutoSumMode 
                             ? 'bg-slate-100 dark:bg-slate-900 text-slate-500 cursor-not-allowed border-indigo-200 dark:border-indigo-900/50' 
