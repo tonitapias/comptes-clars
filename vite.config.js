@@ -7,7 +7,6 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      // Aquesta llista força que s'incloguin al paquet final
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'maskable-icon-512x512.png', 'logo.svg'],
       manifest: {
         name: 'Comptes Clars',
@@ -40,7 +39,7 @@ export default defineConfig({
       }
     })
   ],
-  base: '/',
+  base: '/', // <--- AQUESTA LÍNIA ÉS LA QUE FALTA I LA QUE ARREGLA L'ERROR
   build: {
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
