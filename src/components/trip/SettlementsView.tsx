@@ -1,70 +1,71 @@
 import React from 'react';
-import { ArrowRight, CheckCircle2 } from 'lucide-react';
-import Card from '../Card';
-import Button from '../Button';
-import { Settlement, Currency, TripUser } from '../../types';
+import { ArrowRight, CheckCircle2, ThumbsUp } from 'lucide-react';
+import { Settlement } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
+import { useTrip } from '../../context/TripContext'; // <--- NOU
 
 interface SettlementsViewProps {
   settlements: Settlement[];
   onSettle: (s: Settlement) => void;
-  currency: Currency;
-  users: TripUser[];
+  // currency i users ELIMINATS
 }
 
-export default function SettlementsView({ settlements, onSettle, currency, users }: SettlementsViewProps) {
-  
-  const getUserName = (id: string) => users.find(u => u.id === id)?.name || '???';
+export default function SettlementsView({ settlements, onSettle }: SettlementsViewProps) {
+  const { tripData } = useTrip();
+  if (!tripData) return null;
+  const { users, currency } = tripData;
+
+  const getUserName = (id: string) => users.find(u => u.id === id)?.name || id;
 
   if (settlements.length === 0) {
-    return (
-        <div className="flex flex-col items-center justify-center py-12 text-center space-y-4 animate-fade-in">
-            {/* AFEGIT: dark:bg-emerald-900/30 dark:text-emerald-400 */}
-            <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center text-3xl shadow-sm">🎉</div>
-            <div>
-                {/* AFEGIT: dark:text-white i dark:text-slate-400 */}
-                <h3 className="text-lg font-bold text-slate-800 dark:text-white">Tot quadrat!</h3>
-                <p className="text-slate-500 dark:text-slate-400 font-medium text-sm">No hi ha deutes pendents.</p>
-            </div>
-        </div>
-    );
+      return (
+          <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800">
+              <div className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 p-4 rounded-full mb-4">
+                  <ThumbsUp size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-slate-700 dark:text-slate-200 mb-1">Tot quadrat!</h3>
+              <p className="text-slate-400 dark:text-slate-500">Ningú deu res a ningú.</p>
+          </div>
+      );
   }
 
   return (
-    <div className="space-y-3 animate-fade-in">
-      {settlements.map((s, idx) => (
-        // AFEGIT: dark:border-l-indigo-400 (perquè brilli més)
-        <Card key={idx} className="p-4 border-l-4 border-l-indigo-500 dark:border-l-indigo-400">
-           <div className="flex flex-col gap-4">
-               <div className="flex items-center justify-between">
-                    {/* AFEGIT: colors 400 per dark mode */}
-                    <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-bold">
-                        <span>{getUserName(s.from)}</span>
+    <div className="space-y-4 animate-fade-in">
+        <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-2xl mb-6">
+            <p className="text-sm text-indigo-800 dark:text-indigo-300 font-medium text-center">
+                Aquest és el pla òptim per liquidar tots els deutes amb el mínim de moviments possibles.
+            </p>
+        </div>
+
+        {settlements.map((settlement, idx) => (
+            <div key={idx} className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 transition-transform hover:scale-[1.01]">
+                <div className="flex-1 min-w-0 flex items-center gap-3">
+                    <div className="flex flex-col items-center min-w-[60px]">
+                        <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[80px]">{getUserName(settlement.from)}</span>
+                        <span className="text-xs text-rose-500 font-bold">Paga</span>
                     </div>
-                    {/* AFEGIT: dark:text-slate-600 */}
-                    <ArrowRight size={16} className="text-slate-300 dark:text-slate-600" />
-                    <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold">
-                        <span>{getUserName(s.to)}</span>
+                    
+                    <div className="flex-1 flex flex-col items-center">
+                        <span className="text-xs text-slate-400 mb-1">via Bizum/etc</span>
+                        <div className="h-[2px] w-full bg-slate-200 dark:bg-slate-700 relative">
+                             <ArrowRight size={12} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-slate-400 bg-white dark:bg-slate-900 px-1"/>
+                        </div>
                     </div>
-               </div>
-               
-               {/* AFEGIT: border-top fosc */}
-               <div className="flex items-center justify-between pt-3 border-t border-slate-50 dark:border-slate-800">
-                    <span className="text-2xl font-black text-slate-800 dark:text-white">{formatCurrency(s.amount, currency)}</span>
-                    <Button 
-                        size="sm" 
-                        variant="secondary" 
-                        onClick={() => onSettle(s)}
-                        // El botó secundari ja s'adapta sol gràcies al Button.tsx que veurem ara
-                        className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-transparent hover:bg-indigo-100 dark:hover:bg-indigo-900/50"
-                        icon={CheckCircle2}
-                    >
-                        Saldar
-                    </Button>
-               </div>
+
+                    <div className="flex flex-col items-center min-w-[60px]">
+                        <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[80px]">{getUserName(settlement.to)}</span>
+                        <span className="text-xs text-emerald-500 font-bold">Rep</span>
+                    </div>
+                </div>
+
+                <div className="text-right">
+                    <span className="block text-lg font-black text-indigo-600 dark:text-indigo-400">{formatCurrency(settlement.amount, currency)}</span>
+                    <button onClick={() => onSettle(settlement)} className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center justify-end gap-1 hover:underline mt-1">
+                        <CheckCircle2 size={12}/> Marcar Pagat
+                    </button>
+                </div>
             </div>
-        </Card>
-      ))}
+        ))}
     </div>
   );
 }

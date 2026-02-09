@@ -2,15 +2,18 @@ import React from 'react';
 import { Clock, PlusCircle, Edit, Trash, UserPlus, CheckCircle, Settings } from 'lucide-react';
 import Modal from '../Modal';
 import { LogEntry } from '../../types';
+import { useTrip } from '../../context/TripContext'; // <--- Context
 
 interface ActivityModalProps {
   isOpen: boolean;
   onClose: () => void;
-  logs: LogEntry[];
+  // logs eliminat
 }
 
-export default function ActivityModal({ isOpen, onClose, logs }: ActivityModalProps) {
-  // Ordenem logs del més nou al més antic
+export default function ActivityModal({ isOpen, onClose }: ActivityModalProps) {
+  const { tripData } = useTrip();
+  const logs = tripData?.logs || [];
+
   const sortedLogs = [...logs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   const getIcon = (action: LogEntry['action']) => {

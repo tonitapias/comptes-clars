@@ -39,7 +39,12 @@ export default defineConfig({
       }
     })
   ],
-  base: '/', // <--- AQUESTA LÍNIA ÉS LA QUE FALTA I LA QUE ARREGLA L'ERROR
+  base: '/',
+  server: {
+    headers: {
+      "Cross-Origin-Opener-Policy": "same-origin-allow-popups"
+    }
+  },
   build: {
     chunkSizeWarningLimit: 1000,
     rollupOptions: {

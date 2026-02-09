@@ -124,15 +124,30 @@ export default function LandingPage({ user }: LandingPageProps) {
   }, [user, inviteCode, navigate, setSearchParams]);
 
   // --- HANDLERS ---
-  const handleGoogleLogin = async () => {
+ // A src/pages/LandingPage.tsx
+
+const handleGoogleLogin = async () => {
     setLoginLoading(true);
     setAuthError('');
     try { 
       await signInWithPopup(auth, new GoogleAuthProvider());
       setIsAuthModalOpen(false);
     } catch (e: any) { 
+      // Si hi ha un error però l'usuari s'ha creat/loguejat igualment (cas típic de COOP), ho donem per bo.
+      if (auth.currentUser) {
+          console.warn("Avís de tancament de popup ignorat (l'usuari està loguejat).");
+          setIsAuthModalOpen(false);
+          return;
+      }
+
       console.error(e); 
-      setAuthError('Error iniciant sessió amb Google.');
+      
+      // Filtrem missatges tècnics lletjos per a l'usuari
+      if (e.message && e.message.includes('closed-by-user')) {
+        setAuthError('Has tancat la finestra abans d\'acabar.');
+      } else {
+        setAuthError('Error iniciant sessió amb Google. Prova-ho de nou.');
+      }
     } finally { 
       setLoginLoading(false); 
     }
@@ -290,7 +305,7 @@ export default function LandingPage({ user }: LandingPageProps) {
          <div className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] bg-purple-200/40 dark:bg-purple-900/20 rounded-full blur-[120px] mix-blend-multiply dark:mix-blend-screen animate-pulse-slow"></div>
          <div className="absolute top-[20%] right-[-10%] w-[60%] h-[60%] bg-indigo-200/40 dark:bg-indigo-900/20 rounded-full blur-[120px] mix-blend-multiply dark:mix-blend-screen animate-pulse-slow" style={{animationDelay: '2s'}}></div>
          <div className="absolute bottom-[-10%] left-[20%] w-[50%] h-[50%] bg-pink-200/40 dark:bg-pink-900/20 rounded-full blur-[120px] mix-blend-multiply dark:mix-blend-screen animate-pulse-slow" style={{animationDelay: '4s'}}></div>
-         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 dark:opacity-10"></div>
+         <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-20 dark:opacity-10"></div>
       </div>
 
       <div className="w-full max-w-6xl relative z-10 flex flex-col gap-8 h-full">
