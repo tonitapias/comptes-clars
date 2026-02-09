@@ -1,7 +1,6 @@
+// src/components/trip/ExpensesList.tsx
 import React, { useMemo } from 'react';
-import { Search, Receipt, Plus, ArrowRightLeft, Paperclip } from 'lucide-react';
-import Card from '../Card';
-import Button from '../Button';
+import { Search, Receipt, ArrowRightLeft, Paperclip } from 'lucide-react'; // <--- Eliminat 'Plus' dels imports
 import { CATEGORIES } from '../../utils/constants';
 import { Expense, CategoryId, TripUser } from '../../types';
 import { formatCurrency, formatDateDisplay } from '../../utils/formatters';
@@ -45,7 +44,6 @@ export default function ExpensesList({
   const { tripData } = useTrip();
 
   // Optimització: Creem un mapa d'usuaris per a accés O(1)
-  // Això evita fer un .find() per a cada despesa renderitzada
   const userMap = useMemo(() => {
     if (!tripData?.users) return {};
     return tripData.users.reduce((acc, user) => {
@@ -54,7 +52,6 @@ export default function ExpensesList({
     }, {} as Record<string, TripUser>);
   }, [tripData?.users]);
 
-  // Helper ràpid usant el mapa
   const getUserName = (id: string) => userMap[id]?.name || 'Desconegut';
 
   if (!tripData) return null;
@@ -171,17 +168,7 @@ export default function ExpensesList({
         )}
       </div>
 
-      <div className="h-20" /> {/* Spacer for FAB */}
-      
-      {/* Floating Action Button */}
-      <div className="fixed bottom-6 right-6 z-40">
-        <Button 
-            onClick={() => onEdit({} as Expense)} // Empty object signals new expense
-            className="w-14 h-14 rounded-full shadow-xl flex items-center justify-center bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:scale-105 active:scale-95 transition-all"
-        >
-            <Plus className="w-6 h-6" />
-        </Button>
-      </div>
+      {/* --- HE ELIMINAT EL BOTÓ FLOTANT DUPLICAT I L'ESPAIADOR AQUÍ --- */}
     </div>
   );
 }

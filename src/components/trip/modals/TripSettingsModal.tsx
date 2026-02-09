@@ -1,9 +1,12 @@
+// FITXER: src/components/trip/modals/TripSettingsModal.tsx
+
 import React, { useState, useEffect } from 'react';
-import { Lock, LogOut } from 'lucide-react';
+import { Lock, LogOut, Download } from 'lucide-react'; // <--- 1. Importem la icona Download
 import Modal from '../../Modal';
 import Button from '../../Button';
 import { CURRENCIES } from '../../../utils/constants';
 import { TripData, Currency } from '../../../types';
+import { downloadBackup } from '../../../utils/exportData'; // <--- 2. Importem la funció
 
 interface TripSettingsModalProps {
   isOpen: boolean;
@@ -17,7 +20,7 @@ interface TripSettingsModalProps {
 export default function TripSettingsModal({
   isOpen, onClose, tripData, canChangeCurrency, onUpdateSettings, onLeaveTrip
 }: TripSettingsModalProps) {
-  const [name, setName] = useState(tripData.name);
+  const [name, setName] = useState(tripData?.name || '');
   const [date, setDate] = useState('');
 
   useEffect(() => {
@@ -38,9 +41,12 @@ export default function TripSettingsModal({
     }
   };
 
+  if (!tripData) return null;
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Configuració del Grup">
       <div className="space-y-6">
+        {/* Camp NOM */}
         <div>
           <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Nom</label>
           <input 
@@ -50,6 +56,8 @@ export default function TripSettingsModal({
             onChange={e => setName(e.target.value)} 
           />
         </div>
+
+        {/* Camp DATA */}
         <div>
           <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Data</label>
           <input 
@@ -59,6 +67,8 @@ export default function TripSettingsModal({
             onChange={e => setDate(e.target.value)} 
           />
         </div>
+
+        {/* Selecció MONEDA */}
         <div>
           <div className="flex justify-between mb-2">
             <label className="block text-xs font-bold text-slate-500 uppercase">Moneda</label>
@@ -79,7 +89,21 @@ export default function TripSettingsModal({
             ))}
           </div>
         </div>
+
+        {/* --- AQUÍ ESTÀ EL BOTÓ DE BACKUP --- */}
+        <div>
+           <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Còpia de Seguretat</label>
+           <button 
+             onClick={() => downloadBackup(tripData)}
+             className="w-full p-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors border border-slate-200"
+           >
+             <Download size={18} />
+             Descarregar JSON
+           </button>
+        </div>
+
         <Button onClick={handleSave}>Guardar canvis</Button>
+        
         <div className="border-t pt-4">
           <button onClick={onLeaveTrip} className="w-full p-3 flex justify-center gap-2 text-rose-600 bg-rose-50 hover:bg-rose-100 font-bold rounded-xl transition-colors">
             <LogOut size={18}/> Abandonar Grup

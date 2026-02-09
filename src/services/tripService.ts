@@ -22,7 +22,6 @@ const tripConverter: FirestoreDataConverter<TripData> = {
   fromFirestore: (snapshot: QueryDocumentSnapshot, options: SnapshotOptions): TripData => {
     const data = snapshot.data(options);
     return {
-      // Ús de la constant per netejar l'ID
       id: snapshot.id.replace(TRIP_DOC_PREFIX, ''), 
       name: data.name || 'Viatge sense nom',
       users: data.users || [],
@@ -35,11 +34,9 @@ const tripConverter: FirestoreDataConverter<TripData> = {
   }
 };
 
-// --- REFERÈNCIES A COL·LECCIONS (Refactoritzat amb DB_PATHS) ---
-// Ara utilitzem les rutes centralitzades en lloc de cadenes màgiques
+// --- REFERÈNCIES A COL·LECCIONS ---
 const tripsCol = collection(db, DB_PATHS.TRIPS_COLLECTION).withConverter(tripConverter);
 
-// Helpers locals que utilitzen la nova configuració
 const getTripRef = (tripId: string) => 
   doc(db, DB_PATHS.getTripDocPath(tripId)).withConverter(tripConverter);
 
@@ -85,7 +82,16 @@ export const TripService = {
   },
 
   createTrip: async (trip: TripData) => {
-    await setDoc(getTripRef(trip.id), { ...trip, logs: [] });
+    // CORRECCIÓ 1: Assegurar memberUids des de l'inici
+    const initialMemberUids = trip.users
+      .filter(u => u.linkedUid)
+      .map(u => u.linkedUid as string);
+
+    await setDoc(getTripRef(trip.id), { 
+      ...trip, 
+      memberUids: initialMemberUids,
+      logs: [] 
+    });
   },
 
   updateTrip: async (tripId: string, data: Partial<TripData>) => {
@@ -129,6 +135,29 @@ export const TripService = {
   joinTripViaLink: async (tripId: string, user: User) => {
     const tripRef = getTripRef(tripId);
     
+    // 1. LLEGIR: Obtenim l'estat actual abans de tocar res
+    const tripSnap = await getDoc(tripRef);
+    if (!tripSnap.exists()) return;
+
+    const data = tripSnap.data();
+    const currentUsers = data.users || [];
+    
+    // CORRECCIÓ 2: CHECK DE SEGURETAT (IDEMPOTÈNCIA)
+    // Busquem si JA existeix un usuari amb aquest UID de Firebase (linkedUid)
+    // Això evita que es creïn duplicats encara que la funció es cridi 2 vegades
+    const alreadyExists = currentUsers.some(u => u.linkedUid === user.uid);
+
+    if (alreadyExists) {
+      console.log("TripService: L'usuari ja existeix. No fem res.");
+      
+      // Opcional: Si l'usuari existeix però per error no era a memberUids, ho arreglem
+      if (data.memberUids && !data.memberUids.includes(user.uid)) {
+        await updateDoc(tripRef, { memberUids: arrayUnion(user.uid) });
+      }
+      return; // <--- SORTIM AQUÍ
+    }
+
+    // 3. NOMÉS SI NO EXISTEIX, CREEM L'USUARI
     const newUser: TripUser = {
       id: generateId(),
       name: user.displayName || user.email?.split('@')[0] || 'Usuari',
@@ -138,12 +167,11 @@ export const TripService = {
       photoUrl: user.photoURL || undefined
     };
 
-    const updatePayload: UpdateData<TripData> = {
+    await updateDoc(tripRef, {
       users: arrayUnion(newUser),
       memberUids: arrayUnion(user.uid)
-    };
-
-    await updateDoc(tripRef, updatePayload);
+    });
+    
     await logAction(tripId, `s'ha unit al grup`, 'join');
   },
 
