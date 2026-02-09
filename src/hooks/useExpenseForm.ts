@@ -1,5 +1,7 @@
+// src/hooks/useExpenseForm.ts
 import { useState, useEffect } from 'react';
 import { Expense, TripUser, Currency, CurrencyCode, CategoryId, SplitType } from '../types';
+import { SPLIT_TYPES } from '../services/billingService';
 
 interface UseExpenseFormProps {
   initialData: Expense | null;
@@ -23,7 +25,9 @@ export function useExpenseForm({ initialData, users, currency, onSubmit }: UseEx
   const [date, setDate] = useState(initialData?.date ? initialData.date.split('T')[0] : new Date().toISOString().split('T')[0]);
   const [receiptUrl, setReceiptUrl] = useState(initialData?.receiptUrl || '');
   
-  const [splitType, setSplitType] = useState<SplitType>(initialData?.splitType || 'equal');
+  // MILLORA: Ús de constants importades per evitar errors de tipografia i mantenir coherència
+  const [splitType, setSplitType] = useState<SplitType>(initialData?.splitType || SPLIT_TYPES.EQUAL);
+  
   const [involved, setInvolved] = useState<string[]>(initialData?.involved || users.filter(u => !u.isDeleted).map(u => u.id));
   
   // Convertim els detalls del repartiment de cèntims a unitats si cal
@@ -77,11 +81,12 @@ export function useExpenseForm({ initialData, users, currency, onSubmit }: UseEx
         payer,
         category,
         date: new Date(date).toISOString(),
-        involved: splitType === 'equal' ? involved : Object.keys(splitDetails).filter(k => splitDetails[k] > 0),
+        // Ús de la constant
+        involved: splitType === SPLIT_TYPES.EQUAL ? involved : Object.keys(splitDetails).filter(k => splitDetails[k] > 0),
         splitType,
       };
 
-      if (splitType !== 'equal') {
+      if (splitType !== SPLIT_TYPES.EQUAL) {
         // Tornem a convertir els detalls a cèntims per a la base de dades
         const detailsInCents: Record<string, number> = {};
         Object.entries(splitDetails).forEach(([uid, val]) => {

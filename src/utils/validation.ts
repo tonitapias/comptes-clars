@@ -16,14 +16,22 @@ export const TripUserSchema = z.object({
 // Aquest és el que fa servir tripService.addExpense
 export const ExpenseSchema = z.object({
   title: z.string().min(1, "El títol és obligatori").max(100, "Títol massa llarg"),
-  amount: z.number().positive("L'import ha de ser positiu").finite(), 
+  
+  // MILLORA: Forcem que sigui ENTER (cèntims). Rebutgem floats per evitar errors IEEE 754.
+  amount: z.number().int("L'import ha de ser un enter (cèntims)").positive("L'import ha de ser positiu").finite(), 
+  
   payer: z.string().min(1, "El pagador és obligatori"),
   category: z.enum(['food', 'transport', 'home', 'drinks', 'travel', 'tickets', 'shopping', 'entertainment', 'transfer', 'other', 'all']),
   involved: z.array(z.string()).min(1, "Hi ha d'haver almenys una persona involucrada"),
   date: z.string(), // Acceptem qualsevol string per flexibilitat, idealment ISO
   splitType: z.enum(['equal', 'exact', 'shares']).optional(),
-  splitDetails: z.record(z.string(), z.number()).optional(),
+  
+  // MILLORA: Els detalls del split també han de ser enters (cèntims)
+  splitDetails: z.record(z.string(), z.number().int()).optional(),
+  
   receiptUrl: z.string().url("L'enllaç de la imatge no és vàlid").optional().nullable(),
+  
+  // Camps de divisa original (poden tenir decimals si són la moneda origen, però l'amount principal és enter)
   originalAmount: z.number().positive().optional(),
   originalCurrency: z.enum(['EUR', 'USD', 'GBP', 'JPY', 'MXN']).optional(),
   exchangeRate: z.number().positive().optional()
@@ -36,7 +44,6 @@ const PersistedExpenseSchema = ExpenseSchema.extend({
 });
 
 // Validació Completa del Viatge
-// CORRECCIÓ CRÍTICA: Ara fem servir PersistedExpenseSchema per no perdre els IDs
 export const TripDataSchema = z.object({
   id: z.string(),
   name: z.string().min(1, "El nom del grup és obligatori"),

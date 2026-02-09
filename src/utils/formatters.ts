@@ -7,9 +7,11 @@ import { Currency } from '../types';
  * @param amount Import en cèntims (enter)
  * @param currency Objecte amb el codi i locale (ex: {code: 'EUR', locale: 'ca-ES'})
  */
-export const formatMoney = (amount: number, currency: Currency): string => {
-  // Gestió de valors no numèrics
-  if (typeof amount !== 'number' || isNaN(amount)) return '0,00 €';
+export const formatMoney = (amount: number | null | undefined, currency: Currency): string => {
+  // Gestió robusta de valors nuls o no numèrics
+  if (amount === null || amount === undefined || isNaN(amount)) {
+    return formatMoney(0, currency);
+  }
 
   try {
     return new Intl.NumberFormat(currency?.locale || 'ca-ES', { 
@@ -19,8 +21,9 @@ export const formatMoney = (amount: number, currency: Currency): string => {
       maximumFractionDigits: 2
     }).format(amount / 100);
   } catch (error) {
-    // Fallback simple si falla la localització
-    return `${(amount / 100).toFixed(2)} ${currency?.symbol || ''}`;
+    // Fallback d'últim recurs
+    const symbol = currency?.symbol || '€';
+    return `${(amount / 100).toFixed(2)} ${symbol}`;
   }
 };
 
@@ -35,14 +38,11 @@ export const formatDate = (dateString: string): string => {
   
   try {
     const date = new Date(dateString);
-    
-    // Validem si la data és vàlida
     if (isNaN(date.getTime())) return '';
 
     return date.toLocaleDateString('ca-ES', { 
       day: 'numeric', 
-      month: 'short',
-      // Opcional: any: 'numeric' si vols veure l'any
+      month: 'short'
     });
   } catch (e) {
     return '';

@@ -2,21 +2,19 @@
 
 import { 
   collection, doc, addDoc, updateDoc, deleteDoc, getDocs, getDoc, setDoc, query, where, arrayUnion,
-  FirestoreDataConverter, QueryDocumentSnapshot, SnapshotOptions 
+  FirestoreDataConverter, QueryDocumentSnapshot, SnapshotOptions, UpdateData 
 } from 'firebase/firestore'; 
 import { User } from 'firebase/auth';
-import { db, appId, auth } from '../config/firebase';
+import { db, auth } from '../config/firebase';
+import { DB_PATHS, TRIP_DOC_PREFIX } from '../config/dbPaths';
 import { Expense, TripData, Settlement, TripUser, LogEntry, Currency } from '../types';
 import { ExpenseSchema } from '../utils/validation';
 
 // --- CONVERTIDOR DE DADES (Seguretat de Tipus) ---
-// Això garanteix que les dades que venen de Firebase sempre tenen l'estructura correcta,
-// evitant errors "undefined" a la interfície si falten camps en viatges antics.
 const tripConverter: FirestoreDataConverter<TripData> = {
   toFirestore: (trip: TripData) => {
     return {
       ...trip,
-      // Assegurem que no guardem undefineds accidentals
       logs: trip.logs || [],
       memberUids: trip.memberUids || []
     };
@@ -24,7 +22,8 @@ const tripConverter: FirestoreDataConverter<TripData> = {
   fromFirestore: (snapshot: QueryDocumentSnapshot, options: SnapshotOptions): TripData => {
     const data = snapshot.data(options);
     return {
-      id: snapshot.id.replace('trip_', ''), // Neteja de l'ID per consistència
+      // Ús de la constant per netejar l'ID
+      id: snapshot.id.replace(TRIP_DOC_PREFIX, ''), 
       name: data.name || 'Viatge sense nom',
       users: data.users || [],
       expenses: data.expenses || [],
@@ -36,18 +35,19 @@ const tripConverter: FirestoreDataConverter<TripData> = {
   }
 };
 
-// --- REFERÈNCIES A COL·LECCIONS ---
-// Apliquem el convertidor directament a les referències per tipat automàtic
-const tripsCol = collection(db, 'artifacts', appId, 'public', 'data', 'trips').withConverter(tripConverter);
+// --- REFERÈNCIES A COL·LECCIONS (Refactoritzat amb DB_PATHS) ---
+// Ara utilitzem les rutes centralitzades en lloc de cadenes màgiques
+const tripsCol = collection(db, DB_PATHS.TRIPS_COLLECTION).withConverter(tripConverter);
 
+// Helpers locals que utilitzen la nova configuració
 const getTripRef = (tripId: string) => 
-  doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`).withConverter(tripConverter);
+  doc(db, DB_PATHS.getTripDocPath(tripId)).withConverter(tripConverter);
 
 const getExpensesCol = (tripId: string) => 
-  collection(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`, 'expenses');
+  collection(db, DB_PATHS.getExpensesCollectionPath(tripId));
 
 const getExpenseRef = (tripId: string, expenseId: string) => 
-  doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`, 'expenses', expenseId);
+  doc(db, DB_PATHS.getExpenseDocPath(tripId, expenseId));
 
 const generateId = () => crypto.randomUUID();
 
@@ -63,16 +63,18 @@ const logAction = async (tripId: string, message: string, action: LogEntry['acti
       userName: currentUser?.displayName || 'Algú',
       timestamp: new Date().toISOString()
     };
-    // Nota: Utilitzem updateDoc directament per evitar re-escriure tot el document
-    // El 'cast' parcial és necessari perquè estem actualitzant un camp específic
-    await updateDoc(getTripRef(tripId), { logs: arrayUnion(log) } as any);
+    
+    const updatePayload: UpdateData<TripData> = {
+      logs: arrayUnion(log)
+    };
+    
+    await updateDoc(getTripRef(tripId), updatePayload);
   } catch (e) { console.error("Error guardant log:", e); }
 };
 
 export const TripService = {
   getUserTrips: async (uid: string): Promise<TripData[]> => {
     try {
-      // Ara 'tripsCol' ja té el convertidor, així que 'd.data()' retorna TripData directament
       const q = query(tripsCol, where('memberUids', 'array-contains', uid));
       const snap = await getDocs(q);
       return snap.docs.map(d => d.data());
@@ -83,20 +85,16 @@ export const TripService = {
   },
 
   createTrip: async (trip: TripData) => {
-    // Utilitzem setDoc amb l'ID específic "trip_ID"
-    // El convertidor s'encarregarà de preparar les dades
     await setDoc(getTripRef(trip.id), { ...trip, logs: [] });
   },
 
   updateTrip: async (tripId: string, data: Partial<TripData>) => {
-    // updateDoc requereix objectes parcials, typescript es queixa si usem el convertidor estricte aquí
-    // així que fem un update estàndard sobre la referència genèrica
-    await updateDoc(getTripRef(tripId), data as any);
+    await updateDoc(getTripRef(tripId), data as UpdateData<TripData>);
     await logAction(tripId, `ha actualitzat la configuració`, 'settings');
   },
 
   addExpense: async (tripId: string, expense: Omit<Expense, 'id'>) => {
-    ExpenseSchema.parse(expense); // Validació Zod abans d'enviar
+    ExpenseSchema.parse(expense); 
     const docRef = await addDoc(getExpensesCol(tripId), expense);
     await logAction(tripId, `ha afegit "${expense.title}"`, 'create');
     return docRef.id;
@@ -140,12 +138,12 @@ export const TripService = {
       photoUrl: user.photoURL || undefined
     };
 
-    // Fem servir arrayUnion per afegir atòmicament sense llegir/escriure tot el doc
-    await updateDoc(tripRef, {
+    const updatePayload: UpdateData<TripData> = {
       users: arrayUnion(newUser),
       memberUids: arrayUnion(user.uid)
-    } as any);
+    };
 
+    await updateDoc(tripRef, updatePayload);
     await logAction(tripId, `s'ha unit al grup`, 'join');
   },
 
@@ -154,16 +152,20 @@ export const TripService = {
     const snap = await getDoc(tripRef);
     if (!snap.exists()) return;
     
-    const data = snap.data(); // Això ja és TripData gràcies al convertidor
+    const data = snap.data(); 
     
-    // Marquem l'usuari com esborrat (Soft Delete) per mantenir històric
     const newUsers = data.users.map(u => 
       u.id === internalUserId ? { ...u, isDeleted: true, linkedUid: undefined } : u
     );
     
     const newMembers = data.memberUids?.filter(uid => uid !== auth.currentUser?.uid) || [];
     
-    await updateDoc(tripRef, { users: newUsers, memberUids: newMembers } as any);
+    const updatePayload: UpdateData<TripData> = { 
+      users: newUsers, 
+      memberUids: newMembers 
+    };
+
+    await updateDoc(tripRef, updatePayload);
     await logAction(tripId, `ha sortit del grup`, 'settings');
   }
 };
