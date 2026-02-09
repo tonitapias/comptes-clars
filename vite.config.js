@@ -40,7 +40,14 @@ export default defineConfig({
     })
   ],
   base: '/',
+  // Configuració per a 'npm run dev'
   server: {
+    headers: {
+      "Cross-Origin-Opener-Policy": "same-origin-allow-popups"
+    }
+  },
+  // Configuració per a 'npm run preview' (LA NOVA PART CLAU)
+  preview: {
     headers: {
       "Cross-Origin-Opener-Policy": "same-origin-allow-popups"
     }
