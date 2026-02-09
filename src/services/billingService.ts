@@ -1,16 +1,18 @@
+// src/services/billingService.ts
+
 import { Expense, TripUser, Balance, Settlement, CategoryStat } from '../types';
 import { CATEGORIES } from '../utils/constants';
 
 /**
  * Normalitza la identificació d'usuaris.
- * Resol si un string és un ID real o un nom d'usuari (per compatibilitat legacy).
+ * Prioritza ID i usa nom només per compatibilitat legacy.
  */
 export const resolveUserId = (identifier: string, users: TripUser[]): string | undefined => {
-  // 1. És un ID conegut?
+  if (!identifier) return undefined;
+  
   const userById = users.find(u => u.id === identifier);
   if (userById) return userById.id;
 
-  // 2. És un nom que correspon a un usuari?
   const userByName = users.find(u => u.name === identifier);
   if (userByName) return userByName.id;
 
@@ -18,19 +20,26 @@ export const resolveUserId = (identifier: string, users: TripUser[]): string | u
 };
 
 /**
- * Calcula el balanç financer de cada usuari basat en totes les despeses.
- * Retorna un array ordenat de major a menor saldo.
+ * Calcula el balanç financer de cada usuari.
  */
 export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balance[] => {
   const balanceMap: Record<string, number> = {};
   
-  // Inicialitzem a 0 tots els usuaris
+  // Inicialitzem a 0 tots els usuaris actius
   users.forEach(u => balanceMap[u.id] = 0);
+
+  // Optimització: Creem un diccionari de noms per resolució ràpida (legacy)
+  const nameToIdMap = users.reduce((acc, u) => {
+    acc[u.name] = u.id;
+    return acc;
+  }, {} as Record<string, string>);
 
   expenses.forEach(exp => {
     // 1. Qui ha pagat (creditor)
-    const payerId = resolveUserId(exp.payer, users);
-    if (payerId && balanceMap[payerId] !== undefined) {
+    // Intentem usar l'ID directament, si no, busquem pel mapa de noms
+    const payerId = balanceMap[exp.payer] !== undefined ? exp.payer : nameToIdMap[exp.payer];
+    
+    if (payerId) {
       balanceMap[payerId] += exp.amount;
     }
 
@@ -38,13 +47,12 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
     const splitType = exp.splitType || 'equal';
 
     if (splitType === 'equal') {
-      let rawInvolved = exp.involved?.length > 0 ? exp.involved : users.map(u => u.id);
+      const rawInvolved = (exp.involved && exp.involved.length > 0) ? exp.involved : users.map(u => u.id);
       
-      // Netegem IDs i els ordenem per determinisme en el repartiment de cèntims
       const receiversIds = rawInvolved
-        .map(id => resolveUserId(id, users))
-        .filter((id): id is string => id !== undefined && balanceMap[id] !== undefined)
-        .sort();
+        .map(id => balanceMap[id] !== undefined ? id : nameToIdMap[id])
+        .filter((id): id is string => !!id && balanceMap[id] !== undefined)
+        .sort(); // Sorting per determinisme en el residu
 
       const count = receiversIds.length;
       if (count > 0) {
@@ -52,7 +60,7 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
         const remainder = exp.amount % count;
 
         receiversIds.forEach((uid, index) => {
-          // Els primers 'remainder' usuaris paguen 1 cèntim més
+          // Repartiment del cèntim sobrant entre els primers
           const amountToPay = baseAmount + (index < remainder ? 1 : 0);
           balanceMap[uid] -= amountToPay;
         });
@@ -61,8 +69,8 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
     } else if (splitType === 'exact') {
       const details = exp.splitDetails || {};
       Object.entries(details).forEach(([identifier, amount]) => {
-        const uid = resolveUserId(identifier, users);
-        if (uid && balanceMap[uid] !== undefined) {
+        const uid = balanceMap[identifier] !== undefined ? identifier : nameToIdMap[identifier];
+        if (uid) {
           balanceMap[uid] -= amount;
         }
       });
@@ -75,21 +83,17 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
         const amountPerShare = exp.amount / totalShares;
         let distributed = 0;
 
-        // Convertim a entrades ordenades per ID per evitar errors d'arrodoniment aleatoris
         const entries = Object.entries(details)
-          .map(([key, shares]) => ({ uid: resolveUserId(key, users), shares }))
-          .filter((entry): entry is { uid: string, shares: number } => 
-            entry.uid !== undefined && balanceMap[entry.uid] !== undefined
-          )
-          .sort((a, b) => (a.uid > b.uid ? 1 : -1));
+          .map(([key, shares]) => ({ uid: balanceMap[key] !== undefined ? key : nameToIdMap[key], shares }))
+          .filter((entry): entry is { uid: string, shares: number } => !!entry.uid && balanceMap[entry.uid] !== undefined)
+          .sort((a, b) => a.uid.localeCompare(b.uid));
 
         const count = entries.length;
 
         entries.forEach((entry, index) => {
           let amountToPay;
           if (index === count - 1) {
-            // L'últim assumeix la diferència per quadratura exacta
-            amountToPay = exp.amount - distributed;
+            amountToPay = exp.amount - distributed; // Quadratura exacta final
           } else {
             amountToPay = Math.floor(entry.shares * amountPerShare);
           }
@@ -106,39 +110,39 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
 };
 
 /**
- * Algoritme "Greedy" per minimitzar el nombre de transaccions necessàries per saldar deutes.
+ * Algoritme per minimitzar transaccions (Greedy).
  */
 export const calculateSettlements = (balances: Balance[]): Settlement[] => {
   const debts: Settlement[] = [];
-  // Fem una còpia profunda per no mutar els balanços originals que venen de la UI
   const workingBalances = balances.map(b => ({ ...b }));
 
-  const debtors = workingBalances.filter(b => b.amount < -0.01).sort((a, b) => a.amount - b.amount);
-  const creditors = workingBalances.filter(b => b.amount > 0.01).sort((a, b) => b.amount - a.amount);
+  // Filtrem per qualsevol desajust superior a 0 (cèntims enters)
+  const debtors = workingBalances.filter(b => b.amount < 0).sort((a, b) => a.amount - b.amount);
+  const creditors = workingBalances.filter(b => b.amount > 0).sort((a, b) => b.amount - a.amount);
 
   let i = 0, j = 0;
   while (i < debtors.length && j < creditors.length) {
     const debtor = debtors[i];
     const creditor = creditors[j];
 
-    // L'import a pagar és el mínim entre el que deu un i el que li deuen a l'altre
     const amount = Math.min(Math.abs(debtor.amount), creditor.amount);
 
-    debts.push({ from: debtor.userId, to: creditor.userId, amount });
+    if (amount > 0) {
+      debts.push({ from: debtor.userId, to: creditor.userId, amount });
+      debtor.amount += amount;
+      creditor.amount -= amount;
+    }
 
-    debtor.amount += amount;
-    creditor.amount -= amount;
-
-    // Avancem índexs si s'ha saldat completament (amb marge d'error per decimals)
-    if (Math.abs(debtor.amount) < 0.01) i++;
-    if (creditor.amount < 0.01) j++;
+    // Si el balanç és 0 (o gairebé 0 per seguretat), passem al següent
+    if (Math.abs(debtor.amount) < 1) i++;
+    if (creditor.amount < 1) j++;
   }
 
   return debts;
 };
 
 /**
- * Genera estadístiques per categoria.
+ * Estadístiques per categoria.
  */
 export const calculateCategoryStats = (expenses: Expense[]): CategoryStat[] => {
   const stats: Record<string, number> = {};
@@ -149,12 +153,10 @@ export const calculateCategoryStats = (expenses: Expense[]): CategoryStat[] => {
 
   validExpenses.forEach(exp => {
     const catKey = exp.category || 'other';
-    if (!stats[catKey]) stats[catKey] = 0;
-    stats[catKey] += exp.amount;
+    stats[catKey] = (stats[catKey] || 0) + exp.amount;
   });
 
   return Object.entries(stats).map(([id, amount]) => {
-    // Busquem la info visual de la categoria (icona, color, etc.)
     const catInfo = CATEGORIES.find(c => c.id === id) || 
                    CATEGORIES.find(c => c.id === 'other') || 
                    CATEGORIES[0];

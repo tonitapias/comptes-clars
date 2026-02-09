@@ -8,7 +8,6 @@ import ActivityModal from '../modals/ActivityModal';
 import TripSettingsModal from './modals/TripSettingsModal';
 import TripSettleModal from './modals/TripSettleModal';
 
-// Tipus
 import { TripData, TripUser, Currency } from '../../types';
 import { useTripModals } from '../../hooks/useTripModals';
 import { useTripMutations } from '../../hooks/useTripMutations';
@@ -44,6 +43,7 @@ export default function TripModals({
   return (
     <>
       <ExpenseModal 
+        key={modals.editingExpense?.id || 'new'} // Força a React a netejar el formulari en canviar de despesa
         isOpen={modals.isExpenseModalOpen} 
         onClose={modals.closeExpenseModal} 
         initialData={modals.editingExpense} 

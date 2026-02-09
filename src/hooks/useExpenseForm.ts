@@ -11,7 +11,7 @@ interface UseExpenseFormProps {
 export function useExpenseForm({ initialData, users, currency, onSubmit }: UseExpenseFormProps) {
   const [title, setTitle] = useState(initialData?.title || '');
   
-  // CORRECCIÓ 1: Si editem, convertim cèntims a unitats per a l'input (ex: 2000 -> 20.00)
+  // Convertim cèntims a unitats per a l'input (ex: 2000 -> 20.00)
   const [amount, setAmount] = useState(
     initialData?.amount 
       ? (initialData.amount / 100).toFixed(2) 
@@ -26,13 +26,16 @@ export function useExpenseForm({ initialData, users, currency, onSubmit }: UseEx
   const [splitType, setSplitType] = useState<SplitType>(initialData?.splitType || 'equal');
   const [involved, setInvolved] = useState<string[]>(initialData?.involved || users.filter(u => !u.isDeleted).map(u => u.id));
   
-  // CORRECCIÓ 2: Els detalls del split també venen en cèntims si són exactes? 
-  // Normalment el split "exact" guarda valors absoluts. Assumirem que també calen convertir si són imports.
-  // Per simplicitat en aquesta correcció ràpida, deixem el splitDetails com està si l'usuari els introdueix manualment, 
-  // però l'ideal seria normalitzar-ho també. Centrem-nos en el 'amount' principal primer.
-  const [splitDetails, setSplitDetails] = useState<Record<string, number>>(initialData?.splitDetails || {});
+  // Convertim els detalls del repartiment de cèntims a unitats si cal
+  const [splitDetails, setSplitDetails] = useState<Record<string, number>>(() => {
+    if (!initialData?.splitDetails) return {};
+    const normalized: Record<string, number> = {};
+    Object.entries(initialData.splitDetails).forEach(([uid, val]) => {
+      normalized[uid] = val / 100; 
+    });
+    return normalized;
+  });
 
-  // Foreign Currency State
   const [isForeignCurrency, setIsForeignCurrency] = useState(!!initialData?.originalCurrency);
   const [foreignAmount, setForeignAmount] = useState(initialData?.originalAmount?.toString() || '');
   const [foreignCurrency, setForeignCurrency] = useState<CurrencyCode>(initialData?.originalCurrency || 'USD');
@@ -40,7 +43,6 @@ export function useExpenseForm({ initialData, users, currency, onSubmit }: UseEx
   
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Auto-calculate amount from foreign currency
   useEffect(() => {
     if (isForeignCurrency && foreignAmount && exchangeRate) {
       const calculated = parseFloat(foreignAmount) / parseFloat(exchangeRate);
@@ -66,13 +68,12 @@ export function useExpenseForm({ initialData, users, currency, onSubmit }: UseEx
     setIsSubmitting(true);
 
     try {
-      // CORRECCIÓ 3: Convertim l'input (unitats) a cèntims (enters) per guardar
-      // Utilitzem Math.round per evitar errors de punt flotant (ex: 19.99 * 100 = 1998.999...)
+      // Convertim l'input (unitats) a cèntims per guardar
       const amountInCents = Math.round(parseFloat(amount) * 100);
       
-      const baseExpense: any = {
+      const expenseData: Omit<Expense, 'id'> = {
         title,
-        amount: amountInCents, // <--- AQUÍ ESTÀ LA CLAU
+        amount: amountInCents,
         payer,
         category,
         date: new Date(date).toISOString(),
@@ -81,25 +82,28 @@ export function useExpenseForm({ initialData, users, currency, onSubmit }: UseEx
       };
 
       if (splitType !== 'equal') {
-        baseExpense.splitDetails = splitDetails;
+        // Tornem a convertir els detalls a cèntims per a la base de dades
+        const detailsInCents: Record<string, number> = {};
+        Object.entries(splitDetails).forEach(([uid, val]) => {
+          detailsInCents[uid] = Math.round(val * 100);
+        });
+        expenseData.splitDetails = detailsInCents;
       }
 
-      if (receiptUrl && receiptUrl.trim() !== '') {
-        baseExpense.receiptUrl = receiptUrl;
+      if (receiptUrl?.trim()) {
+        expenseData.receiptUrl = receiptUrl;
       }
 
       if (isForeignCurrency) {
-        // Els imports originals en divisa estrangera sovint es guarden tal qual (float) o en cèntims segons la teva lògica antiga.
-        // Si l'app antiga mostrava "20 USD" bé, llavors es guarden com a float. Ho deixem com a float per seguretat.
-        baseExpense.originalAmount = parseFloat(foreignAmount);
-        baseExpense.originalCurrency = foreignCurrency;
-        baseExpense.exchangeRate = parseFloat(exchangeRate);
+        expenseData.originalAmount = parseFloat(foreignAmount);
+        expenseData.originalCurrency = foreignCurrency;
+        expenseData.exchangeRate = parseFloat(exchangeRate);
       }
 
-      await onSubmit(baseExpense);
+      await onSubmit(expenseData);
 
     } catch (error) {
-      console.error(error);
+      console.error("Error submitting expense:", error);
       throw error; 
     } finally {
       setIsSubmitting(false);
