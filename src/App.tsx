@@ -5,9 +5,12 @@ import { Loader2 } from 'lucide-react';
 import { auth } from './config/firebase';
 import LandingPage from './pages/LandingPage';
 import TripPage from './pages/TripPage';
-import ProtectedRoute from './components/ProtectedRoute'; // <--- IMPORTAT
+import ProtectedRoute from './components/ProtectedRoute';
+import { useTheme } from './hooks/useTheme'; // <--- Importat
 
 function App() {
+  useTheme(); // <--- Activa l'escoltador del tema globalment
+  
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   

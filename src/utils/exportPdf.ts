@@ -2,7 +2,6 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Expense, Settlement, Balance, TripUser } from '../types';
 
-// MILLORA: Funció robusta que busca per ID, però si no troba l'usuari, retorna el text original (per noms antics)
 const getName = (idOrName: string, users: TripUser[]) => {
   const u = users.find(u => u.id === idOrName);
   return u ? u.name : idOrName; 
@@ -19,112 +18,109 @@ export const generatePDF = (
   const doc = new jsPDF();
   const indigoColor = [79, 70, 229] as [number, number, number];
 
-  // 1. HEADER
+  // 1. CAPÇALERA
   doc.setFillColor(...indigoColor);
   doc.rect(0, 0, 210, 40, 'F'); 
 
-  doc.setFontSize(24);
+  doc.setFontSize(22);
   doc.setTextColor(255, 255, 255);
-  doc.text(tripName, 14, 20);
+  doc.text(tripName.toUpperCase(), 14, 22);
+  
+  doc.setFontSize(9);
+  doc.setTextColor(200, 200, 200);
+  doc.text(`Informe de despeses - Generat el ${new Date().toLocaleDateString('ca-ES')}`, 14, 32);
+
+  let finalY = 50;
+
+  // 2. RESUM GENERAL
+  const totalSpending = expenses
+    .filter(e => e.category !== 'transfer')
+    .reduce((acc, curr) => acc + curr.amount, 0);
+
+  doc.setFontSize(14);
+  doc.setTextColor(indigoColor[0], indigoColor[1], indigoColor[2]);
+  doc.text("Resum del Viatge", 14, finalY);
   
   doc.setFontSize(10);
-  doc.setTextColor(200, 200, 200);
-  doc.text(`Informe generat el: ${new Date().toLocaleDateString('ca-ES')}`, 14, 28);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Despesa Total del Grup: ${(totalSpending / 100).toFixed(2).replace('.', ',')} ${currencySymbol}`, 14, finalY + 7);
+  doc.text(`Membres actius: ${users.filter(u => !u.isDeleted).length}`, 14, finalY + 13);
 
-  // 2. RESUM
-  const totalCents = expenses.filter(e => e.category !== 'transfer').reduce((acc, curr) => acc + curr.amount, 0);
-  
-  doc.setTextColor(0);
-  doc.setFontSize(14);
-  doc.text("Resum Econòmic", 14, 55);
-  
-  doc.setFontSize(11);
-  doc.setTextColor(80);
-  doc.text(`Despesa Total:`, 14, 62);
-  
-  doc.setFontSize(16);
-  doc.setTextColor(0);
-  // Nota: Si vols format català al PDF (comes), pots fer servir toLocaleString o replace('.', ',')
-  doc.text(`${(totalCents / 100).toFixed(2).replace('.', ',')} ${currencySymbol}`, 14, 69);
+  finalY += 25;
 
   // 3. TAULA DE BALANÇOS
-  const balanceData = balances.map(b => [
-    getName(b.userId, users), 
-    (b.amount / 100).toFixed(2).replace('.', ',') + ' ' + currencySymbol, 
-    b.amount >= 0 ? 'Recupera' : 'Ha de pagar'
-  ]);
-
-  autoTable(doc, {
-    startY: 80,
-    head: [['Usuari', 'Balanç', 'Estat']],
-    body: balanceData,
-    theme: 'grid',
-    headStyles: { fillColor: indigoColor, textColor: 255, fontStyle: 'bold' },
-    columnStyles: {
-        1: { fontStyle: 'bold', halign: 'right' },
-        2: { halign: 'center' }
-    }
-  });
-
-  // 4. TAULA DE DESPESES
-  const expenseData = expenses.map(e => [
-    new Date(e.date).toLocaleDateString('ca-ES'),
-    e.title,
-    getName(e.payer, users), // Ara això ja no tornarà "???" amb dades antigues
-    (e.amount / 100).toFixed(2).replace('.', ',') + ' ' + currencySymbol,
-    e.category === 'transfer' 
-        ? 'Transferència' 
-        : (e.splitType === 'exact' ? 'Exacte' : (e.splitType === 'shares' ? 'Parts' : `${e.involved.length || users.length} pers.`))
-  ]);
-
-  let finalY = (doc as any).lastAutoTable.finalY + 15;
   doc.setFontSize(14);
-  doc.text("Detall de Despeses", 14, finalY);
+  doc.setTextColor(indigoColor[0], indigoColor[1], indigoColor[2]);
+  doc.text("Estat de Comptes", 14, finalY);
+
+  const balanceData = balances.map(b => {
+    const isPositive = b.amount > 0;
+    const amountStr = (b.amount / 100).toFixed(2).replace('.', ',') + ' ' + currencySymbol;
+    return [
+      getName(b.userId, users),
+      isPositive ? `+ ${amountStr}` : amountStr,
+      isPositive ? 'COBRA' : (b.amount < 0 ? 'DEU' : 'AL DIA')
+    ];
+  });
 
   autoTable(doc, {
     startY: finalY + 5,
-    head: [['Data', 'Concepte', 'Pagat per', 'Import', 'Tipus']],
+    head: [['Membre', 'Balanç', 'Estat']],
+    body: balanceData,
+    theme: 'grid',
+    headStyles: { fillColor: indigoColor },
+    columnStyles: { 1: { halign: 'right' }, 2: { halign: 'center' } }
+  });
+
+  finalY = (doc as any).lastAutoTable.finalY + 15;
+
+  // 4. TAULA DE DESPESES
+  doc.setFontSize(14);
+  doc.setTextColor(indigoColor[0], indigoColor[1], indigoColor[2]);
+  doc.text("Detall de Despeses", 14, finalY);
+
+  const expenseData = expenses.map(e => [
+    new Date(e.date).toLocaleDateString('ca-ES'),
+    e.title,
+    getName(e.payer, users),
+    (e.amount / 100).toFixed(2).replace('.', ',') + ' ' + currencySymbol,
+    e.category === 'transfer' ? 'PAGAMENT' : e.category.toUpperCase()
+  ]);
+
+  autoTable(doc, {
+    startY: finalY + 5,
+    head: [['Data', 'Concepte', 'Pagat per', 'Import', 'Categoria']],
     body: expenseData,
     theme: 'striped',
     headStyles: { fillColor: [100, 116, 139] },
-    styles: { fontSize: 9 },
+    styles: { fontSize: 8 },
     columnStyles: { 3: { halign: 'right', fontStyle: 'bold' } }
   });
 
-  // 5. LIQUIDACIONS
+  // 5. TAULA DE LIQUIDACIONS (Pla de pagaments)
   if (settlements.length > 0) {
-      const settlementData = settlements.map(s => [
-        getName(s.from, users), 
-        '→ PAGA A →',
-        getName(s.to, users),   
-        (s.amount / 100).toFixed(2).replace('.', ',') + ' ' + currencySymbol
-      ]);
-
       finalY = (doc as any).lastAutoTable.finalY + 15;
-      
-      if (finalY > 240) {
-          doc.addPage();
-          finalY = 20;
-      }
+      if (finalY > 240) { doc.addPage(); finalY = 20; }
 
       doc.setFontSize(14);
       doc.setTextColor(indigoColor[0], indigoColor[1], indigoColor[2]);
-      doc.text("Pla de Liquidació", 14, finalY);
+      doc.text("Pla de Liquidació (Com tancar deutes)", 14, finalY);
+
+      const settlementData = settlements.map(s => [
+        getName(s.from, users),
+        'paga a',
+        getName(s.to, users),
+        (s.amount / 100).toFixed(2).replace('.', ',') + ' ' + currencySymbol
+      ]);
 
       autoTable(doc, {
         startY: finalY + 5,
         body: settlementData,
         theme: 'plain',
-        styles: { fontSize: 11, cellPadding: 4 },
-        columnStyles: {
-            0: { fontStyle: 'bold', textColor: [225, 29, 72] },
-            1: { halign: 'center', fontSize: 8, textColor: [150, 150, 150] },
-            2: { fontStyle: 'bold', textColor: [16, 185, 129] },
-            3: { halign: 'right', fontStyle: 'bold' }
-        }
+        styles: { fontSize: 10, fontStyle: 'bold' },
+        columnStyles: { 3: { halign: 'right', textColor: indigoColor } }
       });
   }
 
-  const safeFileName = tripName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-  doc.save(`comptes_${safeFileName}.pdf`);
+  doc.save(`Comptes_Clars_${tripName.replace(/\s+/g, '_')}.pdf`);
 };

@@ -4,7 +4,7 @@ import { Share2, Copy, Check, Crown, Trash2, Link as LinkIcon, Users, Edit2, X }
 import Modal from '../Modal';
 import { TripUser } from '../../types';
 import { ToastType } from '../Toast';
-import { useTrip } from '../../context/TripContext'; // <--- NOU: Context
+import { useTrip } from '../../context/TripContext';
 import { TripService } from '../../services/tripService';
 
 interface GroupModalProps {
@@ -12,10 +12,6 @@ interface GroupModalProps {
   onClose: () => void;
   showToast: (msg: string, type?: ToastType) => void;
   initialTab?: 'members' | 'share';
-  // Props eliminades: trip, onUpdateTrip (ja no fan falta)
-  // Les deixem opcionals "any" per si encara tens el codi vell cridant-les, que no peti
-  trip?: any;
-  onUpdateTrip?: any;
 }
 
 const getAvatarColor = (name: string) => {
@@ -36,7 +32,6 @@ const getAvatarColor = (name: string) => {
 };
 
 export default function GroupModal({ isOpen, onClose, showToast, initialTab = 'members' }: GroupModalProps) {
-  // 1. Connectem al cervell
   const { tripData, currentUser, actions } = useTrip();
 
   const [activeTab, setActiveTab] = useState<'members' | 'share'>(initialTab);
@@ -47,12 +42,14 @@ export default function GroupModal({ isOpen, onClose, showToast, initialTab = 'm
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [tempName, setTempName] = useState('');
 
-  // Si no hi ha dades carregades, no pintem res (o un loader)
   if (!tripData) return null;
   const shareUrl = `${window.location.origin}/?join=${tripData.id}`;
 
   useEffect(() => {
-    if (isOpen) setActiveTab(initialTab);
+    if (isOpen) {
+        setActiveTab(initialTab);
+        setEditingUserId(null); // Resetejem edicions en obrir
+    }
   }, [isOpen, initialTab]);
 
   const handleCopyCode = () => {
@@ -69,20 +66,16 @@ export default function GroupModal({ isOpen, onClose, showToast, initialTab = 'm
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  // --- ACCIONS REFACTORITZADES ---
-  
   const handleRemoveUser = async (userId: string, userName: string) => {
-    if (!window.confirm(`Segur que vols eliminar a ${userName} del grup?\nSi té despeses, quedarà marcat com a 'Ex-membre'.`)) return;
+    if (!window.confirm(`Segur que vols eliminar a ${userName} del grup?`)) return;
     setLoadingAction(userId);
-    // Fem servir l'acció centralitzada
-    const res = await actions.leaveTrip(userId, 0, false); // 0 balance assumit aquí o gestionar error si falla
+    const res = await actions.leaveTrip(userId, 0, false); 
     if (res.success) showToast(`${userName} eliminat`, 'success');
     else showToast(res.error || "Error", 'error');
     setLoadingAction(null);
   };
 
   const handleClaimUser = async (tripUserId: string) => {
-        
     if (!currentUser) return;
     if (!window.confirm("Aquest usuari ets tu?")) return;
     
@@ -91,7 +84,6 @@ export default function GroupModal({ isOpen, onClose, showToast, initialTab = 'm
         await TripService.linkUserToAccount(tripData.id, tripUserId, currentUser);
         showToast("Perfil vinculat!", 'success');
     } catch (error) {
-        console.error(error);
         showToast("Error en vincular", 'error');
     } finally {
         setLoadingAction(null);
@@ -102,7 +94,6 @@ export default function GroupModal({ isOpen, onClose, showToast, initialTab = 'm
     if (!editingUserId || !tempName.trim()) return;
     setLoadingAction(editingUserId);
     try {
-        const { TripService } = await import('../../services/tripService');
         await TripService.renameUser(tripData.id, editingUserId, tempName.trim());
         showToast("Nom actualitzat", 'success');
         setEditingUserId(null);
@@ -120,7 +111,7 @@ export default function GroupModal({ isOpen, onClose, showToast, initialTab = 'm
     <Modal isOpen={isOpen} onClose={onClose} title="Gestió del Grup">
       
       {/* PESTANYES */}
-      <div className="flex border-b border-slate-100 dark:border-slate-800 mb-4 transition-colors">
+      <div className="flex border-b border-slate-100 dark:border-slate-800 mb-6 transition-colors">
         <button onClick={() => setActiveTab('members')} className={`flex-1 pb-3 text-sm font-bold flex items-center justify-center gap-2 transition-colors ${activeTab === 'members' ? 'text-indigo-600 border-b-2 border-indigo-600 dark:text-indigo-400 dark:border-indigo-400' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500'}`}>
             <Users size={16}/> Membres
         </button>
@@ -129,63 +120,107 @@ export default function GroupModal({ isOpen, onClose, showToast, initialTab = 'm
         </button>
       </div>
 
-      <div className="min-h-[300px]">
+      <div className="min-h-[350px]">
           {activeTab === 'share' ? (
-            /* ZONA COMPARTIR */
             <div className="flex flex-col items-center gap-6 py-2 animate-fade-in">
-                <div className="bg-white p-4 rounded-xl border-2 border-slate-100 shadow-sm"><QRCode value={shareUrl} size={140} /></div>
+                <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 shadow-sm overflow-hidden">
+                    <QRCode value={shareUrl} size={150} />
+                </div>
                 <div className="w-full space-y-4">
-                    <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 dark:bg-indigo-900/20 dark:border-indigo-800/50">
-                        <p className="text-xs font-bold text-indigo-500 dark:text-indigo-300 uppercase mb-2">Enllaç d'invitació</p>
+                    <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-800/50">
+                        <p className="text-[10px] font-black text-indigo-500 dark:text-indigo-300 uppercase tracking-widest mb-3">Enllaç d'invitació</p>
                         <div className="flex gap-2">
-                            <div className="flex-1 bg-white px-3 py-2 rounded-lg text-sm text-indigo-900 font-medium truncate border border-indigo-200 opacity-70 dark:bg-slate-800 dark:text-indigo-200 dark:border-indigo-800">{shareUrl}</div>
-                            <button onClick={handleCopyLink} className={`px-4 rounded-lg font-bold text-sm transition-all flex items-center gap-2 shadow-sm ${copiedLink ? 'bg-green-600 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}>{copiedLink ? <Check size={18} /> : <LinkIcon size={18} />}</button>
+                            <div className="flex-1 bg-white dark:bg-slate-800 px-3 py-2.5 rounded-xl text-sm text-slate-600 dark:text-indigo-200 border border-slate-100 dark:border-slate-700 truncate">
+                                {shareUrl}
+                            </div>
+                            <button onClick={handleCopyLink} className={`px-4 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shadow-sm ${copiedLink ? 'bg-emerald-600 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}>
+                                {copiedLink ? <Check size={18} /> : <LinkIcon size={18} />}
+                            </button>
                         </div>
                     </div>
-                    <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200 dark:bg-slate-800 dark:border-slate-700">
-                        <div><p className="text-[10px] font-bold text-slate-400 uppercase">Codi Manual</p><p className="font-mono font-bold text-slate-700 dark:text-white tracking-wider select-all text-lg">{tripData.id}</p></div>
-                        <button onClick={handleCopyCode} className="text-indigo-600 dark:text-indigo-400 p-2 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 rounded-lg">{copiedCode ? <Check size={20}/> : <Copy size={20}/>}</button>
+                    <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700">
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Codi de Grup</p>
+                            <p className="font-mono font-bold text-slate-700 dark:text-white tracking-wider text-xl">{tripData.id}</p>
+                        </div>
+                        <button onClick={handleCopyCode} className="text-indigo-600 dark:text-indigo-400 p-2.5 hover:bg-white dark:hover:bg-slate-800 rounded-xl transition-colors shadow-sm bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700">
+                            {copiedCode ? <Check size={20}/> : <Copy size={20}/>}
+                        </button>
                     </div>
                 </div>
             </div>
           ) : (
-            /* ZONA MEMBRES */
             <div className="animate-fade-in">
-                <div className="flex justify-between items-center mb-3 px-1"><p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase">{activeUsers.length} Participants</p></div>
-                <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1 custom-scrollbar">
+                <div className="flex justify-between items-center mb-4 px-1">
+                    <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{activeUsers.length} Participants actius</p>
+                </div>
+                <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1 custom-scrollbar">
                     {activeUsers.map((u: TripUser) => {
                         const avatarClass = u.photoUrl ? 'bg-white' : getAvatarColor(u.name);
                         const isLinked = !!u.linkedUid;
                         const isMe = currentUser && u.linkedUid === currentUser.uid;
 
                         return (
-                            <div key={u.id} className="group flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm dark:bg-slate-800 dark:border-slate-700">
-                                <div className="flex items-center gap-3">
-                                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold border border-slate-100 overflow-hidden dark:border-slate-600 ${avatarClass}`}>
+                            <div key={u.id} className="group flex items-center justify-between bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm transition-all hover:shadow-md">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold border border-slate-100 dark:border-slate-700 overflow-hidden shrink-0 ${avatarClass}`}>
                                         {u.photoUrl ? <img src={u.photoUrl} alt={u.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : u.name.charAt(0).toUpperCase()}
                                     </div>
-                                    <div>
+                                    <div className="min-w-0">
                                         <div className="flex items-center gap-1.5">
                                             {editingUserId === u.id ? (
                                                 <div className="flex items-center gap-1">
-                                                    <input type="text" value={tempName} autoFocus onChange={(e) => setTempName(e.target.value)} className="border-b-2 border-indigo-500 outline-none text-sm font-bold text-indigo-700 dark:text-indigo-400 w-32 bg-transparent px-1" onKeyDown={(e) => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') { setEditingUserId(null); setTempName(''); } }} />
-                                                    <button onClick={handleSaveName} className="text-green-600 dark:text-green-400 hover:bg-green-50 p-1 rounded"><Check size={14} /></button>
-                                                    <button onClick={() => { setEditingUserId(null); setTempName(''); }} className="text-red-500 dark:text-red-400 hover:bg-red-50 p-1 rounded"><X size={14} /></button>
+                                                    <input 
+                                                        type="text" 
+                                                        value={tempName} 
+                                                        autoFocus 
+                                                        onChange={(e) => setTempName(e.target.value)} 
+                                                        className="border-b-2 border-indigo-500 outline-none text-sm font-bold text-indigo-700 dark:text-indigo-400 w-32 bg-transparent px-1" 
+                                                        onKeyDown={(e) => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') setEditingUserId(null); }} 
+                                                    />
+                                                    <button onClick={handleSaveName} className="text-emerald-500 p-1"><Check size={14}/></button>
                                                 </div>
                                             ) : (
-                                                <div className="flex items-center gap-2">
-                                                    <p className={`font-bold text-sm ${isMe ? 'text-indigo-700 dark:text-indigo-400' : 'text-slate-800 dark:text-white'}`}>{u.name} {isMe && '(Tu)'}</p>
-                                                    {u.id === adminId && <Crown size={12} className="text-yellow-500 fill-yellow-500" />}
-                                                    {(isMe || !u.linkedUid) && <button onClick={() => { setEditingUserId(u.id); setTempName(u.name); }} className="text-slate-300 hover:text-indigo-600 opacity-0 group-hover:opacity-100 p-0.5"><Edit2 size={12} /></button>}
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <p className={`font-bold text-sm truncate ${isMe ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-700 dark:text-slate-200'}`}>
+                                                        {u.name} {isMe && '(Tu)'}
+                                                    </p>
+                                                    {u.id === adminId && <Crown size={12} className="text-amber-500 fill-amber-500 shrink-0" />}
+                                                    {(isMe || !u.linkedUid) && (
+                                                        <button 
+                                                            onClick={() => { setEditingUserId(u.id); setTempName(u.name); }} 
+                                                            className="text-slate-300 hover:text-indigo-600 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+                                                        >
+                                                            <Edit2 size={12} />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
-                                        <p className="text-[10px] text-slate-400">{isLinked ? 'Verificat' : 'Convidat'}</p>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                                            {isLinked ? 'Usuari Verificat' : 'Perfil Convidat'}
+                                        </p>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-1">
-                                    {!isLinked && currentUser && <button onClick={() => handleClaimUser(u.id)} disabled={loadingAction === u.id} className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded border border-indigo-100 dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-300">Sóc jo</button>}
-                                    {!isMe && <button onClick={() => handleRemoveUser(u.id, u.name)} disabled={loadingAction === u.id} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>}
+                                <div className="flex items-center gap-1 shrink-0">
+                                    {!isLinked && currentUser && (
+                                        <button 
+                                            onClick={() => handleClaimUser(u.id)} 
+                                            disabled={!!loadingAction} 
+                                            className="text-[10px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 dark:text-indigo-300 px-3 py-1.5 rounded-lg border border-indigo-100 dark:border-indigo-800 hover:bg-indigo-100 transition-colors"
+                                        >
+                                            Sóc jo
+                                        </button>
+                                    )}
+                                    {!isMe && (
+                                        <button 
+                                            onClick={() => handleRemoveUser(u.id, u.name)} 
+                                            disabled={!!loadingAction} 
+                                            className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition-colors"
+                                        >
+                                            <Trash2 size={18} />
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         );

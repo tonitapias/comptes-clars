@@ -1,11 +1,11 @@
 import React from 'react';
-import { Settings, Users, Share2, FileText, History, ArrowLeft } from 'lucide-react';
+import { Settings, Users, Share2, FileText, History, ArrowLeft, Sun, Moon } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useTrip } from '../../context/TripContext'; // <--- NOU
+import { useTrip } from '../../context/TripContext';
+import { useTheme } from '../../hooks/useTheme'; // <--- Importat
 import { formatCurrency } from '../../utils/formatters';
 
 interface TripHeaderProps {
-  // Conservem només props d'UI o valors calculats que no estan al context base
   displayedTotal: number;
   totalGroupSpending: number;
   isFiltered: boolean;
@@ -22,6 +22,8 @@ export default function TripHeader({
 }: TripHeaderProps) {
   
   const { tripData } = useTrip();
+  const { theme, toggleTheme } = useTheme(); // <--- Lògica del tema
+  
   if (!tripData) return null;
 
   const { name, createdAt, users, currency } = tripData;
@@ -36,6 +38,15 @@ export default function TripHeader({
             <ArrowLeft size={24} />
           </Link>
           <div className="flex gap-2">
+            {/* Botó Mode Fosc */}
+            <button 
+              onClick={toggleTheme} 
+              className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors bg-slate-50 dark:bg-slate-800 rounded-full"
+              title={theme === 'light' ? 'Canviar a mode fosc' : 'Canviar a mode clar'}
+            >
+               {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+            </button>
+
             <button onClick={onOpenActivity} className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors bg-slate-50 dark:bg-slate-800 rounded-full">
                <History size={20} />
             </button>
