@@ -1,5 +1,7 @@
+// src/types/index.ts
 import { LucideIcon } from 'lucide-react';
 
+// --- MONEDA ---
 export type CurrencyCode = 'EUR' | 'USD' | 'GBP' | 'JPY' | 'MXN';
 
 export interface Currency {
@@ -8,6 +10,7 @@ export interface Currency {
   locale: string;
 }
 
+// --- CATEGORIES ---
 export type CategoryId = 'food' | 'transport' | 'home' | 'drinks' | 'travel' | 'tickets' | 'shopping' | 'entertainment' | 'transfer' | 'other' | 'all';
 
 export interface Category {
@@ -18,44 +21,49 @@ export interface Category {
   barColor: string;
 }
 
+// --- USUARIS ---
 export interface TripUser {
-  id: string;
-  name: string;
-  email?: string;
-  isAuth?: boolean;
-  linkedUid?: string;
-  photoUrl?: string;
-  isDeleted?: boolean;
+  id: string;             // UUID intern del viatge
+  name: string;           // Nom visual
+  email?: string;         // Opcional per a notificacions futures
+  isAuth?: boolean;       // Si està vinculat a un compte real
+  linkedUid?: string | null;     // ID de Firebase Auth (si isAuth=true)
+  photoUrl?: string | null;
+  isDeleted?: boolean;    // Soft delete
 }
 
+// --- DESPESES ---
 export type SplitType = 'equal' | 'exact' | 'shares';
 
 export interface Expense {
-  id: number | string;
+  id: string | number;    // ID únic (number=Legacy, string=UUID)
   title: string;
-  amount: number;
-  payer: string;
+  amount: number;         // En cèntims (Integer)
+  payer: string;          // ID de l'usuari pagador
   category: CategoryId;
-  involved: string[];
-  date: string;         
-  splitType?: SplitType; 
-  splitDetails?: Record<string, number>;
-  receiptUrl?: string;
+  involved: string[];     // IDs dels usuaris involucrats
+  date: string;           // ISO String
+  splitType?: SplitType;  
+  splitDetails?: Record<string, number>; // ID Usuari -> Quantitat/Shares
+  receiptUrl?: string | null;
+  
+  // Camps opcionals per a multi-divisa (Futur)
   originalAmount?: number;      
   originalCurrency?: CurrencyCode; 
   exchangeRate?: number;        
 }
 
-// --- NOVETAT: ESTRUCTURA DEL LOG ---
+// --- LOGS I AUDITORIA ---
 export interface LogEntry {
   id: string;
   action: 'create' | 'update' | 'delete' | 'join' | 'settle' | 'settings';
   message: string;
-  userId: string;      // ID de l'usuari (TripUser)
-  userName: string;    // Nom en aquell moment
+  userId: string;
+  userName: string;
   timestamp: string;
 }
 
+// --- ESTRUCTURA PRINCIPAL (DOCUMENT) ---
 export interface TripData {
   id: string;
   name: string;
@@ -63,10 +71,11 @@ export interface TripData {
   expenses: Expense[];
   currency: Currency;
   createdAt: string;
-  memberUids?: string[];
-  logs?: LogEntry[]; // <--- AFEGIT ARRAY DE LOGS
+  memberUids?: string[];   // Array de UIDs de Firebase per a regles de seguretat
+  logs?: LogEntry[];
 }
 
+// --- RESULTATS DE CÀLCULS ---
 export interface Balance {
   userId: string;
   amount: number;

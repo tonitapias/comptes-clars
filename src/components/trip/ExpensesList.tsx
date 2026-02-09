@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Search, Receipt, Plus, ArrowRightLeft, Paperclip } from 'lucide-react';
 import Card from '../Card';
 import Button from '../Button';
 import { CATEGORIES } from '../../utils/constants';
-import { Expense, CategoryId } from '../../types';
+import { Expense, CategoryId, TripUser } from '../../types';
 import { formatCurrency, formatDateDisplay } from '../../utils/formatters';
-import { useTrip } from '../../context/TripContext'; // <--- NOU
+import { useTrip } from '../../context/TripContext';
 
 interface ExpensesListProps {
   expenses: Expense[];
@@ -14,7 +14,6 @@ interface ExpensesListProps {
   filterCategory: CategoryId | 'all';
   setFilterCategory: (c: CategoryId | 'all') => void;
   onEdit: (e: Expense | null) => void;
-  // currency i users ELIMINATS
 }
 
 const getAvatarColor = (name: string) => {
@@ -22,102 +21,167 @@ const getAvatarColor = (name: string) => {
     'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-300', 
     'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300', 
     'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-300', 
-    'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-300', 
-    'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-300', 
+    'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-300',
+    'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-300',
     'bg-pink-100 text-pink-600 dark:bg-pink-900/30 dark:text-pink-300',
     'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-300',
     'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-300',
-    'bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-300',
-    'bg-cyan-100 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-300'
   ];
   let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
   return colors[Math.abs(hash) % colors.length];
 };
 
 export default function ExpensesList({ 
-  expenses, searchQuery, setSearchQuery, filterCategory, setFilterCategory, onEdit 
+  expenses, 
+  searchQuery, 
+  setSearchQuery, 
+  filterCategory, 
+  setFilterCategory,
+  onEdit
 }: ExpensesListProps) {
-  
-  // Consumim dades directament del context
   const { tripData } = useTrip();
+
+  // Optimització: Creem un mapa d'usuaris per a accés O(1)
+  // Això evita fer un .find() per a cada despesa renderitzada
+  const userMap = useMemo(() => {
+    if (!tripData?.users) return {};
+    return tripData.users.reduce((acc, user) => {
+      acc[user.id] = user;
+      return acc;
+    }, {} as Record<string, TripUser>);
+  }, [tripData?.users]);
+
+  // Helper ràpid usant el mapa
+  const getUserName = (id: string) => userMap[id]?.name || 'Desconegut';
+
   if (!tripData) return null;
-  const { users, currency } = tripData;
-
-  const getCategory = (id: string) => CATEGORIES.find(c => c.id === id) || CATEGORIES.find(c => c.id === 'other') || CATEGORIES[0];
-  
-  const getUserName = (idOrName: string) => {
-      const u = users.find(u => u.id === idOrName);
-      return u ? u.name : idOrName; 
-  };
-
-  const getUserPhoto = (idOrName: string) => {
-      const u = users.find(u => u.id === idOrName);
-      return u?.photoUrl;
-  };
+  const { currency } = tripData;
 
   return (
-    <div className="space-y-4 animate-fade-in">
-       <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-        <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center gap-2 flex-1 min-w-[150px] shadow-sm">
-            <Search size={16} className="text-slate-400 ml-1" />
-            <input type="text" placeholder="Buscar..." className="w-full bg-transparent outline-none text-sm font-medium text-slate-700 dark:text-slate-200" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+    <div className="space-y-6 animate-fade-in">
+      {/* Search and Filters */}
+      <div className="flex flex-col gap-4">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+          <input 
+            type="text"
+            placeholder="Cerca despeses..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-600 transition-all text-slate-800 dark:text-slate-100"
+          />
         </div>
-        <select className="bg-white dark:bg-slate-900 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-sm font-bold text-slate-600 dark:text-slate-300 outline-none shadow-sm" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value as any)}>
-            {CATEGORIES.map(c => (<option key={c.id} value={c.id}>{c.label}</option>))}
-        </select>
+        
+        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+            {CATEGORIES.map(cat => (
+                <button
+                    key={cat.id}
+                    onClick={() => setFilterCategory(cat.id)}
+                    className={`
+                        flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-all text-sm font-medium
+                        ${filterCategory === cat.id 
+                            ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-lg scale-105' 
+                            : 'bg-white text-slate-600 dark:bg-slate-900 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'}
+                    `}
+                >
+                    <cat.icon className="w-4 h-4" />
+                    {cat.label}
+                </button>
+            ))}
+        </div>
       </div>
 
-      {expenses.length === 0 ? (
-        <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800">
-            <Receipt size={32} className="text-indigo-300 dark:text-indigo-400/50 mx-auto mb-4" />
-            <p className="text-slate-400 text-sm">No hi ha despeses.</p>
-            {!searchQuery && filterCategory === 'all' && <Button onClick={() => onEdit(null)} className="mx-auto mt-4" icon={Plus}>Afegir Despesa</Button>}
-        </div>
-      ) : (
-        <div className="space-y-3">
-            {expenses.map((expense) => { 
-                const category = getCategory(expense.category); 
-                const isTransfer = expense.category === 'transfer'; 
+      {/* Expenses List */}
+      <div className="space-y-4">
+        {expenses.length === 0 ? (
+            <div className="text-center py-12 text-slate-400">
+                <Receipt className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                <p>No s'han trobat despeses</p>
+            </div>
+        ) : (
+            expenses.map((expense) => {
+                const category = CATEGORIES.find(c => c.id === expense.category) || CATEGORIES[0];
+                const isTransfer = expense.category === 'transfer';
                 const payerName = getUserName(expense.payer);
-                const photoUrl = getUserPhoto(expense.payer);
-                const avatarClass = photoUrl ? 'bg-white' : getAvatarColor(payerName);
                 const hasForeignCurrency = expense.originalCurrency && expense.originalCurrency !== currency.code;
 
                 return (
-                  <Card key={expense.id} className={`hover:shadow-md transition-all group ${isTransfer ? 'bg-slate-50 dark:bg-slate-800/50' : 'bg-white dark:bg-slate-900'}`} onClick={() => onEdit(expense)}>
-                    <div className="flex items-center p-4 cursor-pointer">
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mr-4 shadow-sm ${category.color}`}>
-                          {isTransfer ? <ArrowRightLeft size={20}/> : <category.icon size={22} />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-start">
-                            <div className="flex items-center gap-2 overflow-hidden">
-                                <h4 className={`font-bold truncate ${isTransfer ? 'text-slate-600 dark:text-slate-400 italic' : 'text-slate-800 dark:text-white'}`}>{expense.title}</h4>
-                                {expense.receiptUrl && <a href={expense.receiptUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="p-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded hover:bg-indigo-100 shrink-0"><Paperclip size={12} strokeWidth={2.5}/></a>}
-                            </div>
-                            <span className="text-xs text-slate-400 dark:text-slate-500 font-medium bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-100 dark:border-slate-700 ml-2 whitespace-nowrap">{formatDateDisplay(expense.date)}</span>
+                  <div 
+                    key={expense.id}
+                    onClick={() => onEdit(expense)}
+                    className="group bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 transition-all cursor-pointer relative overflow-hidden"
+                  >
+                    {/* Category Color Bar */}
+                    <div className={`absolute left-0 top-0 bottom-0 w-1 ${category.barColor}`} />
+
+                    <div className="flex items-center justify-between pl-3">
+                      <div className="flex items-center gap-4 flex-1 min-w-0">
+                        <div className={`
+                            w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-colors
+                            ${isTransfer ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 group-hover:bg-slate-200 dark:group-hover:bg-slate-700'}
+                        `}>
+                            {isTransfer ? <ArrowRightLeft className="w-6 h-6" /> : <category.icon className="w-6 h-6" />}
                         </div>
-                        <div className="flex items-center gap-2 mt-1.5">
-                            <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 pl-1 pr-2 py-0.5 rounded-full border border-slate-100 dark:border-slate-700">
-                                <div className={`w-5 h-5 rounded-full overflow-hidden flex items-center justify-center text-[9px] font-bold border border-white dark:border-slate-600 shadow-sm ${avatarClass}`}>
-                                    {photoUrl ? <img src={photoUrl} className="w-full h-full object-cover" alt={payerName} referrerPolicy="no-referrer"/> : payerName.charAt(0).toUpperCase()}
+                        
+                        <div className="flex flex-col min-w-0 flex-1 mr-2">
+                            <div className="flex items-center gap-2 mb-0.5">
+                                <span className="font-bold text-slate-800 dark:text-slate-100 truncate text-base">{expense.title}</span>
+                                {expense.receiptUrl && <Paperclip className="w-3 h-3 text-slate-400 flex-shrink-0" />}
+                            </div>
+                            
+                            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                <span>{formatDateDisplay(expense.date)}</span>
+                                <span>•</span>
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                    <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold ${getAvatarColor(payerName)}`}>
+                                        {userMap[expense.payer]?.photoUrl ? (
+                                            <img src={userMap[expense.payer].photoUrl} alt={payerName} className="w-full h-full object-cover rounded-full" />
+                                        ) : payerName.charAt(0).toUpperCase()}
+                                    </div>
+                                    <span className="font-medium truncate max-w-[80px]">{payerName}</span>
                                 </div>
-                                <span className="text-xs text-slate-600 dark:text-slate-300 font-bold">{payerName}</span>
+                                <span>•</span>
+                                <span className="truncate">
+                                    {isTransfer 
+                                        ? `→ ${expense.involved[0] ? getUserName(expense.involved[0]) : 'Tothom'}`
+                                        : (expense.splitType === 'equal' ? `${expense.involved.length} pers.` : (expense.splitType === 'exact' ? 'Exacte' : 'Parts'))
+                                    }
+                                </span>
                             </div>
-                            <span className="text-xs text-slate-400 dark:text-slate-600">•</span>
-                            <span className="text-xs text-slate-500 dark:text-slate-400 truncate">{isTransfer ? '→' : 'Per a'} <span className="ml-1 font-medium text-slate-600 dark:text-slate-300">{isTransfer ? (expense.involved[0] ? getUserName(expense.involved[0]) : 'Tothom') : (expense.splitType === 'equal' ? `${expense.involved.length} pers.` : (expense.splitType === 'exact' ? 'Exacte' : 'Parts'))}</span></span>
                         </div>
                       </div>
+
                       <div className="flex flex-col items-end pl-2">
-                        <span className={`font-bold text-lg ${isTransfer ? 'text-slate-500 dark:text-slate-500' : 'text-slate-800 dark:text-white'}`}>{formatCurrency(expense.amount, currency)}</span>
-                        {hasForeignCurrency && <span className="text-[10px] font-medium text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">{expense.originalAmount?.toFixed(2)} {expense.originalCurrency}</span>}
+                        <span className={`font-bold text-lg whitespace-nowrap ${isTransfer ? 'text-emerald-500' : 'text-slate-800 dark:text-white'}`}>
+                            {formatCurrency(expense.amount, currency)}
+                        </span>
+                        {hasForeignCurrency && (
+                            <span className="text-[10px] font-medium text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded whitespace-nowrap mt-1">
+                                {expense.originalAmount?.toFixed(2)} {expense.originalCurrency}
+                            </span>
+                        )}
                       </div>
                     </div>
-                  </Card>
-            );})}
-        </div>
-      )}
+                  </div>
+                );
+            })
+        )}
+      </div>
+
+      <div className="h-20" /> {/* Spacer for FAB */}
+      
+      {/* Floating Action Button */}
+      <div className="fixed bottom-6 right-6 z-40">
+        <Button 
+            onClick={() => onEdit({} as Expense)} // Empty object signals new expense
+            className="w-14 h-14 rounded-full shadow-xl flex items-center justify-center bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:scale-105 active:scale-95 transition-all"
+        >
+            <Plus className="w-6 h-6" />
+        </Button>
+      </div>
     </div>
   );
 }
