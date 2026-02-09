@@ -5,6 +5,7 @@ import Modal from '../Modal';
 import { TripUser } from '../../types';
 import { ToastType } from '../Toast';
 import { useTrip } from '../../context/TripContext'; // <--- NOU: Context
+import { TripService } from '../../services/tripService';
 
 interface GroupModalProps {
   isOpen: boolean;
@@ -81,17 +82,7 @@ export default function GroupModal({ isOpen, onClose, showToast, initialTab = 'm
   };
 
   const handleClaimUser = async (tripUserId: string) => {
-    // Aquesta acció específica encara no estava al hook general, la podem deixar aquí o moure-la. 
-    // Per coherència i rapidesa, com que linkUserToAccount és molt específica, la podem mantenir "legacy" o afegir-la a useTripActions.
-    // Com que "actions" exposa la lògica principal, l'ideal seria tenir 'linkUser' allà. 
-    // Per ara, per no fer-te modificar useTripActions un altre cop, farem servir la importació directa (excepció controlada)
-    // O MILLOR: La importem aquí però tenint clar que és un deute tècnic petit.
-    // *Nota: Si vols ser purista, afegeix linkUserToAccount a useTripActions.ts primer.*
-    
-    // De moment, per simplicitat en aquest pas, utilitzaré l'import directe com abans, 
-    // PERÒ en un entorn real ho mouria al hook.
-    const { TripService } = await import('../../services/tripService'); // Dynamic import o estàtic
-    
+        
     if (!currentUser) return;
     if (!window.confirm("Aquest usuari ets tu?")) return;
     
