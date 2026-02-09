@@ -1,3 +1,5 @@
+// src/hooks/useTripCalculations.ts
+
 import { useMemo } from 'react';
 import type { Expense, TripUser } from '../types';
 import * as billingService from '../services/billingService';
@@ -18,52 +20,75 @@ export function useTripCalculations(
   filterCategory: string
 ): CalculationsResult {
   
-  // 1. Filtrar i Ordenar (Lògica de Presentació, es queda al Hook)
+  // 1. Optimització: Ordenació Memotitzada (Pas 1)
+  // Només es re-ordena si canvien les despeses, no quan busquem.
+  const sortedExpenses = useMemo(() => {
+    // Fem una còpia [...expenses] per no mutar l'array original
+    return [...expenses].sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      // Primer per data (més recent primer)
+      if (dateA !== dateB) return dateB - dateA;
+      // Desempat per ID per estabilitat visual
+      if (typeof a.id === 'number' && typeof b.id === 'number') return b.id - a.id;
+      return String(b.id).localeCompare(String(a.id));
+    });
+  }, [expenses]);
+
+  // 2. Filtratge sobre la llista ja ordenada (Pas 2)
+  // Això és molt ràpid i reacciona al teclat de l'usuari.
   const filteredExpenses = useMemo(() => {
-    const q = searchQuery.toLowerCase();
+    const q = searchQuery.toLowerCase().trim();
+    const isCategoryFilterActive = filterCategory !== 'all';
+
+    // Si no hi ha filtres, retornem directament la llista ordenada (O(1))
+    if (!q && !isCategoryFilterActive) {
+      return sortedExpenses;
+    }
     
-    return expenses.filter(e => {
-        // Usem el servei per resoldre noms si cal, o busquem noms per filtrar
-        const payerUser = users.find(u => u.id === e.payer || u.name === e.payer);
-        const payerName = payerUser?.name.toLowerCase() || '';
+    return sortedExpenses.filter(e => {
+        // Lògica de cerca: Títol, Pagador o Involucrats
+        let matchesSearch = true;
         
-        const involvedNames = e.involved.map(idOrName => {
-            const user = users.find(u => u.id === idOrName || u.name === idOrName);
-            return user ? user.name.toLowerCase() : '';
-        });
-
-        const matchesSearch = 
-            e.title.toLowerCase().includes(q) || 
-            payerName.includes(q) ||
-            involvedNames.some(name => name.includes(q));
+        if (q) {
+            // Resolució de noms per a la cerca
+            const payerUser = users.find(u => u.id === e.payer || u.name === e.payer);
+            const payerName = payerUser?.name.toLowerCase() || '';
             
-        const matchesCategory = filterCategory === 'all' || e.category === filterCategory;
-        return matchesSearch && matchesCategory;
-      }).sort((a, b) => {
-        const dateA = new Date(a.date).getTime();
-        const dateB = new Date(b.date).getTime();
-        if (dateA !== dateB) return dateB - dateA;
-        if (typeof a.id === 'number' && typeof b.id === 'number') return b.id - a.id;
-        return String(b.id).localeCompare(String(a.id));
-      });
-  }, [expenses, searchQuery, filterCategory, users]);
+            const involvedNames = e.involved.map(idOrName => {
+                const user = users.find(u => u.id === idOrName || u.name === idOrName);
+                return user ? user.name.toLowerCase() : '';
+            });
 
-  // 2. Balanços (Delegat al Service)
+            matchesSearch = 
+                e.title.toLowerCase().includes(q) || 
+                payerName.includes(q) ||
+                involvedNames.some(name => name.includes(q));
+        }
+
+        // Lògica de categoria
+        const matchesCategory = !isCategoryFilterActive || e.category === filterCategory;
+
+        return matchesSearch && matchesCategory;
+      });
+  }, [sortedExpenses, searchQuery, filterCategory, users]);
+
+  // 3. Balanços (Delegat al Service)
   const balances = useMemo(() => {
     return billingService.calculateBalances(expenses, users);
   }, [users, expenses]);
 
-  // 3. Estadístiques (Delegat al Service)
+  // 4. Estadístiques (Delegat al Service)
   const categoryStats = useMemo(() => {
     return billingService.calculateCategoryStats(expenses);
   }, [expenses]);
 
-  // 4. Liquidacions (Delegat al Service)
+  // 5. Liquidacions (Delegat al Service)
   const settlements = useMemo(() => {
     return billingService.calculateSettlements(balances);
   }, [balances]);
 
-  // 5. Totals (Delegat al Service)
+  // 6. Totals (Delegat al Service)
   const totalGroupSpending = useMemo(() => 
     billingService.calculateTotalSpending(expenses), 
   [expenses]);

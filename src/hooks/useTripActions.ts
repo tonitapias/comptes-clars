@@ -1,20 +1,25 @@
+// src/hooks/useTripActions.ts
+
 import { useState } from 'react';
 import { TripService } from '../services/tripService';
-import { Settlement, Expense, Currency, TripUser } from '../types';
+import { Settlement, Expense, Currency, TripData, TripUser } from '../types';
 import { User } from 'firebase/auth';
 
 export function useTripActions(tripId: string | undefined) {
   const [loadingAction, setLoadingAction] = useState(false);
 
+  // Tipat genèric <T> per inferir correctament el retorn de cada acció
   const execute = async <T>(action: () => Promise<T>): Promise<{ success: boolean; data?: T; error?: string }> => {
     if (!tripId) return { success: false, error: "ID de viatge no trobat" };
     setLoadingAction(true);
     try {
       const data = await action();
       return { success: true, data };
-    } catch (e: any) {
+    } catch (e: unknown) {
+      // Gestió d'errors segura (sense 'any')
       console.error(e);
-      return { success: false, error: e.message || "Error inesperat" };
+      const errorMessage = e instanceof Error ? e.message : "Error inesperat";
+      return { success: false, error: errorMessage };
     } finally {
       setLoadingAction(false);
     }
@@ -39,19 +44,30 @@ export function useTripActions(tripId: string | undefined) {
       execute(async () => {
         const d = new Date(date);
         d.setHours(12, 0, 0, 0); // Evitem errors de zona horària
-        const updateData: any = { name, createdAt: d.toISOString() };
-        if (currency) updateData.currency = currency;
+        
+        // FIX: Tipat estricte Partial<TripData> en lloc de 'any'
+        // Això evita enviar camps brossa a Firebase per error.
+        const updateData: Partial<TripData> = { 
+            name, 
+            createdAt: d.toISOString() 
+        };
+        
+        if (currency) {
+            updateData.currency = currency;
+        }
+        
         await TripService.updateTrip(tripId!, updateData);
       }),
 
     joinTrip: (user: User) => 
       execute(() => TripService.joinTripViaLink(tripId!, user)),
     
-    leaveTrip: async (userId: string, currentBalance: number, isAuthUser: boolean, userUid?: string) => {
+    leaveTrip: async (userId: string, _currentBalance: number, isAuthUser: boolean, userUid?: string) => {
         return execute(async () => {
             if (isAuthUser && userUid) {
-               await TripService.leaveTrip(tripId!, userId, currentBalance);
-               // Lògica addicional de desvinculació de permisos si cal
+               // FIX: TripService.leaveTrip només accepta 2 arguments. 
+               // L'argument 'currentBalance' sobrava i podia causar errors.
+               await TripService.leaveTrip(tripId!, userId);
             }
         });
     }

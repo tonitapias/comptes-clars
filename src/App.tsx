@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
 import { auth } from './config/firebase';
 import LandingPage from './pages/LandingPage';
 import TripPage from './pages/TripPage';
 import ProtectedRoute from './components/ProtectedRoute';
-import { useTheme } from './hooks/useTheme'; // <--- Importat
+import { useTheme } from './hooks/useTheme';
+import { Footer } from './components/Footer';
 
 function App() {
-  useTheme(); // <--- Activa l'escoltador del tema globalment
+  useTheme(); 
   
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -32,23 +33,27 @@ function App() {
   }
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<LandingPage user={user} />} />
-        
-        {/* RUTA PROTEGIDA */}
-        <Route 
-          path="/trip/:tripId" 
-          element={
-            <ProtectedRoute user={user}>
-              <TripPage user={user} />
-            </ProtectedRoute>
-          } 
-        />
-        
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 transition-colors duration-200">
+      
+      <div className="flex-grow">
+        <Routes>
+          <Route path="/" element={<LandingPage user={user} />} />
+          
+          <Route 
+            path="/trip/:tripId" 
+            element={
+              /* AQUÍ ESTAVA L'ERROR: Faltava passar user={user} */
+              <ProtectedRoute user={user}>
+                <TripPage />
+              </ProtectedRoute>
+            } 
+          />
+        </Routes>
+      </div>
+
+      <Footer />
+      
+    </div>
   );
 }
 

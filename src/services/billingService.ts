@@ -34,10 +34,15 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
     return acc;
   }, {} as Record<string, string>);
 
+  // Helper intern per resoldre IDs usant el mapa optimitzat (DRY Refactor)
+  const getCanonicalId = (identifier: string): string | undefined => {
+    if (balanceMap[identifier] !== undefined) return identifier;
+    return nameToIdMap[identifier];
+  };
+
   expenses.forEach(exp => {
     // 1. Qui ha pagat (creditor)
-    // Intentem usar l'ID directament, si no, busquem pel mapa de noms
-    const payerId = balanceMap[exp.payer] !== undefined ? exp.payer : nameToIdMap[exp.payer];
+    const payerId = getCanonicalId(exp.payer);
     
     if (payerId) {
       balanceMap[payerId] += exp.amount;
@@ -50,8 +55,8 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
       const rawInvolved = (exp.involved && exp.involved.length > 0) ? exp.involved : users.map(u => u.id);
       
       const receiversIds = rawInvolved
-        .map(id => balanceMap[id] !== undefined ? id : nameToIdMap[id])
-        .filter((id): id is string => !!id && balanceMap[id] !== undefined)
+        .map(id => getCanonicalId(id))
+        .filter((id): id is string => !!id) // TypeScript type guard
         .sort(); // Sorting per determinisme en el residu
 
       const count = receiversIds.length;
@@ -69,7 +74,7 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
     } else if (splitType === 'exact') {
       const details = exp.splitDetails || {};
       Object.entries(details).forEach(([identifier, amount]) => {
-        const uid = balanceMap[identifier] !== undefined ? identifier : nameToIdMap[identifier];
+        const uid = getCanonicalId(identifier);
         if (uid) {
           balanceMap[uid] -= amount;
         }
@@ -83,9 +88,10 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
         const amountPerShare = exp.amount / totalShares;
         let distributed = 0;
 
+        // Mapegem primer per tenir l'ID canònic i poder ordenar
         const entries = Object.entries(details)
-          .map(([key, shares]) => ({ uid: balanceMap[key] !== undefined ? key : nameToIdMap[key], shares }))
-          .filter((entry): entry is { uid: string, shares: number } => !!entry.uid && balanceMap[entry.uid] !== undefined)
+          .map(([key, shares]) => ({ uid: getCanonicalId(key), shares }))
+          .filter((entry): entry is { uid: string, shares: number } => !!entry.uid)
           .sort((a, b) => a.uid.localeCompare(b.uid));
 
         const count = entries.length;
