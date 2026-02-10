@@ -175,6 +175,32 @@ export const TripService = {
     await logAction(tripId, `s'ha unit al grup`, 'join');
   },
 
+  // --- NOVA FUNCIÓ PER ACTUALITZAR EL NOM D'UN USUARI ---
+  updateTripUserName: async (tripId: string, userId: string, newName: string) => {
+    // ERROR ANTERIOR: doc(db, DB_PATHS.TRIPS, tripId) -> Això fallava perquè DB_PATHS.TRIPS no existeix.
+    
+    // SOLUCIÓ: Utilitzem el helper que ja tens definit a dalt.
+    // Aquest helper construeix la ruta completa: artifacts/.../trips/trip_{ID}
+    const tripRef = getTripRef(tripId); 
+
+    const tripSnap = await getDoc(tripRef);
+
+    if (!tripSnap.exists()) throw new Error("El viatge no existeix");
+
+    const tripData = tripSnap.data(); // Gràcies al converter, això ja és TripData
+
+    const updatedUsers = tripData.users.map(u => {
+      if (u.id === userId) {
+        return { ...u, name: newName.trim() };
+      }
+      return u;
+    });
+
+    await updateDoc(tripRef, { users: updatedUsers });
+    // Opcional: Afegir log
+    // await logAction(tripId, `ha canviat el nom d'un participant`, 'settings');
+  },
+
   leaveTrip: async (tripId: string, internalUserId: string) => {
     const tripRef = getTripRef(tripId);
     const snap = await getDoc(tripRef);
