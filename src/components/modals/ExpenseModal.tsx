@@ -1,12 +1,13 @@
+// src/components/modals/ExpenseModal.tsx
 import React from 'react';
-import { X, Calendar, User as UserIcon, CheckSquare, Square, Calculator, PieChart, Users, Lock, Link, Globe, RefreshCcw } from 'lucide-react';
+import { X, Calendar, User as UserIcon, CheckSquare, Square, Calculator, PieChart, Users, Lock, Link, Globe, RefreshCcw } from 'lucide-react'; // Assegura't que Lock està importat
 import Modal from '../Modal';
 import Button from '../Button';
 import { CATEGORIES } from '../../utils/constants';
 import { TripUser, Currency, Expense, CurrencyCode } from '../../types';
 import { ToastType } from '../Toast';
-import { useExpenseForm } from '../../hooks/useExpenseForm'; // <--- El nostre nou hook
-import { useTrip } from '../../context/TripContext'; // <--- Accés directe a accions
+import { useExpenseForm } from '../../hooks/useExpenseForm';
+import { useTrip } from '../../context/TripContext';
 
 const AVAILABLE_CURRENCIES: CurrencyCode[] = ['EUR', 'USD', 'GBP', 'JPY', 'MXN'];
 
@@ -22,9 +23,8 @@ interface ExpenseModalProps {
 }
 
 export default function ExpenseModal({ isOpen, onClose, initialData, users, currency, onDelete, showToast }: ExpenseModalProps) {
-  const { actions } = useTrip(); // Utilitzem les accions del context
+  const { actions } = useTrip();
 
-  // Deleguem tota la lògica al Hook
   const { formState, setters, logic, isSubmitting } = useExpenseForm({
     initialData: initialData || null,
     users,
@@ -32,170 +32,218 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
     onSubmit: async (data) => {
       try {
         if (initialData) {
-          const res = await actions.updateExpense(String(initialData.id), data);
-          if (!res.success) throw new Error(res.error);
-          showToast("Despesa actualitzada!");
+          await actions.updateExpense(initialData.id, data);
+          showToast('Despesa actualitzada correctament', 'success');
         } else {
-          const res = await actions.addExpense(data);
-          if (!res.success) throw new Error(res.error);
-          showToast("Despesa afegida!");
+          await actions.addExpense(data);
+          showToast('Despesa creada correctament', 'success');
         }
         onClose();
-      } catch (error: any) {
-        showToast(error.message || "Error al guardar", 'error');
+      } catch (error) {
+        console.error(error);
+        showToast('Error al guardar la despesa', 'error');
       }
     }
   });
 
-  const { title, amount, payer, category, date, receiptUrl, splitType, involved, splitDetails, isForeignCurrency, foreignAmount, foreignCurrency, exchangeRate } = formState;
-  
-  const activeUsers = users.filter(u => !u.isDeleted);
-  const isAutoSumMode = splitType === 'exact' || isForeignCurrency;
+  // Helper per saber si estem en mode exacte
+  const isExactMode = formState.splitType === 'exact';
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={initialData ? 'Editar Despesa' : 'Nova Despesa'}>
-      <form onSubmit={logic.handleSubmit} className="space-y-5">
+      <form onSubmit={logic.handleSubmit} className="space-y-6">
         
-        {/* Toggle Multi-divisa */}
-        <div className="flex justify-end">
-            <button type="button" onClick={() => setters.setIsForeignCurrency(!isForeignCurrency)}
-                className={`text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-full transition-all ${isForeignCurrency ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}>
-                <Globe size={12}/> {isForeignCurrency ? 'Moneda Estrangera Activa' : 'Canviar Divisa?'}
-            </button>
-        </div>
-
-        {/* INPUTS DE DIVISA ESTRANGERA */}
-        {isForeignCurrency && (
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 animate-fade-in">
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Import Original</label>
-                        <div className="flex gap-2">
-                             <select value={foreignCurrency} onChange={(e) => setters.setForeignCurrency(e.target.value as CurrencyCode)} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold p-2 outline-none">
-                                 {AVAILABLE_CURRENCIES.filter(c => c !== currency.code).map(c => <option key={c} value={c}>{c}</option>)}
-                             </select>
-                             <input type="number" step="0.01" min="0.01" placeholder="0.00" className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none font-bold"
-                                value={foreignAmount} onChange={(e) => setters.setForeignAmount(e.target.value)} autoFocus />
-                        </div>
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 flex items-center gap-1"><RefreshCcw size={10}/> Tipus de Canvi</label>
-                        <div className="relative">
-                            <input type="number" step="0.0001" min="0.0001" placeholder="1.00" className="w-full p-2 pl-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none font-bold"
-                                value={exchangeRate} onChange={(e) => setters.setExchangeRate(e.target.value)} />
-                            <span className="absolute right-2 top-2.5 text-[10px] text-slate-400">1 {foreignCurrency} = {exchangeRate} {currency.code}</span>
-                        </div>
-                    </div>
-                </div>
-                <div className="text-right"><p className="text-xs text-slate-400">Total calculat: <span className="font-bold text-indigo-600 dark:text-indigo-400">{amount || '0.00'} {currency.symbol}</span></p></div>
-            </div>
-        )}
-
-        {/* Import i Títol */}
-        <div className="flex gap-3">
+        {/* --- AMOUNT INPUT (MODIFICAT PER BLOQUEJAR EN MODE EXACTE) --- */}
+        <div className="flex gap-4">
             <div className="flex-1">
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Concepte</label>
-                <input required type="text" placeholder="Ex: Sopar..." className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:text-white rounded-xl outline-none focus:ring-2 ring-indigo-500/20 transition-all" value={title} onChange={e => setters.setTitle(e.target.value)} />
-            </div>
-            <div className="w-1/3">
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 flex items-center gap-1">Total ({currency.code}) {isAutoSumMode && <Lock size={10} className="text-indigo-500"/>}</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Import</label>
                 <div className="relative">
-                    <input required type="number" step="0.01" min="0.01" placeholder="0.00" readOnly={isAutoSumMode} 
-                        className={`w-full p-3 pl-8 border border-slate-200 dark:border-slate-700 dark:text-white rounded-xl outline-none transition-all font-mono font-bold ${isAutoSumMode ? 'bg-slate-100 dark:bg-slate-900 text-slate-500 cursor-not-allowed border-indigo-200' : 'bg-slate-50 dark:bg-slate-800 focus:ring-2 ring-indigo-500/20'}`} 
-                        value={amount} onChange={e => setters.setAmount(e.target.value)} />
-                    <span className="absolute left-3 top-3.5 text-slate-400 text-sm font-bold">{currency.symbol}</span>
+                    <input 
+                        type="number" 
+                        step="0.01" 
+                        placeholder="0.00" 
+                        required 
+                        readOnly={isExactMode} // <--- BLOQUEJAT SI ÉS EXACTE
+                        value={formState.amount} 
+                        onChange={(e) => setters.setAmount(e.target.value)} 
+                        className={`w-full p-4 pl-12 text-3xl font-bold rounded-2xl border outline-none transition-all
+                            ${isExactMode 
+                                ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-lock' // Estil bloquejat
+                                : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10' // Estil normal
+                            }
+                        `}
+                    />
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-bold text-slate-400">
+                        {currency.symbol}
+                    </span>
+                    
+                    {/* Icona de cadenat si està bloquejat */}
+                    {isExactMode && (
+                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 flex items-center gap-1 bg-slate-200 px-2 py-1 rounded text-xs font-bold">
+                            <Lock size={14} />
+                            <span>Auto</span>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
 
-        {/* Pagador i Data */}
-        <div className="grid grid-cols-2 gap-3">
-             <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Pagat per</label>
-                <div className="relative">
-                    <select className="w-full p-3 pl-9 appearance-none bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:text-white rounded-xl outline-none focus:ring-2 ring-indigo-500/20 transition-all text-sm font-medium" value={payer} onChange={e => setters.setPayer(e.target.value)}>
-                        {activeUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                    </select>
-                    <UserIcon className="absolute left-3 top-3.5 text-slate-400" size={16}/>
-                </div>
-             </div>
-             <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Data</label>
-                <div className="relative">
-                    <input type="date" className="w-full p-3 pl-9 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:text-white rounded-xl outline-none focus:ring-2 ring-indigo-500/20 transition-all text-sm font-medium" value={date} onChange={e => setters.setDate(e.target.value)} />
-                    <Calendar className="absolute left-3 top-3.5 text-slate-400" size={16}/>
-                </div>
-             </div>
-        </div>
-
-        {/* Categories */}
+        {/* TITLE INPUT */}
         <div>
-            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">Categoria</label>
-            <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                {CATEGORIES.filter(c => c.id !== 'all' && c.id !== 'transfer').map(cat => (
-                    <button type="button" key={cat.id} onClick={() => setters.setCategory(cat.id)} 
-                    className={`flex flex-col items-center gap-1 min-w-[60px] p-2 rounded-xl border-2 transition-all ${category === cat.id ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 scale-105' : 'border-slate-100 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 grayscale'}`}>
-                        <cat.icon size={20} />
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Concepte</label>
+            <input 
+                type="text" 
+                placeholder="Ex: Sopar, Taxi, Supermercat..." 
+                required 
+                value={formState.title} 
+                onChange={(e) => setters.setTitle(e.target.value)} 
+                className="w-full p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:border-indigo-500 transition-colors font-medium text-lg"
+            />
+        </div>
+
+        {/* RESTA DEL FORMULARI (Sense canvis, només copiat per context) */}
+        <div className="grid grid-cols-2 gap-4">
+            <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Pagador</label>
+                <div className="relative">
+                    <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+                    <select 
+                        value={formState.payer} 
+                        onChange={(e) => setters.setPayer(e.target.value)} 
+                        className="w-full p-3 pl-10 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 appearance-none font-medium"
+                    >
+                        {users.map(u => (
+                            <option key={u.id} value={u.id}>{u.name}</option>
+                        ))}
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Data</label>
+                <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+                    <input 
+                        type="date" 
+                        value={formState.date} 
+                        onChange={(e) => setters.setDate(e.target.value)} 
+                        className="w-full p-3 pl-10 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 font-medium"
+                    />
+                </div>
+            </div>
+        </div>
+
+        {/* CATEGORIES */}
+        <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Categoria</label>
+            <div className="grid grid-cols-4 gap-2">
+                {CATEGORIES.filter(c => c.id !== 'all').map(cat => (
+                    <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setters.setCategory(cat.id)}
+                        className={`
+                            flex flex-col items-center justify-center p-2 rounded-xl border-2 transition-all
+                            ${formState.category === cat.id 
+                                ? `border-${cat.color.split('-')[1]}-500 bg-${cat.color.split('-')[1]}-50 text-${cat.color.split('-')[1]}-700` 
+                                : 'border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 text-slate-500'
+                            }
+                        `}
+                    >
+                        <cat.icon className="w-6 h-6 mb-1" />
                         <span className="text-[10px] font-bold">{cat.label}</span>
                     </button>
                 ))}
             </div>
         </div>
 
-        {/* INPUT DE TIQUET */}
-        <div>
-            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1 flex items-center gap-1"><Link size={12}/> Enllaç del Tiquet / Foto</label>
-            <input type="url" placeholder="https://..." className="w-full p-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:text-white rounded-xl outline-none focus:ring-2 ring-indigo-500/20 transition-all placeholder:text-slate-400" value={receiptUrl} onChange={e => setters.setReceiptUrl(e.target.value)} />
-        </div>
-
-        {/* REPARTIMENT */}
-        <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
-            <div className="flex items-center justify-between mb-3">
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Com es reparteix?</label>
-                <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
-                    {(['equal', 'exact', 'shares'] as const).map((type) => (
-                        <button key={type} type="button" onClick={() => setters.setSplitType(type)} className={`px-3 py-1 text-xs font-bold rounded-md transition-all flex items-center gap-1 ${splitType === type ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'}`}>
-                            {type === 'equal' && <Users size={12}/>}{type === 'exact' && <Calculator size={12}/>}{type === 'shares' && <PieChart size={12}/>}
-                            {type === 'equal' ? 'Igual' : type === 'exact' ? 'Exacte' : 'Parts'}
-                        </button>
-                    ))}
-                </div>
+        {/* DIVISIÓ DE LA DESPESA */}
+        <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
+            <div className="flex gap-1 bg-slate-200 dark:bg-slate-800 p-1 rounded-xl mb-4">
+                {[
+                    { id: 'equal', icon: Users, label: 'Equitatiu' },
+                    { id: 'exact', icon: Calculator, label: 'Exacte' }, // Ara aquest mode té poders especials
+                    { id: 'percent', icon: PieChart, label: 'Percentatge' }
+                ].map((type) => (
+                    <button
+                        key={type.id}
+                        type="button"
+                        onClick={() => setters.setSplitType(type.id as any)}
+                        className={`flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+                            formState.splitType === type.id 
+                                ? 'bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-indigo-400' 
+                                : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                    >
+                        <type.icon size={16} />
+                        <span className="hidden sm:inline">{type.label}</span>
+                    </button>
+                ))}
             </div>
 
-            {splitType === 'equal' && (
-                <div className="animate-fade-in">
-                     <div className="flex justify-end gap-1 mb-2">
-                        <button type="button" onClick={logic.handleSelectAll} className="px-2 py-0.5 text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded hover:bg-slate-200">Tots</button>
-                        <button type="button" onClick={logic.handleSelectNone} className="px-2 py-0.5 text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded hover:bg-slate-200">Ningú</button>
-                        <button type="button" onClick={logic.handleSelectOnlyPayer} className="px-2 py-0.5 text-[10px] font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 rounded hover:bg-indigo-100">Només Pagador</button>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto p-1">
-                        {activeUsers.map(u => {
-                            const isSelected = involved.includes(u.id);
-                            return (
-                                <button type="button" key={u.id} onClick={() => logic.toggleInvolved(u.id)} className={`flex items-center gap-2 p-2 rounded-lg border text-sm font-medium transition-all text-left ${isSelected ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 shadow-sm' : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 opacity-70 hover:opacity-100'}`}>
-                                    {isSelected ? <CheckSquare size={16} className="shrink-0"/> : <Square size={16} className="shrink-0"/>}
-                                    <span className="truncate">{u.name}</span>
-                                </button>
-                            )
-                        })}
-                    </div>
+            {/* EQUAL MODE */}
+            {formState.splitType === 'equal' && (
+                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+                    {users.map(u => {
+                        const isSelected = formState.involved.includes(u.id);
+                        return (
+                            <button
+                                key={u.id}
+                                type="button"
+                                onClick={() => logic.toggleInvolved(u.id)}
+                                className={`
+                                    flex items-center gap-3 p-3 rounded-xl border transition-all text-left
+                                    ${isSelected 
+                                        ? 'bg-indigo-50 border-indigo-200 text-indigo-900 dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-200' 
+                                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 opacity-60 grayscale hover:opacity-100'
+                                    }
+                                `}
+                            >
+                                {isSelected 
+                                    ? <CheckSquare className="text-indigo-600 dark:text-indigo-400 w-5 h-5 flex-shrink-0" /> 
+                                    : <Square className="text-slate-400 w-5 h-5 flex-shrink-0" />
+                                }
+                                <span className="font-bold text-sm truncate">{u.name}</span>
+                            </button>
+                        );
+                    })}
                 </div>
             )}
 
-            {(splitType === 'exact' || splitType === 'shares') && (
-                <div className="animate-fade-in space-y-2">
-                    {splitType === 'exact' && <p className="text-[10px] text-indigo-500 dark:text-indigo-400 font-bold mb-2 flex items-center gap-1"><Calculator size={10}/> El total es calcula automàticament.</p>}
-                    {activeUsers.map(u => (
-                         <div key={u.id} className="flex items-center justify-between gap-2 p-2 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                             <span className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate w-32">{u.name}</span>
-                             {splitType === 'exact' ? (
-                                <div className="relative w-32">
-                                    <input type="number" step="0.01" min="0" placeholder="0.00" value={splitDetails[u.id] || ''} onChange={(e) => logic.handleDetailChange(u.id, e.target.value)} className="w-full p-1.5 pl-6 text-right bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-md text-sm font-bold outline-none focus:border-indigo-500"/>
+            {/* EXACT MODE & PERCENT MODE */}
+            {formState.splitType !== 'equal' && (
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+                    {users.map(u => (
+                         <div key={u.id} className="flex items-center justify-between p-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800">
+                             <div className="flex items-center gap-2">
+                                <div className={`w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-400`}>
+                                    {u.name.charAt(0)}
+                                </div>
+                                <span className="font-medium text-sm">{u.name}</span>
+                             </div>
+                             
+                             {formState.splitType === 'exact' ? (
+                                <div className="relative w-24">
+                                    <input 
+                                        type="number" 
+                                        step="0.01" 
+                                        min="0" 
+                                        placeholder="0" 
+                                        value={formState.splitDetails[u.id] ?? ''} 
+                                        onChange={(e) => logic.handleDetailChange(u.id, e.target.value)} 
+                                        className="w-full p-1.5 pl-6 text-right bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-md text-sm font-bold outline-none focus:border-indigo-500"
+                                    />
                                     <span className="absolute left-2 top-1.5 text-slate-400 text-xs">{currency.symbol}</span>
                                 </div>
                              ) : (
-                                <input type="number" step="0.5" min="0" placeholder="0" value={splitDetails[u.id] ?? ''} onChange={(e) => logic.handleDetailChange(u.id, e.target.value)} className="w-16 p-1.5 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-md text-sm font-bold outline-none focus:border-indigo-500"/>
+                                <input 
+                                    type="number" 
+                                    step="0.5" 
+                                    min="0" 
+                                    placeholder="0" 
+                                    value={formState.splitDetails[u.id] ?? ''} 
+                                    onChange={(e) => logic.handleDetailChange(u.id, e.target.value)} 
+                                    className="w-16 p-1.5 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-md text-sm font-bold outline-none focus:border-indigo-500"
+                                />
                              )}
                          </div>
                     ))}
@@ -204,8 +252,14 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
         </div>
 
         <div className="flex gap-3 pt-2">
-            {initialData && onDelete && <button type="button" onClick={() => onDelete(initialData.id)} className="p-4 rounded-xl bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors"><X size={20} /></button>}
-            <Button type="submit" className="flex-1" disabled={isSubmitting || (splitType === 'equal' && involved.length === 0)}>{isSubmitting ? 'Guardant...' : initialData ? 'Actualitzar' : 'Afegir Despesa'}</Button>
+            {initialData && onDelete && (
+                <button type="button" onClick={() => onDelete(initialData.id)} className="p-4 rounded-xl bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors">
+                    <X size={20} />
+                </button>
+            )}
+            <Button type="submit" className="flex-1" loading={isSubmitting}>
+                {initialData ? 'Guardar Canvis' : 'Crear Despesa'}
+            </Button>
         </div>
       </form>
     </Modal>

@@ -1,6 +1,6 @@
 // src/hooks/useExpenseForm.ts
 import { useState, useEffect } from 'react';
-import { Expense, TripUser, Currency, CurrencyCode, CategoryId, SplitType } from '../types';
+import { Expense, TripUser, Currency, CategoryId, SplitType } from '../types';
 import { SPLIT_TYPES } from '../services/billingService';
 
 interface UseExpenseFormProps {
@@ -25,69 +25,78 @@ export function useExpenseForm({ initialData, users, currency, onSubmit }: UseEx
   const [date, setDate] = useState(initialData?.date ? initialData.date.split('T')[0] : new Date().toISOString().split('T')[0]);
   const [receiptUrl, setReceiptUrl] = useState(initialData?.receiptUrl || '');
   
-  // MILLORA: Ús de constants importades per evitar errors de tipografia i mantenir coherència
   const [splitType, setSplitType] = useState<SplitType>(initialData?.splitType || SPLIT_TYPES.EQUAL);
+  const [involved, setInvolved] = useState<string[]>(initialData?.involved || users.map(u => u.id));
   
-  const [involved, setInvolved] = useState<string[]>(initialData?.involved || users.filter(u => !u.isDeleted).map(u => u.id));
-  
-  // Convertim els detalls del repartiment de cèntims a unitats si cal
+  // Normalitzem els detalls si venen de la DB (cèntims -> unitats)
   const [splitDetails, setSplitDetails] = useState<Record<string, number>>(() => {
     if (!initialData?.splitDetails) return {};
-    const normalized: Record<string, number> = {};
+    const details: Record<string, number> = {};
     Object.entries(initialData.splitDetails).forEach(([uid, val]) => {
-      normalized[uid] = val / 100; 
+      details[uid] = val / 100;
     });
-    return normalized;
+    return details;
   });
 
   const [isForeignCurrency, setIsForeignCurrency] = useState(!!initialData?.originalCurrency);
   const [foreignAmount, setForeignAmount] = useState(initialData?.originalAmount?.toString() || '');
-  const [foreignCurrency, setForeignCurrency] = useState<CurrencyCode>(initialData?.originalCurrency || 'USD');
-  const [exchangeRate, setExchangeRate] = useState(initialData?.exchangeRate?.toString() || '1');
-  
+  const [foreignCurrency, setForeignCurrency] = useState(initialData?.originalCurrency || 'USD');
+  const [exchangeRate, setExchangeRate] = useState(initialData?.exchangeRate?.toString() || '');
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // --- NOVA FUNCIÓ: AUTOSUMA (RISC ZERO) ---
+  // Aquest efecte només s'activa quan canvien els detalls i estem en mode 'exact'
   useEffect(() => {
-    if (isForeignCurrency && foreignAmount && exchangeRate) {
-      const calculated = parseFloat(foreignAmount) / parseFloat(exchangeRate);
-      setAmount(calculated.toFixed(2));
+    if (splitType === SPLIT_TYPES.EXACT) {
+      // Sumem tots els valors introduïts als inputs individuals
+      const total = Object.values(splitDetails).reduce((sum, val) => sum + (Number(val) || 0), 0);
+      
+      // Actualitzem el camp 'amount' principal
+      // Usem toFixed(2) perquè sembli una moneda, o string buit si és 0 per no molestar
+      setAmount(total > 0 ? total.toFixed(2) : '');
     }
-  }, [foreignAmount, exchangeRate, isForeignCurrency]);
+  }, [splitDetails, splitType]);
+  // ------------------------------------------
 
-  const handleSelectAll = () => setInvolved(users.filter(u => !u.isDeleted).map(u => u.id));
-  const handleSelectNone = () => setInvolved([]);
-  const handleSelectOnlyPayer = () => setInvolved([payer]);
-  
-  const toggleInvolved = (uid: string) => {
-    setInvolved(prev => prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]);
+  // Logic handlers
+  const toggleInvolved = (userId: string) => {
+    setInvolved(prev => {
+      if (prev.includes(userId)) {
+        if (prev.length === 1) return prev; // No pot quedar buit
+        return prev.filter(id => id !== userId);
+      }
+      return [...prev, userId];
+    });
   };
 
-  const handleDetailChange = (uid: string, value: string) => {
-    setSplitDetails(prev => ({ ...prev, [uid]: parseFloat(value) || 0 }));
+  const handleDetailChange = (userId: string, value: string) => {
+    const numValue = parseFloat(value);
+    setSplitDetails(prev => ({
+      ...prev,
+      [userId]: isNaN(numValue) ? 0 : numValue
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !amount || !payer) return;
-    setIsSubmitting(true);
+    if (isSubmitting) return;
 
     try {
-      // Convertim l'input (unitats) a cèntims per guardar
+      setIsSubmitting(true);
       const amountInCents = Math.round(parseFloat(amount) * 100);
       
-      const expenseData: Omit<Expense, 'id'> = {
+      const expenseData: any = {
         title,
         amount: amountInCents,
         payer,
         category,
         date: new Date(date).toISOString(),
-        // Ús de la constant
-        involved: splitType === SPLIT_TYPES.EQUAL ? involved : Object.keys(splitDetails).filter(k => splitDetails[k] > 0),
         splitType,
+        involved,
       };
 
       if (splitType !== SPLIT_TYPES.EQUAL) {
-        // Tornem a convertir els detalls a cèntims per a la base de dades
         const detailsInCents: Record<string, number> = {};
         Object.entries(splitDetails).forEach(([uid, val]) => {
           detailsInCents[uid] = Math.round(val * 100);
@@ -127,8 +136,9 @@ export function useExpenseForm({ initialData, users, currency, onSubmit }: UseEx
       setIsForeignCurrency, setForeignAmount, setForeignCurrency, setExchangeRate
     },
     logic: {
-      handleSelectAll, handleSelectNone, handleSelectOnlyPayer, 
-      toggleInvolved, handleDetailChange, handleSubmit
+      toggleInvolved,
+      handleDetailChange,
+      handleSubmit
     },
     isSubmitting
   };
