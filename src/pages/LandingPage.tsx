@@ -1,20 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Plus, ArrowRight, Wallet, Loader2, LogOut, ChevronRight, 
-  Trash2, Sparkles, KeyRound, Mail, Lock, Eye, EyeOff, 
-  CreditCard, PieChart, ShieldCheck, FolderGit2 
+  Sparkles, KeyRound, CreditCard, PieChart, ShieldCheck, FolderGit2 
 } from 'lucide-react';
-import { 
-  GoogleAuthProvider, 
-  signInWithPopup, 
-  signOut, 
-  User,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  updateProfile,
-  sendPasswordResetEmail
-} from 'firebase/auth';
+import { signOut, User } from 'firebase/auth';
 
 import { auth } from '../config/firebase';
 import { TripService } from '../services/tripService';
@@ -22,95 +12,17 @@ import { CURRENCIES } from '../utils/constants';
 import { TripData, TripUser } from '../types'; 
 import Modal from '../components/Modal';
 
+// Components nous refactoritzats
+import BentoCard from '../components/landing/BentoCard';
+import TripCard from '../components/landing/TripCard';
+import AuthForm from '../components/auth/AuthForm';
+
 // --- TIPUS ---
 type ActionState = 'idle' | 'creating' | 'joining';
-type AuthMode = 'initial' | 'login-email' | 'signup-email';
 
-// --- SUB-COMPONENTS ---
-
-interface BentoCardProps {
-    icon: React.ElementType;
-    title: string;
-    desc: string;
-    color: string;
+interface LandingPageProps {
+  user: User | null;
 }
-
-function BentoCard({ icon: Icon, title, desc, color }: BentoCardProps) {
-    return (
-      <div className="group relative overflow-hidden bg-white/60 dark:bg-slate-800/60 backdrop-blur-md p-6 rounded-3xl border border-white/50 dark:border-white/10 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
-        <div className={`absolute top-0 right-0 p-20 rounded-full blur-3xl opacity-10 transition-opacity group-hover:opacity-20 ${color}`}></div>
-        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 shadow-sm ${color} text-white`}>
-          <Icon size={24} strokeWidth={2.5} />
-        </div>
-        <h3 className="font-bold text-slate-800 dark:text-white text-lg mb-2">{title}</h3>
-        <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed font-medium">{desc}</p>
-      </div>
-    );
-}
-
-interface TripCardProps {
-    trip: TripData;
-    currentUser: User;
-    onNavigate: (id: string) => void;
-    onLeave: (e: React.MouseEvent, tripId: string, internalId: string | undefined, name: string) => void;
-}
-
-function TripCard({ trip, currentUser, onNavigate, onLeave }: TripCardProps) {
-    // Seguretat: Cerquem l'usuari intern dins del viatge per poder sortir-ne
-    const currentUserInfo = trip.users?.find(u => u.linkedUid === currentUser.uid);
-    
-    return (
-        <div 
-            onClick={() => onNavigate(trip.id)} 
-            className="group relative bg-white dark:bg-slate-900 hover:bg-white/80 dark:hover:bg-slate-800 p-6 rounded-3xl border border-white/60 dark:border-slate-800 shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer hover:-translate-y-1 overflow-hidden"
-        >
-            <div className="absolute -right-6 -top-6 w-32 h-32 bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
-
-            <div className="relative z-10">
-                <div className="flex justify-between items-start mb-4">
-                    <div className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 p-2.5 rounded-xl">
-                        <FolderGit2 size={24} />
-                    </div>
-                    <button 
-                        onClick={(e) => onLeave(e, trip.id, currentUserInfo?.id, trip.name)}
-                        className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 z-20"
-                    >
-                        <Trash2 size={18} />
-                    </button>
-                </div>
-                
-                <h3 className="text-xl font-extrabold text-slate-800 dark:text-white mb-1 truncate pr-2">{trip.name}</h3>
-                <p className="text-sm text-slate-400 dark:text-slate-500 font-medium mb-4">
-                    Creat el {trip.createdAt ? new Date(trip.createdAt).toLocaleDateString() : '---'}
-                </p>
-                
-                <div className="flex items-center justify-between mt-auto">
-                    <div className="flex -space-x-2">
-                        {trip.users?.slice(0, 3).map((u, i) => (
-                            <div key={i} className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-500 dark:text-slate-400 overflow-hidden shadow-sm">
-                                {u.photoUrl ? (
-                                    <img src={u.photoUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" alt={u.name} />
-                                ) : (
-                                    u.name?.charAt(0) || '?'
-                                )}
-                            </div>
-                        ))}
-                        {(trip.users?.length || 0) > 3 && (
-                            <div className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-400 shadow-sm">
-                                +{trip.users.length - 3}
-                            </div>
-                        )}
-                    </div>
-                    <div className="w-8 h-8 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-300 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                        <ChevronRight size={18} />
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// --- COMPONENT PRINCIPAL ---
 
 export default function LandingPage({ user }: LandingPageProps) {
   const navigate = useNavigate();
@@ -122,16 +34,7 @@ export default function LandingPage({ user }: LandingPageProps) {
   const [actionState, setActionState] = useState<ActionState>('idle');
   
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<AuthMode>('initial');
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [authError, setAuthError] = useState('');
-  const [resetSent, setResetSent] = useState(false);
-
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  // Nota: Hem eliminat tot l'estat d'auth (email, password, etc) perquè ara viu a AuthForm.tsx
 
   const [inputValue, setInputValue] = useState('');
   const [creatorName, setCreatorName] = useState('');
@@ -163,7 +66,6 @@ export default function LandingPage({ user }: LandingPageProps) {
       setLoadingTrips(true);
       try {
         const trips = await TripService.getUserTrips(user.uid);
-        // Ordenació segura per data
         trips.sort((a, b) => {
             const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
             const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -200,44 +102,6 @@ export default function LandingPage({ user }: LandingPageProps) {
     };
     handleAutoJoin();
   }, [user, inviteCode, navigate, setSearchParams]);
-
-  // Handlers d'autenticació
-  const handleGoogleLogin = async () => {
-    setLoginLoading(true);
-    setAuthError('');
-    try { 
-      await signInWithPopup(auth, new GoogleAuthProvider());
-      setIsAuthModalOpen(false);
-    } catch (e: any) { 
-      if (!auth.currentUser) {
-        setAuthError(e.message?.includes('closed-by-user') ? 'Finestra tancada' : 'Error Google');
-      } else {
-        setIsAuthModalOpen(false);
-      }
-    } finally { setLoginLoading(false); }
-  };
-
-  const handleEmailAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginLoading(true);
-    setAuthError('');
-    try {
-      if (authMode === 'signup-email') {
-        if (password !== confirmPassword) {
-            setAuthError("No coincideixen");
-            setLoginLoading(false);
-            return;
-        }
-        const cred = await createUserWithEmailAndPassword(auth, email, password);
-        await updateProfile(cred.user, { displayName: email.split('@')[0] });
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
-      }
-      setIsAuthModalOpen(false);
-    } catch (err: any) {
-      setAuthError(err.code === 'auth/email-already-in-use' ? 'Ja registrat' : 'Error accés');
-    } finally { setLoginLoading(false); }
-  };
 
   const handleJoinManual = (e: React.FormEvent) => {
     e.preventDefault();
@@ -454,47 +318,7 @@ export default function LandingPage({ user }: LandingPageProps) {
       </div>
 
       <Modal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} title="Accés">
-        <div className="space-y-4 px-2">
-            {authMode === 'initial' && (
-                <>
-                    <button onClick={handleGoogleLogin} disabled={loginLoading} className="w-full flex items-center justify-center gap-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-4 rounded-xl font-bold transition shadow-lg">
-                        {loginLoading ? <Loader2 className="animate-spin text-white/50" /> : <><img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="G" /> Continuar amb Google</>}
-                    </button>
-                    <div className="relative my-4">
-                        <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100 dark:border-slate-700"></div></div>
-                        <div className="relative flex justify-center text-xs uppercase font-bold tracking-widest"><span className="bg-white dark:bg-slate-900 px-2 text-slate-300">OPCIONS</span></div>
-                    </div>
-                    <button onClick={() => setAuthMode('login-email')} className="w-full py-3.5 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 text-slate-600 dark:text-white font-bold rounded-xl hover:text-indigo-600 transition flex items-center justify-center gap-2"><Mail size={20}/> Correu electrònic</button>
-                </>
-            )}
-
-            {(authMode === 'login-email' || authMode === 'signup-email') && (
-                <form onSubmit={handleEmailAuth} className="flex flex-col gap-4 animate-fade-in">
-                    {authError && <div className="bg-red-50 text-red-500 p-3 rounded-xl text-sm font-bold border border-red-100">{authError}</div>}
-                    <div className="space-y-3">
-                        <div className="relative group">
-                            <Mail className="absolute left-4 top-4 text-slate-400" size={20}/>
-                            <input autoFocus type="email" placeholder="Correu" className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl pl-12 pr-4 py-3.5 outline-none focus:border-indigo-500 font-bold text-slate-700 dark:text-white" value={email} onChange={e => setEmail(e.target.value)} required/>
-                        </div>
-                        <div className="relative group">
-                            <Lock className="absolute left-4 top-4 text-slate-400" size={20}/>
-                            <input type={showPassword ? "text" : "password"} placeholder="Contrasenya" className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl pl-12 pr-12 py-3.5 outline-none focus:border-indigo-500 font-bold text-slate-700 dark:text-white" value={password} onChange={e => setPassword(e.target.value)} required minLength={6}/>
-                            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-4 text-slate-300">{showPassword ? <EyeOff size={20} /> : <Eye size={20} />}</button>
-                        </div>
-                        {authMode === 'login-email' && <div className="flex justify-end"><button type="button" onClick={() => sendPasswordResetEmail(auth, email).then(() => setResetSent(true))} className="text-xs font-bold text-slate-400 hover:text-indigo-600">He oblidat la contrasenya</button></div>}
-                    </div>
-                    <button disabled={loginLoading} className="mt-2 w-full bg-indigo-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-indigo-700 transition flex items-center justify-center gap-2 shadow-lg">
-                        {loginLoading ? <Loader2 className="animate-spin" /> : (authMode === 'login-email' ? 'Entrar' : 'Registrar-me')}
-                    </button>
-                    <div className="flex flex-col gap-3 mt-2 text-center">
-                        <button type="button" onClick={() => setAuthMode(authMode === 'login-email' ? 'signup-email' : 'login-email')} className="text-slate-600 dark:text-slate-300 font-bold hover:text-indigo-600 text-sm">
-                            {authMode === 'login-email' ? "No tens compte? Registra't" : "Ja tens compte? Entra"}
-                        </button>
-                        <button type="button" onClick={() => setAuthMode('initial')} className="text-slate-400 hover:text-slate-600 text-xs font-bold uppercase tracking-wider">Tornar</button>
-                    </div>
-                </form>
-            )}
-        </div>
+        <AuthForm onClose={() => setIsAuthModalOpen(false)} />
       </Modal>
 
       <style>{` 
