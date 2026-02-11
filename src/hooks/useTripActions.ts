@@ -55,7 +55,8 @@ export function useTripActions(tripId: string | undefined) {
         await TripService.updateTrip(tripId!, updateData);
       }),
 
-    // --- ACCIÓ NOVA: ESBORRAR PROJECTE ---
+    // --- ACCIÓ "SOFT DELETE" ---
+    // Aquesta acció marca el viatge com a isDeleted: true
     deleteTrip: () => 
       execute(async () => {
          await TripService.deleteTrip(tripId!);
@@ -64,16 +65,21 @@ export function useTripActions(tripId: string | undefined) {
     joinTrip: (user: User) => 
       execute(() => TripService.joinTripViaLink(tripId!, user)),
     
-    // --- LÒGICA MILLORADA: PROTECCIÓ CONTRA DEUTES ---
+    // --- LÒGICA PROTECCIÓ CONTRA DEUTES ---
     leaveTrip: async (userId: string, currentBalance: number, isAuthUser: boolean, userUid?: string) => {
         return execute(async () => {
             if (isAuthUser && userUid) {
-               // VALIDACIÓ: No permetem sortir si el balanç no és quasi zero (marge 10 cèntims)
+               // VALIDACIÓ: Protecció estricta de deutes.
+               // Utilitzem 10 cèntims com a marge d'error per arrodoniments.
+               // Si l'usuari deu diners O li deuen diners, no pot marxar.
                if (Math.abs(currentBalance) > 10) {
-                 throw new Error("No pots sortir del grup si tens deutes pendents o diners per recuperar. Primer has de liquidar el teu saldo.");
+                 const tipusDeute = currentBalance > 0 ? "tens diners per recuperar" : "tens deutes pendents";
+                 throw new Error(`No pots sortir del grup: ${tipusDeute}. Primer has de liquidar el teu saldo (Balanç actual: ${(currentBalance/100).toFixed(2)}€).`);
                }
 
                await TripService.leaveTrip(tripId!, userId);
+            } else {
+               throw new Error("No tens permisos per realitzar aquesta acció.");
             }
         });
     }

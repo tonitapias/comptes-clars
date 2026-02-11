@@ -72,7 +72,8 @@ export interface TripData {
   createdAt: string;
   memberUids?: string[];   
   logs?: LogEntry[];
-  isDeleted?: boolean; // <--- NOVA PROPIETAT (SOFT DELETE)
+  isDeleted?: boolean; // <--- SOFT DELETE
+  isSettled?: boolean; // <--- NOU ESTAT SALDAT
 }
 
 // --- RESULTATS DE CÀLCULS ---

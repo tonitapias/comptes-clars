@@ -9,6 +9,7 @@ import { db, auth } from '../config/firebase';
 import { DB_PATHS, TRIP_DOC_PREFIX } from '../config/dbPaths';
 import { Expense, TripData, Settlement, TripUser, LogEntry, Currency } from '../types';
 import { ExpenseSchema } from '../utils/validation';
+import { calculateBalances } from './billingService'; // Importem la lògica de càlcul
 
 // --- HELPER: SANITIZE DATA ---
 const sanitizeData = <T>(data: T): T => {
@@ -36,7 +37,8 @@ const tripConverter: FirestoreDataConverter<TripData> = {
       createdAt: data.createdAt || new Date().toISOString(),
       memberUids: data.memberUids || [],
       logs: data.logs || [],
-      isDeleted: data.isDeleted || false // Llegim el flag
+      isDeleted: data.isDeleted || false, // Flag Soft Delete
+      isSettled: data.isSettled || false   // Flag Saldat
     };
   }
 };
@@ -53,6 +55,36 @@ const getExpenseRef = (tripId: string, expenseId: string) =>
   doc(db, DB_PATHS.getExpenseDocPath(tripId, expenseId));
 
 const generateId = () => crypto.randomUUID();
+
+// --- FUNCIÓ AUXILIAR: RECALCULAR ESTAT SALDAT ---
+// Aquesta funció es crida cada vegada que hi ha un canvi financer
+const recalculateTripSettledStatus = async (tripId: string) => {
+  try {
+    // 1. Obtenim totes les despeses actuals
+    const expensesSnap = await getDocs(getExpensesCol(tripId));
+    const currentExpenses = expensesSnap.docs.map(d => ({ ...d.data(), id: d.id })) as Expense[];
+
+    // 2. Obtenim els usuaris (necessaris per al càlcul de balances)
+    const tripSnap = await getDoc(getTripRef(tripId));
+    if (!tripSnap.exists()) return;
+    const tripData = tripSnap.data();
+
+    // 3. Calculem els balanços
+    const balances = calculateBalances(currentExpenses, tripData.users);
+
+    // 4. Comprovem si TOTS els balanços són quasi zero (< 10 cèntims)
+    const isSettled = balances.every(b => Math.abs(b.amount) < 10);
+
+    // 5. Només actualitzem si l'estat ha canviat per estalviar escriptures
+    if (tripData.isSettled !== isSettled) {
+      await updateDoc(getTripRef(tripId), { isSettled });
+      console.log(`[TripService] Estat 'isSettled' actualitzat a: ${isSettled}`);
+    }
+
+  } catch (error) {
+    console.error("Error recalculant l'estat saldat:", error);
+  }
+};
 
 // --- SISTEMA DE LOGS INTERN ---
 const logAction = async (tripId: string, message: string, action: LogEntry['action']) => {
@@ -80,7 +112,7 @@ export const TripService = {
     try {
       const q = query(tripsCol, where('memberUids', 'array-contains', uid));
       const snap = await getDocs(q);
-      // FILTRE: Només retornem els que NO estan marcats com esborrats
+      // FILTRE: Només retornem els que NO estan marcats com esborrats (SOFT DELETE)
       return snap.docs
         .map(d => d.data())
         .filter(trip => !trip.isDeleted); 
@@ -99,7 +131,8 @@ export const TripService = {
       ...trip,
       memberUids: initialMemberUids,
       logs: [],
-      isDeleted: false
+      isDeleted: false,
+      isSettled: true // Un viatge nou comença saldat (0 despeses)
     };
 
     await setDoc(getTripRef(trip.id), sanitizeData(tripWithMembers));
@@ -110,9 +143,9 @@ export const TripService = {
     await logAction(tripId, `ha actualitzat la configuració`, 'settings');
   },
 
-  // --- NOVA FUNCIÓ: SOFT DELETE ---
+  // --- IMPLEMENTACIÓ SOFT DELETE ---
   deleteTrip: async (tripId: string) => {
-    // No esborrem el document, només l'amaguem (risc zero)
+    // No esborrem el document, només l'amaguem posant el flag isDeleted
     await updateDoc(getTripRef(tripId), { isDeleted: true });
     await logAction(tripId, `ha arxivat el projecte`, 'settings');
   },
@@ -122,12 +155,19 @@ export const TripService = {
     const cleanExpense = sanitizeData(expense);
     const docRef = await addDoc(getExpensesCol(tripId), cleanExpense);
     await logAction(tripId, `ha afegit "${expense.title}"`, 'create');
+    
+    // Recalculem l'estat global
+    await recalculateTripSettledStatus(tripId);
+    
     return docRef.id;
   },
 
   updateExpense: async (tripId: string, expenseId: string, expense: Partial<Expense>) => {
     await updateDoc(getExpenseRef(tripId, expenseId), sanitizeData(expense));
     await logAction(tripId, `ha editat "${expense.title || 'una despesa'}"`, 'update');
+    
+    // Recalculem l'estat global
+    await recalculateTripSettledStatus(tripId);
   },
 
   deleteExpense: async (tripId: string, expenseId: string) => {
@@ -135,6 +175,9 @@ export const TripService = {
     const title = snap.exists() ? snap.data().title : 'una despesa';
     await deleteDoc(getExpenseRef(tripId, expenseId));
     await logAction(tripId, `ha eliminat "${title}"`, 'delete');
+
+    // Recalculem l'estat global
+    await recalculateTripSettledStatus(tripId);
   },
 
   settleDebt: async (tripId: string, settlement: Settlement, method: string) => {
@@ -149,6 +192,9 @@ export const TripService = {
     };
     await addDoc(getExpensesCol(tripId), sanitizeData(repayment));
     await logAction(tripId, `ha liquidat un deute via ${method}`, 'settle');
+
+    // Recalculem l'estat global (essencial aquí, ja que busquem que isSettled sigui true)
+    await recalculateTripSettledStatus(tripId);
   },
 
   joinTripViaLink: async (tripId: string, user: User) => {
@@ -183,6 +229,7 @@ export const TripService = {
       memberUids: arrayUnion(user.uid)
     });
     
+    // Quan s'uneix algú nou, el balanç no canvia (té 0), així que no cal recalcular isSettled
     await logAction(tripId, `s'ha unit al grup`, 'join');
   },
 
@@ -226,5 +273,8 @@ export const TripService = {
 
     await updateDoc(tripRef, updatePayload);
     await logAction(tripId, `ha sortit del grup`, 'settings');
+    
+    // Recalculem per si de cas, tot i que s'hauria d'haver bloquejat abans si tenia deute
+    await recalculateTripSettledStatus(tripId);
   }
 };
