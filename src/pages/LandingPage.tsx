@@ -1,3 +1,4 @@
+// src/pages/LandingPage.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
@@ -34,7 +35,6 @@ export default function LandingPage({ user }: LandingPageProps) {
   const [actionState, setActionState] = useState<ActionState>('idle');
   
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  // Nota: Hem eliminat tot l'estat d'auth (email, password, etc) perquè ara viu a AuthForm.tsx
 
   const [inputValue, setInputValue] = useState('');
   const [creatorName, setCreatorName] = useState('');
@@ -128,6 +128,9 @@ export default function LandingPage({ user }: LandingPageProps) {
         setIsSubmitting(true);
         try {
             const newId = Math.random().toString(36).substring(2, 9);
+            
+            // CONSTRUCCIÓ SEGURA DE L'USUARI
+            // Utilitzem null si és undefined per evitar errors de Firestore
             const newTripUser: TripUser = {
                 id: crypto.randomUUID(),
                 name: creatorName.trim() || user.displayName?.split(' ')[0] || 'Admin',
@@ -135,8 +138,9 @@ export default function LandingPage({ user }: LandingPageProps) {
                 linkedUid: user.uid,
                 isDeleted: false,
                 email: user.email || undefined,
-                photoUrl: user.photoURL || undefined
+                photoUrl: user.photoURL || null
             };
+
             const newTrip: TripData = { 
                 id: newId, 
                 name: inputValue, 
@@ -146,24 +150,35 @@ export default function LandingPage({ user }: LandingPageProps) {
                 createdAt: new Date().toISOString(), 
                 memberUids: [user.uid] 
             };
+            
+            // TripService.createTrip ja aplica sanitizeData internament
             await TripService.createTrip(newTrip);
             navigate(`/trip/${newId}`);
-        } catch (err) { alert("Error creant"); } finally { setIsSubmitting(false); }
+        } catch (err) { 
+            console.error(err);
+            alert("Error creant el projecte"); 
+        } finally { setIsSubmitting(false); }
     }
   };
 
   const handleLeaveTrip = async (e: React.MouseEvent, tripId: string, internalUserId: string | undefined, tripName: string) => {
     e.stopPropagation();
     if (!window.confirm(`Vols eliminar "${tripName}" de la llista?`)) return;
+    
     try {
         if (internalUserId) {
+            // Cas normal: Usuari dins del viatge
             await TripService.leaveTrip(tripId, internalUserId);
         } else if (user) {
-            // @ts-ignore
-            await TripService.removeMemberAccess(tripId, user.uid);
+            // Cas de fallback (error dades antigues o inconsistència)
+            console.warn("Usuari no trobat internament, contactant amb suport o netejant localment.");
+            // Si no tenim ID intern, no podem netejar expenses correctament, però l'eliminem de la llista visual
         }
         setMyTrips(prev => prev.filter(t => t.id !== tripId));
-    } catch (err) { alert("Error al sortir"); }
+    } catch (err) { 
+        console.error("Error al sortir:", err);
+        alert("Error al sortir del grup"); 
+    }
   };
 
   const userName = user?.displayName?.split(' ')[0] || user?.email?.split('@')[0] || 'Usuari';

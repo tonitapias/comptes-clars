@@ -1,7 +1,7 @@
 // src/services/tripService.ts
 
 import { 
-  collection, doc, addDoc, updateDoc, deleteDoc, getDocs, getDoc, setDoc, query, where, arrayUnion,
+  collection, doc, addDoc, updateDoc, deleteDoc, getDocs, getDoc, setDoc, query, where, arrayUnion, arrayRemove,
   FirestoreDataConverter, QueryDocumentSnapshot, SnapshotOptions, UpdateData 
 } from 'firebase/firestore'; 
 import { User } from 'firebase/auth';
@@ -10,13 +10,21 @@ import { DB_PATHS, TRIP_DOC_PREFIX } from '../config/dbPaths';
 import { Expense, TripData, Settlement, TripUser, LogEntry, Currency } from '../types';
 import { ExpenseSchema } from '../utils/validation';
 
+// --- HELPER: SANITIZE DATA (RISC ZERO PER A FIRESTORE) ---
+// Elimina claus amb valor undefined per evitar errors de Firestore
+const sanitizeData = <T>(data: T): T => {
+  return JSON.parse(JSON.stringify(data));
+};
+
 // --- CONVERTIDOR DE DADES (Seguretat de Tipus) ---
 const tripConverter: FirestoreDataConverter<TripData> = {
   toFirestore: (trip: TripData) => {
+    // Sanatitzem abans d'enviar per evitar errors de camps opcionals undefined
+    const sanitized = sanitizeData(trip);
     return {
-      ...trip,
-      logs: trip.logs || [],
-      memberUids: trip.memberUids || []
+      ...sanitized,
+      logs: sanitized.logs || [],
+      memberUids: sanitized.memberUids || []
     };
   },
   fromFirestore: (snapshot: QueryDocumentSnapshot, options: SnapshotOptions): TripData => {
@@ -61,8 +69,9 @@ const logAction = async (tripId: string, message: string, action: LogEntry['acti
       timestamp: new Date().toISOString()
     };
     
+    // Sanatitzem el log també
     const updatePayload: UpdateData<TripData> = {
-      logs: arrayUnion(log)
+      logs: arrayUnion(sanitizeData(log))
     };
     
     await updateDoc(getTripRef(tripId), updatePayload);
@@ -82,32 +91,37 @@ export const TripService = {
   },
 
   createTrip: async (trip: TripData) => {
-    // CORRECCIÓ 1: Assegurar memberUids des de l'inici
+    // 1. Assegurar memberUids des de l'inici
     const initialMemberUids = trip.users
       .filter(u => u.linkedUid)
       .map(u => u.linkedUid as string);
 
-    await setDoc(getTripRef(trip.id), { 
-      ...trip, 
+    // 2. Preparar objecte complert
+    const tripWithMembers = {
+      ...trip,
       memberUids: initialMemberUids,
-      logs: [] 
-    });
+      logs: []
+    };
+
+    // 3. Guardar amb sanatització
+    await setDoc(getTripRef(trip.id), sanitizeData(tripWithMembers));
   },
 
   updateTrip: async (tripId: string, data: Partial<TripData>) => {
-    await updateDoc(getTripRef(tripId), data as UpdateData<TripData>);
+    await updateDoc(getTripRef(tripId), sanitizeData(data) as UpdateData<TripData>);
     await logAction(tripId, `ha actualitzat la configuració`, 'settings');
   },
 
   addExpense: async (tripId: string, expense: Omit<Expense, 'id'>) => {
     ExpenseSchema.parse(expense); 
-    const docRef = await addDoc(getExpensesCol(tripId), expense);
+    const cleanExpense = sanitizeData(expense);
+    const docRef = await addDoc(getExpensesCol(tripId), cleanExpense);
     await logAction(tripId, `ha afegit "${expense.title}"`, 'create');
     return docRef.id;
   },
 
   updateExpense: async (tripId: string, expenseId: string, expense: Partial<Expense>) => {
-    await updateDoc(getExpenseRef(tripId, expenseId), expense);
+    await updateDoc(getExpenseRef(tripId, expenseId), sanitizeData(expense));
     await logAction(tripId, `ha editat "${expense.title || 'una despesa'}"`, 'update');
   },
 
@@ -128,7 +142,7 @@ export const TripService = {
       date: new Date().toISOString(), 
       splitType: 'equal' as const
     };
-    await addDoc(getExpensesCol(tripId), repayment);
+    await addDoc(getExpensesCol(tripId), sanitizeData(repayment));
     await logAction(tripId, `ha liquidat un deute via ${method}`, 'settle');
   },
 
@@ -142,9 +156,8 @@ export const TripService = {
     const data = tripSnap.data();
     const currentUsers = data.users || [];
     
-    // CORRECCIÓ 2: CHECK DE SEGURETAT (IDEMPOTÈNCIA)
+    // 2. CHECK DE SEGURETAT (IDEMPOTÈNCIA)
     // Busquem si JA existeix un usuari amb aquest UID de Firebase (linkedUid)
-    // Això evita que es creïn duplicats encara que la funció es cridi 2 vegades
     const alreadyExists = currentUsers.some(u => u.linkedUid === user.uid);
 
     if (alreadyExists) {
@@ -164,30 +177,25 @@ export const TripService = {
       linkedUid: user.uid,
       isAuth: true,
       isDeleted: false,
-      photoUrl: user.photoURL || undefined
+      photoUrl: user.photoURL || null // Assegurar null si és undefined
     };
 
     await updateDoc(tripRef, {
-      users: arrayUnion(newUser),
+      users: arrayUnion(sanitizeData(newUser)),
       memberUids: arrayUnion(user.uid)
     });
     
     await logAction(tripId, `s'ha unit al grup`, 'join');
   },
 
-  // --- NOVA FUNCIÓ PER ACTUALITZAR EL NOM D'UN USUARI ---
+  // --- ACTUALITZAR NOM D'UN USUARI ---
   updateTripUserName: async (tripId: string, userId: string, newName: string) => {
-    // ERROR ANTERIOR: doc(db, DB_PATHS.TRIPS, tripId) -> Això fallava perquè DB_PATHS.TRIPS no existeix.
-    
-    // SOLUCIÓ: Utilitzem el helper que ja tens definit a dalt.
-    // Aquest helper construeix la ruta completa: artifacts/.../trips/trip_{ID}
     const tripRef = getTripRef(tripId); 
-
     const tripSnap = await getDoc(tripRef);
 
     if (!tripSnap.exists()) throw new Error("El viatge no existeix");
 
-    const tripData = tripSnap.data(); // Gràcies al converter, això ja és TripData
+    const tripData = tripSnap.data(); 
 
     const updatedUsers = tripData.users.map(u => {
       if (u.id === userId) {
@@ -197,8 +205,7 @@ export const TripService = {
     });
 
     await updateDoc(tripRef, { users: updatedUsers });
-    // Opcional: Afegir log
-    // await logAction(tripId, `ha canviat el nom d'un participant`, 'settings');
+    await logAction(tripId, `ha canviat el nom d'un participant`, 'settings');
   },
 
   leaveTrip: async (tripId: string, internalUserId: string) => {
@@ -208,16 +215,22 @@ export const TripService = {
     
     const data = snap.data(); 
     
-    const newUsers = data.users.map(u => 
-      u.id === internalUserId ? { ...u, isDeleted: true, linkedUid: undefined } : u
-    );
+    // 1. FILTRAR l'usuari de l'array d'usuaris (ELIMINAR OBJECTE)
+    const newUsers = data.users.filter(u => u.id !== internalUserId);
     
-    const newMembers = data.memberUids?.filter(uid => uid !== auth.currentUser?.uid) || [];
-    
+    // 2. Obtenir el UID de Firebase per treure'l de memberUids
+    const userToRemove = data.users.find(u => u.id === internalUserId);
+    const uidToRemove = userToRemove?.linkedUid;
+
+    // 3. Construir payload
     const updatePayload: UpdateData<TripData> = { 
-      users: newUsers, 
-      memberUids: newMembers 
+      users: newUsers
     };
+
+    // Si tenia UID vinculat, el treiem de l'array de seguretat amb arrayRemove
+    if (uidToRemove) {
+      updatePayload.memberUids = arrayRemove(uidToRemove);
+    }
 
     await updateDoc(tripRef, updatePayload);
     await logAction(tripId, `ha sortit del grup`, 'settings');

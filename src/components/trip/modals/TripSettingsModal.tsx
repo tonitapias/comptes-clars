@@ -1,14 +1,14 @@
 // FITXER: src/components/trip/modals/TripSettingsModal.tsx
 
 import React, { useState, useEffect } from 'react';
-import { Lock, LogOut, Download, Pencil, Check, X, User as UserIcon } from 'lucide-react'; // <--- ICONES NOVES
+import { Lock, Download, Pencil, Check, X, User as UserIcon } from 'lucide-react'; // <--- He tret LogOut
 import Modal from '../../Modal';
 import Button from '../../Button';
 import { CURRENCIES } from '../../../utils/constants';
 import { TripData, Currency } from '../../../types';
 import { downloadBackup } from '../../../utils/exportData';
-import { TripService } from '../../../services/tripService'; // <--- IMPORTAR SERVEI
-import { auth } from '../../../config/firebase'; // <--- IMPORTAR AUTH
+import { TripService } from '../../../services/tripService'; 
+import { auth } from '../../../config/firebase'; 
 
 interface TripSettingsModalProps {
   isOpen: boolean;
@@ -16,16 +16,16 @@ interface TripSettingsModalProps {
   tripData: TripData;
   canChangeCurrency: boolean;
   onUpdateSettings: (name: string, date: string, currency?: Currency) => Promise<boolean>;
-  onLeaveTrip: () => void;
+  // onLeaveTrip eliminat
 }
 
 export default function TripSettingsModal({
-  isOpen, onClose, tripData, canChangeCurrency, onUpdateSettings, onLeaveTrip
+  isOpen, onClose, tripData, canChangeCurrency, onUpdateSettings
 }: TripSettingsModalProps) {
   const [name, setName] = useState(tripData?.name || '');
   const [date, setDate] = useState('');
   
-  // --- NOUS ESTATS PER L'EDICIÓ D'USUARIS ---
+  // --- ESTATS PER L'EDICIÓ D'USUARIS ---
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editNameValue, setEditNameValue] = useState('');
   const [isUpdatingUser, setIsUpdatingUser] = useState(false);
@@ -42,14 +42,12 @@ export default function TripSettingsModal({
     if (success) onClose();
   };
 
-  // --- NOVA FUNCIÓ PER GUARDAR EL NOM DE L'USUARI ---
   const handleUpdateUserName = async (userId: string) => {
     if (!editNameValue.trim()) return;
     setIsUpdatingUser(true);
     try {
         await TripService.updateTripUserName(tripData.id, userId, editNameValue);
         setEditingUserId(null);
-        // Opcional: Podríem forçar un refresc aquí, però normalment el snapshot de Firebase ho actualitza sol
     } catch (error) {
         console.error("Error canviant nom:", error);
         alert("No s'ha pogut canviar el nom");
@@ -62,7 +60,7 @@ export default function TripSettingsModal({
     <Modal isOpen={isOpen} onClose={onClose} title="Configuració del Projecte">
       <div className="space-y-6">
         
-        {/* CONFIGURACIÓ GENERAL (Ja existia) */}
+        {/* CONFIGURACIÓ GENERAL */}
         <div className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nom del projecte</label>
@@ -85,7 +83,7 @@ export default function TripSettingsModal({
           </div>
         </div>
 
-        {/* --- NOVA SECCIÓ: PARTICIPANTS --- */}
+        {/* --- LLISTAT PARTICIPANTS (AMB EDICIÓ) --- */}
         <div>
             <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Participants</label>
             <div className="bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
@@ -147,9 +145,8 @@ export default function TripSettingsModal({
                 ))}
             </div>
         </div>
-        {/* ---------------------------------- */}
 
-        {/* SELECCIÓ DE DIVISA (Ja existia) */}
+        {/* SELECCIÓ DE DIVISA */}
         <div>
           <div className="flex items-center gap-2 mb-2">
             <label className="block text-xs font-bold text-slate-500 uppercase">Divisa</label>
@@ -176,8 +173,8 @@ export default function TripSettingsModal({
           )}
         </div>
 
-        {/* CÒPIA DE SEGURETAT (Ja existia) */}
-        <div>
+        {/* CÒPIA DE SEGURETAT */}
+        <div className="pb-2">
            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Còpia de Seguretat</label>
            <button 
              onClick={() => downloadBackup(tripData)}
@@ -189,13 +186,6 @@ export default function TripSettingsModal({
         </div>
 
         <Button onClick={handleSave}>Guardar canvis</Button>
-        
-        <div className="border-t border-slate-100 dark:border-slate-700 pt-4">
-          <button onClick={onLeaveTrip} className="w-full p-3 flex justify-center gap-2 text-rose-600 bg-rose-50 hover:bg-rose-100 dark:bg-rose-900/20 dark:hover:bg-rose-900/30 rounded-xl font-bold transition-colors text-sm">
-            <LogOut size={18} />
-            Sortir del projecte
-          </button>
-        </div>
       </div>
     </Modal>
   );
