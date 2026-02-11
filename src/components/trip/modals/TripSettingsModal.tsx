@@ -1,7 +1,7 @@
 // FITXER: src/components/trip/modals/TripSettingsModal.tsx
 
 import React, { useState, useEffect } from 'react';
-import { Lock, Download, Pencil, Check, X, User as UserIcon } from 'lucide-react'; // <--- He tret LogOut
+import { Lock, Download, Pencil, Check, X, User as UserIcon, Trash2 } from 'lucide-react'; 
 import Modal from '../../Modal';
 import Button from '../../Button';
 import { CURRENCIES } from '../../../utils/constants';
@@ -16,16 +16,15 @@ interface TripSettingsModalProps {
   tripData: TripData;
   canChangeCurrency: boolean;
   onUpdateSettings: (name: string, date: string, currency?: Currency) => Promise<boolean>;
-  // onLeaveTrip eliminat
+  onDeleteTrip?: () => Promise<void>; // <--- NOVA PROPIETAT OPCIONAL
 }
 
 export default function TripSettingsModal({
-  isOpen, onClose, tripData, canChangeCurrency, onUpdateSettings
+  isOpen, onClose, tripData, canChangeCurrency, onUpdateSettings, onDeleteTrip
 }: TripSettingsModalProps) {
   const [name, setName] = useState(tripData?.name || '');
   const [date, setDate] = useState('');
   
-  // --- ESTATS PER L'EDICIÓ D'USUARIS ---
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editNameValue, setEditNameValue] = useState('');
   const [isUpdatingUser, setIsUpdatingUser] = useState(false);
@@ -56,6 +55,21 @@ export default function TripSettingsModal({
     }
   };
 
+  // Funció pel botó d'eliminar
+  const handleDeleteClick = async () => {
+    if (!onDeleteTrip) return;
+    
+    if (confirm("Estàs segur que vols eliminar aquest projecte? Desapareixerà de la teva llista.")) {
+      try {
+        await onDeleteTrip();
+        onClose(); // Tanquem el modal
+        // La redirecció l'hauria de gestionar el hook o la pàgina principal en detectar l'esborrat
+      } catch (error) {
+        alert("Error eliminant el projecte");
+      }
+    }
+  };
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Configuració del Projecte">
       <div className="space-y-6">
@@ -83,7 +97,7 @@ export default function TripSettingsModal({
           </div>
         </div>
 
-        {/* --- LLISTAT PARTICIPANTS (AMB EDICIÓ) --- */}
+        {/* --- LLISTAT PARTICIPANTS --- */}
         <div>
             <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Participants</label>
             <div className="bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
@@ -174,7 +188,7 @@ export default function TripSettingsModal({
         </div>
 
         {/* CÒPIA DE SEGURETAT */}
-        <div className="pb-2">
+        <div>
            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Còpia de Seguretat</label>
            <button 
              onClick={() => downloadBackup(tripData)}
@@ -184,6 +198,20 @@ export default function TripSettingsModal({
              Descarregar JSON
            </button>
         </div>
+
+        {/* --- ZONA DE PERILL (ELIMINAR PROJECTE) --- */}
+        {onDeleteTrip && (
+            <div className="pt-6 border-t border-slate-100 dark:border-slate-700">
+            <label className="block text-xs font-bold text-red-500 uppercase mb-2">Zona de Perill</label>
+            <button 
+                onClick={handleDeleteClick}
+                className="w-full p-3 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors border border-red-100 dark:border-red-900/50"
+            >
+                <Trash2 size={18} />
+                Eliminar Projecte
+            </button>
+            </div>
+        )}
 
         <Button onClick={handleSave}>Guardar canvis</Button>
       </div>

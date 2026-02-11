@@ -1,23 +1,27 @@
 // src/config/dbPaths.ts
-import { appId } from './firebase';
+import { appId } from './firebase'; // <--- IMPORTEM LA VARIABLE REAL
 
-// Prefix que utilitzem per als IDs dels documents de viatge (legacy)
+// Ara construïm la ruta usant l'ID real de la teva configuració
+const BASE_PATH = `artifacts/${appId}/public/data`;
+
 export const TRIP_DOC_PREFIX = 'trip_';
 
-// Rutes base de la base de dades
 export const DB_PATHS = {
-  // Ruta principal de la col·lecció de viatges: "artifacts/{appId}/public/data/trips"
-  TRIPS_COLLECTION: `artifacts/${appId}/public/data/trips`,
+  TRIPS_COLLECTION: `${BASE_PATH}/trips`,
   
-  // Helper per construir la ruta d'un document de viatge específic
-  getTripDocPath: (tripId: string) => 
-    `artifacts/${appId}/public/data/trips/${TRIP_DOC_PREFIX}${tripId}`,
+  getTripDocPath: (tripId: string) => {
+    // Si l'ID ja porta el prefix, no el posem dues vegades
+    const docId = tripId.startsWith(TRIP_DOC_PREFIX) ? tripId : `${TRIP_DOC_PREFIX}${tripId}`;
+    return `${BASE_PATH}/trips/${docId}`;
+  },
 
-  // Helper per construir la ruta de la subcol·lecció de despeses
-  getExpensesCollectionPath: (tripId: string) => 
-    `artifacts/${appId}/public/data/trips/${TRIP_DOC_PREFIX}${tripId}/expenses`,
+  getExpensesCollectionPath: (tripId: string) => {
+    const docId = tripId.startsWith(TRIP_DOC_PREFIX) ? tripId : `${TRIP_DOC_PREFIX}${tripId}`;
+    return `${BASE_PATH}/trips/${docId}/expenses`;
+  },
 
-  // Helper per construir la ruta d'una despesa específica
-  getExpenseDocPath: (tripId: string, expenseId: string) => 
-    `artifacts/${appId}/public/data/trips/${TRIP_DOC_PREFIX}${tripId}/expenses/${expenseId}`
+  getExpenseDocPath: (tripId: string, expenseId: string) => {
+    const docId = tripId.startsWith(TRIP_DOC_PREFIX) ? tripId : `${TRIP_DOC_PREFIX}${tripId}`;
+    return `${BASE_PATH}/trips/${docId}/expenses/${expenseId}`;
+  }
 };

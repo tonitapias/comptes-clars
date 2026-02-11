@@ -23,31 +23,30 @@ export interface Category {
 
 // --- USUARIS ---
 export interface TripUser {
-  id: string;             // UUID intern del viatge
-  name: string;           // Nom visual
-  email?: string;         // Opcional per a notificacions futures
-  isAuth?: boolean;       // Si està vinculat a un compte real
-  linkedUid?: string | null;     // ID de Firebase Auth (si isAuth=true)
+  id: string;             
+  name: string;           
+  email?: string;         
+  isAuth?: boolean;       
+  linkedUid?: string | null;     
   photoUrl?: string | null;
-  isDeleted?: boolean;    // Soft delete
+  isDeleted?: boolean;    
 }
 
 // --- DESPESES ---
 export type SplitType = 'equal' | 'exact' | 'shares';
 
 export interface Expense {
-  id: string | number;    // ID únic (number=Legacy, string=UUID)
+  id: string | number;    
   title: string;
   amount: number;         // En cèntims (Integer)
-  payer: string;          // ID de l'usuari pagador
+  payer: string;          
   category: CategoryId;
-  involved: string[];     // IDs dels usuaris involucrats
-  date: string;           // ISO String
+  involved: string[];     
+  date: string;           
   splitType?: SplitType;  
-  splitDetails?: Record<string, number>; // ID Usuari -> Quantitat/Shares
+  splitDetails?: Record<string, number>; 
   receiptUrl?: string | null;
   
-  // Camps opcionals per a multi-divisa (Futur)
   originalAmount?: number;      
   originalCurrency?: CurrencyCode; 
   exchangeRate?: number;        
@@ -71,8 +70,9 @@ export interface TripData {
   expenses: Expense[];
   currency: Currency;
   createdAt: string;
-  memberUids?: string[];   // Array de UIDs de Firebase per a regles de seguretat
+  memberUids?: string[];   
   logs?: LogEntry[];
+  isDeleted?: boolean; // <--- NOVA PROPIETAT (SOFT DELETE)
 }
 
 // --- RESULTATS DE CÀLCULS ---
