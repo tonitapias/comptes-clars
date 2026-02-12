@@ -43,7 +43,7 @@ function TripView() {
   const { toast, clearToast, showToast, mutations } = useTripMutations();
 
   // 2. Càlculs (Ara optimitzats amb el servei pur)
-  const { filteredExpenses, balances, categoryStats, settlements, totalGroupSpending, displayedTotal } = useTripCalculations(
+  const { filteredExpenses, balances, categoryStats, settlements, totalGroupSpending, displayedTotal, isSearching } = useTripCalculations(
     expenses, 
     tripData?.users || [], 
     filters.searchQuery, 
@@ -108,7 +108,8 @@ function TripView() {
                 expenses={filteredExpenses} 
                 searchQuery={filters.searchQuery} setSearchQuery={filters.setSearchQuery} 
                 filterCategory={filters.filterCategory} setFilterCategory={filters.setFilterCategory} 
-                onEdit={modals.openExpenseModal} 
+                onEdit={modals.openExpenseModal}
+                isSearching={isSearching} 
              />
             )
         )}

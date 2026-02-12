@@ -1,5 +1,5 @@
 // src/components/trip/ExpensesList.tsx
-import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Search, Receipt, ArrowRightLeft, Paperclip, Loader2 } from 'lucide-react'; 
 import { CATEGORIES } from '../../utils/constants';
 import { Expense, CategoryId, TripUser } from '../../types';
@@ -13,6 +13,7 @@ interface ExpensesListProps {
   filterCategory: CategoryId | 'all';
   setFilterCategory: (c: CategoryId | 'all') => void;
   onEdit: (e: Expense | null) => void;
+  isSearching: boolean; // [NOU] Estat de càrrega per debounce
 }
 
 const getAvatarColor = (name: string) => {
@@ -35,21 +36,35 @@ const getAvatarColor = (name: string) => {
 
 const PAGE_SIZE = 20;
 
+// [NOU] Component Skeleton per a estat de càrrega suau
+const ExpenseSkeleton = () => (
+  <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 animate-pulse" aria-hidden="true">
+    <div className="flex items-center justify-between pl-3">
+      <div className="flex items-center gap-4 flex-1">
+        <div className="w-12 h-12 rounded-2xl bg-slate-200 dark:bg-slate-800" />
+        <div className="flex flex-col flex-1 gap-2">
+           <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-1/2" />
+           <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-1/3" />
+        </div>
+      </div>
+      <div className="w-16 h-6 bg-slate-200 dark:bg-slate-800 rounded" />
+    </div>
+  </div>
+);
+
 export default function ExpensesList({ 
   expenses, 
   searchQuery, 
   setSearchQuery, 
   filterCategory, 
   setFilterCategory,
-  onEdit
+  onEdit,
+  isSearching
 }: ExpensesListProps) {
   const { tripData } = useTrip();
-  
-  // ESTAT: Control de paginació local
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const observerTarget = useRef<HTMLDivElement>(null);
 
-  // Optimització: Mapa d'usuaris O(1)
   const userMap = useMemo(() => {
     if (!tripData?.users) return {};
     return tripData.users.reduce((acc, user) => {
@@ -58,12 +73,12 @@ export default function ExpensesList({
     }, {} as Record<string, TripUser>);
   }, [tripData?.users]);
 
-  // RESET: Quan canvien els filtres, tornem a l'inici de la llista
+  // RESET
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [searchQuery, filterCategory, expenses]); // Afegim expenses per si s'afegeix una de nova
+  }, [searchQuery, filterCategory, expenses]);
 
-  // LOGICA: Infinite Scroll amb IntersectionObserver
+  // INFINITE SCROLL
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -71,7 +86,7 @@ export default function ExpensesList({
           setVisibleCount((prev) => prev + PAGE_SIZE);
         }
       },
-      { threshold: 0.1, rootMargin: '100px' } // Carrega abans d'arribar al final
+      { threshold: 0.1, rootMargin: '100px' }
     );
 
     if (observerTarget.current) {
@@ -79,11 +94,10 @@ export default function ExpensesList({
     }
 
     return () => observer.disconnect();
-  }, [expenses.length]); // Recreem només si la longitud canvia (pocs renders)
+  }, [expenses.length, isSearching]); // Dependència afegida per reenganxar després de buscar
 
   const getUserName = (id: string) => userMap[id]?.name || 'Desconegut';
 
-  // SLICE: Només renderitzem el subconjunt visible
   const visibleExpenses = expenses.slice(0, visibleCount);
   const hasMore = visibleCount < expenses.length;
 
@@ -93,7 +107,7 @@ export default function ExpensesList({
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Search and Filters */}
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4" role="search">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
           <input 
@@ -102,14 +116,23 @@ export default function ExpensesList({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-600 transition-all text-slate-800 dark:text-slate-100"
+            aria-label="Cerca despeses per títol o persona"
           />
+          {/* Spinner dins l'input per feedback immediat */}
+          {isSearching && (
+             <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
+                <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+             </div>
+          )}
         </div>
         
-        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar" role="tablist" aria-label="Filtre per categories">
             {CATEGORIES.map(cat => (
                 <button
                     key={cat.id}
                     onClick={() => setFilterCategory(cat.id)}
+                    role="tab"
+                    aria-selected={filterCategory === cat.id}
                     className={`
                         flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-all text-sm font-medium
                         ${filterCategory === cat.id 
@@ -125,14 +148,18 @@ export default function ExpensesList({
       </div>
 
       {/* Expenses List */}
-      <div className="space-y-4">
-        {expenses.length === 0 ? (
+      <div className="space-y-4" aria-busy={isSearching} aria-live="polite">
+        {isSearching ? (
+           // [UX] Loading State: Mostrem Skeletons
+           Array.from({ length: 3 }).map((_, i) => <ExpenseSkeleton key={i} />)
+        ) : expenses.length === 0 ? (
             <div className="text-center py-12 text-slate-400">
                 <Receipt className="w-12 h-12 mx-auto mb-3 opacity-20" />
                 <p>No s'han trobat despeses</p>
             </div>
         ) : (
-            <>
+            // [ACCESS] Canvi a <ul> per semàntica
+            <ul className="space-y-4">
               {visibleExpenses.map((expense) => {
                   const category = CATEGORIES.find(c => c.id === expense.category) || CATEGORIES[0];
                   const isTransfer = expense.category === 'transfer';
@@ -140,10 +167,12 @@ export default function ExpensesList({
                   const hasForeignCurrency = expense.originalCurrency && expense.originalCurrency !== currency.code;
 
                   return (
-                    <div 
-                      key={expense.id}
+                    <li key={expense.id}>
+                    {/* [ACCESS] Button interactiu en lloc de Div onClick */}
+                    <button 
+                      type="button"
                       onClick={() => onEdit(expense)}
-                      className="group bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 transition-all cursor-pointer relative overflow-hidden"
+                      className="w-full text-left group bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 transition-all cursor-pointer relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     >
                       {/* Category Color Bar */}
                       <div className={`absolute left-0 top-0 bottom-0 w-1 ${category.barColor}`} />
@@ -165,16 +194,16 @@ export default function ExpensesList({
                               
                               <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                                   <span>{formatDateDisplay(expense.date)}</span>
-                                  <span>•</span>
+                                  <span aria-hidden="true">•</span>
                                   <div className="flex items-center gap-1.5 min-w-0">
                                       <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold ${getAvatarColor(payerName)}`}>
                                           {userMap[expense.payer]?.photoUrl ? (
-                                              <img src={userMap[expense.payer].photoUrl} alt={payerName} className="w-full h-full object-cover rounded-full" />
+                                              <img src={userMap[expense.payer].photoUrl} alt="" className="w-full h-full object-cover rounded-full" />
                                           ) : payerName.charAt(0).toUpperCase()}
                                       </div>
                                       <span className="font-medium truncate max-w-[80px]">{payerName}</span>
                                   </div>
-                                  <span>•</span>
+                                  <span aria-hidden="true">•</span>
                                   <span className="truncate">
                                       {isTransfer 
                                           ? `→ ${expense.involved[0] ? getUserName(expense.involved[0]) : 'Tothom'}`
@@ -196,17 +225,18 @@ export default function ExpensesList({
                           )}
                         </div>
                       </div>
-                    </div>
+                    </button>
+                    </li>
                   );
               })}
-              
-              {/* TRIGGER per Infinite Scroll */}
-              {hasMore && (
-                <div ref={observerTarget} className="h-10 flex items-center justify-center w-full">
-                  <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
-                </div>
-              )}
-            </>
+            </ul>
+        )}
+        
+        {/* TRIGGER per Infinite Scroll (només si no estem cercant) */}
+        {hasMore && !isSearching && (
+          <div ref={observerTarget} className="h-10 flex items-center justify-center w-full">
+            <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+          </div>
         )}
       </div>
     </div>
