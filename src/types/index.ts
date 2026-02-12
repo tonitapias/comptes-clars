@@ -1,12 +1,27 @@
 // src/types/index.ts
 import { LucideIcon } from 'lucide-react';
 
+// --- UTILITATS DE TIPUS (Branding) ---
+// Tècnica "Branded Types": Afegim una marca única a nivell de tipus.
+// Risc Zero: Això desapareix completament al compilar (runtime) i no afecta el rendiment,
+// però impedeix barrejar accidentalment 'MoneyCents' amb 'number' (ex: percentatges).
+declare const __brand: unique symbol;
+export type Brand<K, T> = K & { readonly [__brand]: T };
+
 // --- NOUS TIPUS SEMÀNTICS (Robustesa) ---
-// Defineixen clarament què representen les primitives.
-// Risc Zero: TypeScript ho compila com a 'number'/'string', sense impacte en runtime.
-export type MoneyCents = number; // Sempre enter. Ex: 1000 = 10.00€
+// MoneyCents ara és un tipus exclusiu. 
+// Ja no es pot fer: const a: MoneyCents = 10; (Donarà error)
+// S'ha de fer: const a = toCents(10);
+export type MoneyCents = Brand<number, 'MoneyCents'>; 
 export type UserId = string;
 export type ISODateString = string;
+
+// --- HELPERS (Safe Casting) ---
+// Funcions d'ús obligatori per convertir números a diners.
+// Això fa explícit al codi quan estem "creant" diners.
+export const toCents = (n: number): MoneyCents => Math.round(n) as MoneyCents; // Forcem enter per seguretat
+export const asCents = (n: number): MoneyCents => n as MoneyCents; // Cast directe (confiança cega)
+export const unbrand = (m: MoneyCents): number => m;
 
 // --- MONEDA ---
 export type CurrencyCode = 'EUR' | 'USD' | 'GBP' | 'JPY' | 'MXN';
@@ -45,7 +60,7 @@ export type SplitType = 'equal' | 'exact' | 'shares';
 export interface Expense {
   id: string | number;    
   title: string;
-  amount: MoneyCents;     // Clarament definit com a cèntims
+  amount: MoneyCents;     // Ara estricte: requereix toCents()
   payer: UserId;          
   category: CategoryId;
   involved: UserId[];     
@@ -89,7 +104,7 @@ export interface TripData {
 // --- RESULTATS DE CÀLCULS ---
 export interface Balance {
   userId: UserId;
-  amount: MoneyCents; // El saldo final també és en cèntims
+  amount: MoneyCents; // El saldo final també és un tipus estricte
 }
 
 export interface Settlement {
@@ -100,5 +115,5 @@ export interface Settlement {
 
 export interface CategoryStat extends Category {
   amount: MoneyCents;
-  percentage: number; // Percentatge (0-100) sí que és float
+  percentage: number; // Percentatge (0-100) és float, clarament diferenciat de MoneyCents
 }

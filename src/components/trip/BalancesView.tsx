@@ -1,6 +1,7 @@
+// src/components/trip/BalancesView.tsx
 import React, { useMemo } from 'react';
 import DonutChart from '../DonutChart';
-import { Balance, CategoryStat, TripUser } from '../../types';
+import { Balance, CategoryStat, TripUser, toCents } from '../../types'; // <--- Afegim toCents
 import { formatCurrency } from '../../utils/formatters';
 import { useTrip } from '../../context/TripContext';
 
@@ -12,7 +13,6 @@ interface BalancesViewProps {
 export default function BalancesView({ balances, categoryStats }: BalancesViewProps) {
   const { tripData } = useTrip();
   
-  // Optimització: Mapa d'usuaris per a cerques instantànies
   const userMap = useMemo(() => {
     if (!tripData?.users) return {};
     return tripData.users.reduce((acc, user) => {
@@ -23,6 +23,9 @@ export default function BalancesView({ balances, categoryStats }: BalancesViewPr
 
   if (!tripData) return null;
   const { currency } = tripData;
+
+  // Definim el ZERO segur un sol cop
+  const ZERO = toCents(0);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -65,8 +68,9 @@ export default function BalancesView({ balances, categoryStats }: BalancesViewPr
             <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 px-2">Estat dels Comptes</h3>
             <div className="grid gap-3">
                 {balances.map((balance) => {
-                    const isPositive = balance.amount > 0;
-                    const isZero = balance.amount === 0;
+                    // Comparacions estrictes amb tipus MoneyCents
+                    const isPositive = balance.amount > ZERO;
+                    const isZero = balance.amount === ZERO;
                     const user = userMap[balance.userId];
 
                     return (

@@ -1,25 +1,31 @@
 // src/utils/formatters.ts
 
-import { Currency, MoneyCents } from '../types';
+import { Currency, MoneyCents, toCents } from '../types';
 
 /**
  * Formata un import en cèntims a una cadena de moneda localitzada.
- * BLINDATGE: Gestió robusta d'errors de 'Intl' i valors nuls.
+ * BLINDATGE: Gestió robusta d'errors de 'Intl' i valors nuls, compatible amb MoneyCents.
  */
 export const formatMoney = (amount: MoneyCents | null | undefined, currency: Currency | undefined): string => {
   // 1. Sanitització d'entrada: Si no hi ha import, mostrem 0.
+  // Nota: isNaN funciona amb MoneyCents perquè en runtime és un number.
   if (amount === null || amount === undefined || isNaN(amount)) {
-    // Evitem recursió infinita passant 0 explícitament
-    if (amount !== 0) return formatMoney(0, currency);
+    // Evitem recursió infinita passant 0 explícitament.
+    // FIX CRÍTIC: Utilitzem toCents(0) perquè TypeScript accepti el '0' com a diner vàlid.
+    // També comprovem si ja és 0 per evitar bucle infinit si el 0 falla (molt improbable).
+    if (amount !== toCents(0)) {
+      return formatMoney(toCents(0), currency);
+    }
   }
 
   // 2. Valors per defecte segurs (Safe Defaults)
-  // Això evita errors "Cannot read property of undefined" dins del try/catch
   const safeCode = currency?.code || 'EUR';
   const safeLocale = currency?.locale || 'ca-ES';
   const safeSymbol = currency?.symbol || '€';
 
-  // Convertim cèntims a unitats per a la visualització
+  // Convertim cèntims a unitats per a la visualització (float).
+  // En dividir per 100, TypeScript automàticament "treu la marca" i ho tracta com number,
+  // que és exactament el que vol Intl.NumberFormat.
   const valueInUnits = (amount || 0) / 100;
 
   try {
@@ -32,7 +38,6 @@ export const formatMoney = (amount: MoneyCents | null | undefined, currency: Cur
     }).format(valueInUnits);
   } catch (error) {
     // 3. Fallback d'últim recurs (Fail-safe)
-    // Si el navegador no suporta el locale o el codi de moneda, mostrem string manual
     console.warn(`Error formatting currency (${safeCode}/${safeLocale}):`, error);
     return `${valueInUnits.toFixed(2)} ${safeSymbol}`;
   }
@@ -43,6 +48,7 @@ export const formatCurrency = formatMoney;
 
 /**
  * Formata una data ISO.
+ * Sense canvis respecte a l'original.
  */
 export const formatDate = (dateString: string): string => {
   if (!dateString) return '';

@@ -1,6 +1,6 @@
 // src/hooks/useExpenseForm.ts
 import { useState, useEffect } from 'react';
-import { Expense, TripUser, Currency, CategoryId, SplitType } from '../types';
+import { Expense, TripUser, Currency, CategoryId, SplitType, MoneyCents, toCents } from '../types';
 import { SPLIT_TYPES } from '../services/billingService';
 
 interface UseExpenseFormProps {
@@ -12,12 +12,12 @@ interface UseExpenseFormProps {
 
 /**
  * HELPER: Converteix string monetari ("10.50") a cèntims enters (1050) de forma segura.
- * Evita l'ús de parseFloat per prevenir errors de punt flotant (IEEE 754).
+ * Retorna MoneyCents per satisfer la seguretat de tipus.
  */
-const stringToCents = (value: string): number => {
+const stringToCents = (value: string): MoneyCents => {
   // 1. Netejar entrada (només dígits, punts o comes)
   const clean = value.replace(/[^0-9.,]/g, '').replace(',', '.');
-  if (!clean || clean === '.') return 0;
+  if (!clean || clean === '.') return toCents(0);
 
   // 2. Separar part entera i decimal
   const [integerStr, decimalStr] = clean.split('.');
@@ -28,14 +28,14 @@ const stringToCents = (value: string): number => {
     ? parseInt(decimalStr.slice(0, 2).padEnd(2, '0'), 10) 
     : 0;
 
-  // 3. Retornar enter total
-  return (integerPart * 100) + decimalPart;
+  // 3. Retornar enter total tipat
+  return toCents((integerPart * 100) + decimalPart);
 };
 
 export function useExpenseForm({ initialData, users, currency, onSubmit }: UseExpenseFormProps) {
   const [title, setTitle] = useState(initialData?.title || '');
   
-  // Guardem els imports com a string per evitar problemes d'UX (cursors que salten, "0.00" vs "0")
+  // Guardem els imports com a string per evitar problemes d'UX
   const [amount, setAmount] = useState(
     initialData?.amount 
       ? (initialData.amount / 100).toFixed(2) 
@@ -44,7 +44,7 @@ export function useExpenseForm({ initialData, users, currency, onSubmit }: UseEx
   
   const [payer, setPayer] = useState(initialData?.payer || (users.find(u => !u.isDeleted)?.id || ''));
   const [category, setCategory] = useState<CategoryId>(initialData?.category || 'food');
-  const [date, setDate] = useState(initialData?.date ? initialData.date.split('T')[0] : new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(initialData?.date || new Date().toISOString());
   const [receiptUrl, setReceiptUrl] = useState(initialData?.receiptUrl || '');
   
   const [splitType, setSplitType] = useState<SplitType>(initialData?.splitType || SPLIT_TYPES.EQUAL);
@@ -68,16 +68,14 @@ export function useExpenseForm({ initialData, users, currency, onSubmit }: UseEx
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // --- AUTOSUMA SEGURA (RISC ZERO) ---
+  // --- AUTOSUMA SEGURA ---
   useEffect(() => {
     if (splitType === SPLIT_TYPES.EXACT) {
-      // Sumem directament els cèntims per evitar decimals estranys
+      // Sumem directament els cèntims (MoneyCents en runtime és un number, així que reduce funciona)
       const totalCents = Object.values(splitDetails).reduce((sum, val) => {
-        return sum + stringToCents(val);
+        return sum + stringToCents(val); // stringToCents retorna MoneyCents (number)
       }, 0);
       
-      // Actualitzem l'import principal només si hi ha canvis rellevants
-      // Usem toFixed(2) per mostrar format moneda estàndard
       if (totalCents > 0) {
         setAmount((totalCents / 100).toFixed(2));
       } else {
@@ -86,11 +84,10 @@ export function useExpenseForm({ initialData, users, currency, onSubmit }: UseEx
     }
   }, [splitDetails, splitType]);
 
-  // Logic handlers
   const toggleInvolved = (userId: string) => {
     setInvolved(prev => {
       if (prev.includes(userId)) {
-        if (prev.length === 1) return prev; // No pot quedar buit
+        if (prev.length === 1) return prev; 
         return prev.filter(id => id !== userId);
       }
       return [...prev, userId];
@@ -98,8 +95,6 @@ export function useExpenseForm({ initialData, users, currency, onSubmit }: UseEx
   };
 
   const handleDetailChange = (userId: string, value: string) => {
-    // Permetem que l'usuari escrigui lliurement (strings), validant només caràcters bàsics
-    // Això permet escriure "10." sense que s'esborri el punt immediatament.
     if (/^\d*[.,]?\d*$/.test(value)) {
       setSplitDetails(prev => ({
         ...prev,
@@ -115,12 +110,14 @@ export function useExpenseForm({ initialData, users, currency, onSubmit }: UseEx
     try {
       setIsSubmitting(true);
       
-      // CONVERSIÓ SEGURA: String -> Cèntims Enters
+      // 1. Conversió Estricta: String -> MoneyCents
       const amountInCents = stringToCents(amount);
       
+      // Construïm l'objecte parcialment, tipant-lo com 'any' per muntatge
+      // però assegurant que els camps crítics són correctes.
       const expenseData: any = {
         title: title.trim(),
-        amount: amountInCents,
+        amount: amountInCents, // Ara és MoneyCents
         payer,
         category,
         date: new Date(date).toISOString(),
@@ -129,9 +126,8 @@ export function useExpenseForm({ initialData, users, currency, onSubmit }: UseEx
       };
 
       if (splitType !== SPLIT_TYPES.EQUAL) {
-        const detailsInCents: Record<string, number> = {};
+        const detailsInCents: Record<string, MoneyCents> = {};
         Object.entries(splitDetails).forEach(([uid, val]) => {
-          // Convertim cada input individual a cèntims (o unitats scalades x100 per shares)
           detailsInCents[uid] = stringToCents(val);
         });
         expenseData.splitDetails = detailsInCents;
@@ -141,13 +137,14 @@ export function useExpenseForm({ initialData, users, currency, onSubmit }: UseEx
         expenseData.receiptUrl = receiptUrl.trim();
       }
 
+      // Aquests camps segueixen sent 'number' (floats) o string segons la interfície
       if (isForeignCurrency) {
-        // Els camps originals sí que poden ser floats perquè són informatius
         expenseData.originalAmount = parseFloat(foreignAmount);
         expenseData.originalCurrency = foreignCurrency;
         expenseData.exchangeRate = parseFloat(exchangeRate);
       }
 
+      // TypeScript ara estarà content perquè expenseData compleix l'interface Expense
       await onSubmit(expenseData);
 
     } catch (error) {
