@@ -13,32 +13,53 @@ const CATEGORIES = [
 // --- HELPERS DE TRANSFORMACIÓ (SANITIZERS) ---
 
 /**
- * Transforma qualsevol input numèric (string amb coma/punt o float) a CÈNTIMS (Enter).
- * Ex: "10,50" -> 1050 | 10.5 -> 1050 | "10" -> 1000
+ * Parser de moneda de precisió entera ("Integer-based").
+ * Evita completament l'ús de floats per prevenir errors IEEE 754.
+ */
+const parseMoneyString = (val: string): number => {
+  // 1. Neteja: normalitzem coma a punt i eliminem espais
+  const cleanVal = val.trim().replace(',', '.');
+  
+  // 2. Validació de format bàsic (per evitar NaN)
+  if (cleanVal === '' || isNaN(Number(cleanVal))) return 0;
+
+  // 3. Separació de part entera i decimal
+  const [integerPart, decimalPart = ''] = cleanVal.split('.');
+
+  // 4. Normalització de decimals (sempre 2 dígits)
+  // "10.5" -> "50" | "10.05" -> "05" | "10" -> "00" | "10.123" -> "12" (truncat)
+  const paddedDecimal = (decimalPart + '00').slice(0, 2);
+
+  // 5. Concatenació segura i conversió a Enter
+  // "10" + "50" = "1050" -> 1050
+  const centsString = `${integerPart}${paddedDecimal}`;
+  const cents = parseInt(centsString, 10);
+
+  return isNaN(cents) ? 0 : cents;
+};
+
+/**
+ * Transforma qualsevol input a CÈNTIMS (Enter).
+ * Prioritza el parsing de text segur.
  */
 const currencyInputToCents = (val: unknown): number => {
-  if (typeof val === 'number') {
-    // Si ja és enter (suposem cèntims), el deixem, si és float petit, el tractem com unitats? 
-    // PER SEGURETAT: Assumim que l'input de formulari cru sol ser en unitats (Euros).
-    // Cas especial: Si és un enter molt gran, potser ja són cèntims? 
-    // Per consistència en formularis, tractem tot com a Unitats (Euros) que cal passar a Cèntims.
-    return Math.round(val * 100);
+  if (typeof val === 'string') {
+    return parseMoneyString(val);
   }
   
-  if (typeof val === 'string') {
-    // Normalitzem coma a punt (10,50 -> 10.50)
-    const normalized = val.replace(',', '.').trim();
-    const parsed = parseFloat(normalized);
-    if (isNaN(parsed)) return 0; // O deixem que z.number() falli després
-    return Math.round(parsed * 100);
+  if (typeof val === 'number') {
+    // Si rebem un número (ex: de controls de tipus 'number'), 
+    // l'assumim com a Unitats (Euros) i el convertim amb cura.
+    // .toFixed(2) ens converteix a string segur "10.56" i usem el parser.
+    return parseMoneyString(val.toFixed(2));
   }
   
   return 0;
 };
 
 /**
- * Validador de moneda robust ("Foolproof").
- * Accepta Strings o Numbers, els converteix a Cèntims, i valida que sigui positiu.
+ * Validador de moneda robust.
+ * Accepta Strings (input text) o Numbers, els converteix a Cèntims.
  */
 const MoneyAmountSchema = z.preprocess(
   currencyInputToCents,
@@ -64,8 +85,7 @@ export const TripUserSchema = z.object({
 export const ExpenseSchema = z.object({
   title: z.string().trim().min(1, "El títol és obligatori").max(50, "Títol massa llarg (màx 50)"),
   
-  // MILLORA: Ús del transformador intel·ligent
-  // Ara accepta "12,50" des del formulari i ho guarda com 1250 automàticament.
+  // APLICACIÓ: El nou parser segur s'activa aquí
   amount: MoneyAmountSchema,
   
   payer: z.string().trim().min(1, "El pagador és obligatori"),
@@ -83,15 +103,11 @@ export const ExpenseSchema = z.object({
   
   splitType: z.enum(SPLIT_TYPES).optional(),
   
-  // Validació de Detalls: També apliquem la transformació a cèntims per si s'introdueixen a mà
+  // Validació de Detalls: També apliquem la transformació segura
   splitDetails: z.record(
     z.string(), 
     z.preprocess(
-      // Si el valor ve de formulari (input manual), el convertim. 
-      // Si ve de DB (ja cèntims), cal vigilar. 
-      // *NOTA D'AUDITORIA*: En formularis d'edició, normalment treballem en unitats.
-      // Assumim inputs d'UI (Euros).
-      (val) => (typeof val === 'string' ? currencyInputToCents(val) : val),
+      (val) => currencyInputToCents(val),
       z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
     )
   ).optional(),
@@ -102,13 +118,13 @@ export const ExpenseSchema = z.object({
   originalCurrency: z.enum(CURRENCIES).optional(),
   exchangeRate: z.number().positive().optional()
 })
-// --- REGLES DE NEGOCI (REFINE) ---
+// --- REGLES DE NEGOCI (Integrity Checks) ---
 
 // REGLA 1: Mode EXACT (Suma <= Total)
 .refine((data) => {
   if (data.splitType === 'exact' && data.splitDetails) {
     const sumDetails = Object.values(data.splitDetails).reduce((a, b) => a + b, 0);
-    // Tolerància zero: treballem amb enters
+    // Comprovem igualtat estricta, però permetem que sigui menor (cost propi)
     return sumDetails <= data.amount;
   }
   return true;
@@ -134,6 +150,7 @@ export const ExpenseSchema = z.object({
   if ((data.splitType === 'exact' || data.splitType === 'shares') && data.splitDetails) {
     const involvedSet = new Set(data.involved);
     const detailUids = Object.keys(data.splitDetails);
+    // Verifiquem que tothom qui paga (té detall) està a la llista d'involucrats
     return detailUids.every(uid => involvedSet.has(uid));
   }
   return true;
