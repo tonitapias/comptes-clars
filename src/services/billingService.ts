@@ -16,8 +16,8 @@ export const SPECIAL_CATEGORIES = {
 } as const;
 
 // Llindar mínim per suggerir una devolució (en cèntims). 
-// Evita transaccions ridícules com tornar 0.01€.
-const MIN_SETTLEMENT_CENTS = 10; 
+// Reduït a 1 cèntim per garantir que el grup pugui quedar a zero absolut (Risc Zero: Integritat).
+const MIN_SETTLEMENT_CENTS = 1; 
 
 /**
  * Normalitza la identificació d'usuaris.
@@ -53,7 +53,7 @@ const createUserResolutionMap = (users: TripUser[]): Record<string, string> => {
 
 /**
  * Calcula el balanç financer de cada usuari.
- * Lògica refactoritzada per a O(n) amb mapes de cerca.
+ * Lògica refactoritzada per garantir SUMA ZERO en tots els casos.
  */
 export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balance[] => {
   const balanceMap: Record<string, number> = {};
@@ -66,15 +66,15 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
     const payerId = getCanonicalId(exp.payer);
     if (!payerId) return;
 
-    // 1. Abonem l'import al pagador
-    if (balanceMap[payerId] !== undefined) {
-      balanceMap[payerId] += exp.amount;
-    }
+    // VARIABLE CLAU: Calculem quant s'ha de retornar realment al pagador
+    // per garantir que (Abonament Pagador) == (Suma Deutes).
+    let amountCreditedToPayer = 0;
 
-    // 2. Carreguem el deute als involucrats
     const splitType = exp.splitType || SPLIT_TYPES.EQUAL;
 
     if (splitType === SPLIT_TYPES.EQUAL) {
+      // MODE EQUITATIU
+      // Reparteix l'import total entre els participants
       const rawInvolved = (exp.involved && exp.involved.length > 0) ? exp.involved : users.map(u => u.id);
       
       const receiversIds = Array.from(new Set(
@@ -85,50 +85,83 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
 
       const count = receiversIds.length;
       if (count > 0) {
+        // Quantitat base (divisió entera)
         const baseAmount = Math.floor(exp.amount / count);
+        // Residu a repartir (cèntims solts)
         const remainder = exp.amount % count;
 
         receiversIds.forEach((uid, index) => {
+          // Els primers 'remainder' usuaris paguen 1 cèntim més
           const amountToPay = baseAmount + (index < remainder ? 1 : 0);
           balanceMap[uid] -= amountToPay;
         });
+
+        // En mode EQUAL, sempre repartim tot l'import original
+        amountCreditedToPayer = exp.amount;
       }
 
     } else if (splitType === SPLIT_TYPES.EXACT) {
+      // MODE EXACTE
+      // CORRECCIÓ CRÍTICA: L'import abonat al pagador ha de ser la suma dels detalls,
+      // no l'import teòric de la despesa, per evitar crear/destruir diners.
       const details = exp.splitDetails || {};
+      let totalAllocated = 0;
+
       Object.entries(details).forEach(([identifier, amount]) => {
         const uid = getCanonicalId(identifier);
         if (uid && balanceMap[uid] !== undefined) {
           balanceMap[uid] -= amount;
+          totalAllocated += amount;
         }
       });
 
+      amountCreditedToPayer = totalAllocated;
+
     } else if (splitType === SPLIT_TYPES.SHARES) {
+      // MODE PARTS (SHARES)
       const details = exp.splitDetails || {};
       
       const entries = Object.entries(details)
         .map(([key, shares]) => ({ uid: getCanonicalId(key), shares }))
         .filter((entry): entry is { uid: string, shares: number } => !!entry.uid && balanceMap[entry.uid] !== undefined)
+        // Ordenem per ID consistentment per a que el repartiment de residus sigui determinista
         .sort((a, b) => a.uid.localeCompare(b.uid));
 
       const totalShares = entries.reduce((acc, curr) => acc + curr.shares, 0);
 
       if (totalShares > 0) {
         const amountPerShare = exp.amount / totalShares;
-        let distributed = 0;
-        const count = entries.length;
-
-        entries.forEach((entry, index) => {
-          let amountToPay;
-          if (index === count - 1) {
-            amountToPay = exp.amount - distributed;
-          } else {
-            amountToPay = Math.floor(entry.shares * amountPerShare);
-          }
-          balanceMap[entry.uid] -= amountToPay;
-          distributed += amountToPay;
+        let distributedSoFar = 0;
+        
+        // 1. Assignació base (arrodonint cap avall)
+        const allocations = entries.map(entry => {
+          const rawAmount = Math.floor(entry.shares * amountPerShare);
+          return { ...entry, amountToPay: rawAmount };
         });
+
+        const totalAllocatedBase = allocations.reduce((acc, curr) => acc + curr.amountToPay, 0);
+        
+        // 2. Repartiment just del residu (cèntims)
+        let remainder = exp.amount - totalAllocatedBase;
+
+        // Repartim 1 cèntim als primers N usuaris fins esgotar el residu
+        allocations.forEach((alloc) => {
+          if (remainder > 0) {
+            alloc.amountToPay += 1;
+            remainder -= 1;
+          }
+          balanceMap[alloc.uid] -= alloc.amountToPay;
+          distributedSoFar += alloc.amountToPay;
+        });
+
+        // En mode SHARES, assumim que l'objectiu és repartir tot l'import
+        amountCreditedToPayer = distributedSoFar; 
       }
+    }
+
+    // FINALMENT: Abonem al pagador la quantitat exacta que s'ha carregat als altres
+    if (balanceMap[payerId] !== undefined) {
+      balanceMap[payerId] += amountCreditedToPayer;
     }
   });
 
@@ -142,15 +175,17 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
  */
 export const calculateSettlements = (balances: Balance[]): Settlement[] => {
   const debts: Settlement[] = [];
+  // Treballem amb una còpia per no mutar l'entrada
   const workingBalances = balances.map(b => ({ ...b }));
 
+  // Separem deutors (negatiu) i creditors (positiu)
   const debtors = workingBalances
-    .filter(b => b.amount < -1) 
-    .sort((a, b) => a.amount - b.amount);
+    .filter(b => b.amount < -0.9) // Filtratge suau per evitar soroll de float molt petit
+    .sort((a, b) => a.amount - b.amount); // Més deutor primer (-100, -50...)
 
   const creditors = workingBalances
-    .filter(b => b.amount > 1) 
-    .sort((a, b) => b.amount - a.amount);
+    .filter(b => b.amount > 0.9) 
+    .sort((a, b) => b.amount - a.amount); // Més creditor primer (100, 50...)
 
   let i = 0; 
   let j = 0; 
@@ -159,8 +194,10 @@ export const calculateSettlements = (balances: Balance[]): Settlement[] => {
     const debtor = debtors[i];
     const creditor = creditors[j];
 
+    // L'import a saldar és el mínim entre el que deu un i el que espera l'altre
     const amount = Math.min(Math.abs(debtor.amount), creditor.amount);
 
+    // Només generem la transacció si supera el mínim (ara 1 cèntim)
     if (amount >= MIN_SETTLEMENT_CENTS) {
       debts.push({ 
         from: debtor.userId, 
@@ -169,9 +206,11 @@ export const calculateSettlements = (balances: Balance[]): Settlement[] => {
       });
     }
 
+    // Ajustem els balanços temporals
     debtor.amount += amount;
     creditor.amount -= amount;
 
+    // Avancem índexs si s'han saldat (amb un marge d'error mínim per flotants)
     if (Math.abs(debtor.amount) < 1) i++;
     if (creditor.amount < 1) j++;
   }

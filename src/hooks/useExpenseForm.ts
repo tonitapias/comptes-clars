@@ -10,10 +10,32 @@ interface UseExpenseFormProps {
   onSubmit: (data: Omit<Expense, 'id'>) => Promise<void>;
 }
 
+/**
+ * HELPER: Converteix string monetari ("10.50") a cèntims enters (1050) de forma segura.
+ * Evita l'ús de parseFloat per prevenir errors de punt flotant (IEEE 754).
+ */
+const stringToCents = (value: string): number => {
+  // 1. Netejar entrada (només dígits, punts o comes)
+  const clean = value.replace(/[^0-9.,]/g, '').replace(',', '.');
+  if (!clean || clean === '.') return 0;
+
+  // 2. Separar part entera i decimal
+  const [integerStr, decimalStr] = clean.split('.');
+  
+  const integerPart = parseInt(integerStr || '0', 10);
+  // Assegurem que només agafem 2 decimals i fem padding (ex: "5" -> "50")
+  const decimalPart = decimalStr 
+    ? parseInt(decimalStr.slice(0, 2).padEnd(2, '0'), 10) 
+    : 0;
+
+  // 3. Retornar enter total
+  return (integerPart * 100) + decimalPart;
+};
+
 export function useExpenseForm({ initialData, users, currency, onSubmit }: UseExpenseFormProps) {
   const [title, setTitle] = useState(initialData?.title || '');
   
-  // Convertim cèntims a unitats per a l'input (ex: 2000 -> 20.00)
+  // Guardem els imports com a string per evitar problemes d'UX (cursors que salten, "0.00" vs "0")
   const [amount, setAmount] = useState(
     initialData?.amount 
       ? (initialData.amount / 100).toFixed(2) 
@@ -28,12 +50,13 @@ export function useExpenseForm({ initialData, users, currency, onSubmit }: UseEx
   const [splitType, setSplitType] = useState<SplitType>(initialData?.splitType || SPLIT_TYPES.EQUAL);
   const [involved, setInvolved] = useState<string[]>(initialData?.involved || users.map(u => u.id));
   
-  // Normalitzem els detalls si venen de la DB (cèntims -> unitats)
-  const [splitDetails, setSplitDetails] = useState<Record<string, number>>(() => {
+  // UX MILLORADA: Guardem els detalls com a strings per permetre edició fluida
+  const [splitDetails, setSplitDetails] = useState<Record<string, string>>(() => {
     if (!initialData?.splitDetails) return {};
-    const details: Record<string, number> = {};
+    const details: Record<string, string> = {};
     Object.entries(initialData.splitDetails).forEach(([uid, val]) => {
-      details[uid] = val / 100;
+      // Convertim de cèntims a string unitari (ex: 1050 -> "10.50")
+      details[uid] = (val / 100).toFixed(2);
     });
     return details;
   });
@@ -45,19 +68,23 @@ export function useExpenseForm({ initialData, users, currency, onSubmit }: UseEx
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // --- NOVA FUNCIÓ: AUTOSUMA (RISC ZERO) ---
-  // Aquest efecte només s'activa quan canvien els detalls i estem en mode 'exact'
+  // --- AUTOSUMA SEGURA (RISC ZERO) ---
   useEffect(() => {
     if (splitType === SPLIT_TYPES.EXACT) {
-      // Sumem tots els valors introduïts als inputs individuals
-      const total = Object.values(splitDetails).reduce((sum, val) => sum + (Number(val) || 0), 0);
+      // Sumem directament els cèntims per evitar decimals estranys
+      const totalCents = Object.values(splitDetails).reduce((sum, val) => {
+        return sum + stringToCents(val);
+      }, 0);
       
-      // Actualitzem el camp 'amount' principal
-      // Usem toFixed(2) perquè sembli una moneda, o string buit si és 0 per no molestar
-      setAmount(total > 0 ? total.toFixed(2) : '');
+      // Actualitzem l'import principal només si hi ha canvis rellevants
+      // Usem toFixed(2) per mostrar format moneda estàndard
+      if (totalCents > 0) {
+        setAmount((totalCents / 100).toFixed(2));
+      } else {
+        setAmount('');
+      }
     }
   }, [splitDetails, splitType]);
-  // ------------------------------------------
 
   // Logic handlers
   const toggleInvolved = (userId: string) => {
@@ -71,11 +98,14 @@ export function useExpenseForm({ initialData, users, currency, onSubmit }: UseEx
   };
 
   const handleDetailChange = (userId: string, value: string) => {
-    const numValue = parseFloat(value);
-    setSplitDetails(prev => ({
-      ...prev,
-      [userId]: isNaN(numValue) ? 0 : numValue
-    }));
+    // Permetem que l'usuari escrigui lliurement (strings), validant només caràcters bàsics
+    // Això permet escriure "10." sense que s'esborri el punt immediatament.
+    if (/^\d*[.,]?\d*$/.test(value)) {
+      setSplitDetails(prev => ({
+        ...prev,
+        [userId]: value
+      }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -84,10 +114,12 @@ export function useExpenseForm({ initialData, users, currency, onSubmit }: UseEx
 
     try {
       setIsSubmitting(true);
-      const amountInCents = Math.round(parseFloat(amount) * 100);
+      
+      // CONVERSIÓ SEGURA: String -> Cèntims Enters
+      const amountInCents = stringToCents(amount);
       
       const expenseData: any = {
-        title,
+        title: title.trim(),
         amount: amountInCents,
         payer,
         category,
@@ -99,16 +131,18 @@ export function useExpenseForm({ initialData, users, currency, onSubmit }: UseEx
       if (splitType !== SPLIT_TYPES.EQUAL) {
         const detailsInCents: Record<string, number> = {};
         Object.entries(splitDetails).forEach(([uid, val]) => {
-          detailsInCents[uid] = Math.round(val * 100);
+          // Convertim cada input individual a cèntims (o unitats scalades x100 per shares)
+          detailsInCents[uid] = stringToCents(val);
         });
         expenseData.splitDetails = detailsInCents;
       }
 
       if (receiptUrl?.trim()) {
-        expenseData.receiptUrl = receiptUrl;
+        expenseData.receiptUrl = receiptUrl.trim();
       }
 
       if (isForeignCurrency) {
+        // Els camps originals sí que poden ser floats perquè són informatius
         expenseData.originalAmount = parseFloat(foreignAmount);
         expenseData.originalCurrency = foreignCurrency;
         expenseData.exchangeRate = parseFloat(exchangeRate);
