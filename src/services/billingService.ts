@@ -1,9 +1,7 @@
 // src/services/billingService.ts
 
 import { Expense, TripUser, Balance, Settlement, CategoryStat, MoneyCents, toCents } from '../types';
-import { CATEGORIES, SPLIT_TYPES } from '../utils/constants'; // [FIX] Importem la font de veritat
-
-// [FIX] Eliminada constant SPLIT_TYPES duplicada per evitar conflictes.
+import { CATEGORIES, SPLIT_TYPES } from '../utils/constants';
 
 export const SPECIAL_CATEGORIES = {
   TRANSFER: 'transfer',
@@ -112,6 +110,7 @@ const applyExactSplit = (
 /**
  * Estratègia SHARES: Repartiment ponderat per participacions.
  * Utilitza matemàtica entera segura per evitar errors de punt flotant.
+ * OPTIMITZACIÓ: Distribució determinista O(N) sense bucles 'while'.
  */
 const applySharesSplit = (
   exp: Expense,
@@ -129,35 +128,32 @@ const applySharesSplit = (
 
   if (totalShares <= 0) return toCents(0);
 
-  let distributedSoFar = toCents(0);
-  
+  // 1. Càlcul base del romanent total abans de distribuir
+  // Calculem quant "hauríem" de pagar en total si féssim només la part entera
+  let totalBaseAllocated = 0;
   const allocations = entries.map(entry => {
-    // Multiplicació primer per precisió
-    const rawAmount = toCents(Math.floor((exp.amount * entry.shares) / totalShares));
-    return { ...entry, amountToPay: rawAmount };
+    const rawAmount = Math.floor((exp.amount * entry.shares) / totalShares);
+    totalBaseAllocated += rawAmount;
+    return { ...entry, baseAmount: rawAmount };
   });
 
-  const totalAllocatedBase = allocations.reduce((acc, curr) => toCents(acc + curr.amountToPay), toCents(0));
-  let remainder = exp.amount - totalAllocatedBase;
-
+  const remainder = exp.amount - totalBaseAllocated;
+  
+  // 2. Distribució determinista del romanent
+  // Utilitzem la mateixa lògica de rotació que a 'Equal Split' per ser justos
   const offset = getStableDistributionOffset(exp.id, allocations.length);
-  let distributionIdx = offset % allocations.length;
+  const count = allocations.length;
+  let distributedSoFar = toCents(0);
 
-  // Circuit Breaker per bucle infinit
-  let iterations = 0;
-  const MAX_ITERATIONS = allocations.length * 2 + remainder;
+  allocations.forEach((alloc, i) => {
+    // Si l'índex rotat cau dins del rang del romanent, li toca 1 cèntim extra
+    const rotatedIndex = (i - offset + count) % count;
+    const extraCent = rotatedIndex < remainder ? 1 : 0;
+    
+    const finalAmount = toCents(alloc.baseAmount + extraCent);
 
-  while (remainder > 0 && allocations.length > 0 && iterations < MAX_ITERATIONS) {
-      const alloc = allocations[distributionIdx];
-      alloc.amountToPay = toCents(alloc.amountToPay + 1);
-      remainder--;
-      distributionIdx = (distributionIdx + 1) % allocations.length;
-      iterations++;
-  }
-
-  allocations.forEach((alloc) => {
-    balanceMap[alloc.uid] = toCents(balanceMap[alloc.uid] - alloc.amountToPay);
-    distributedSoFar = toCents(distributedSoFar + alloc.amountToPay);
+    balanceMap[alloc.uid] = toCents(balanceMap[alloc.uid] - finalAmount);
+    distributedSoFar = toCents(distributedSoFar + finalAmount);
   });
 
   return distributedSoFar;
@@ -206,7 +202,7 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
     .sort((a, b) => b.amount - a.amount);
 };
 
-// --- ALTRES FUNCIONS ---
+// --- ALTRES FUNCIONS (Sense canvis, només verificades) ---
 
 export const calculateSettlements = (balances: Balance[]): Settlement[] => {
   const totalBalance = balances.reduce((acc, b) => acc + b.amount, 0);

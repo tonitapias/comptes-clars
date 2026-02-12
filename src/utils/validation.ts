@@ -1,38 +1,25 @@
 // src/utils/validation.ts
 import { z } from 'zod';
-import { SPLIT_TYPES, CATEGORIES, CURRENCIES } from './constants'; // [FIX] Importació centralitzada
+import { SPLIT_TYPES, CATEGORIES, CURRENCIES } from './constants';
 
 // --- EXTRACCIÓ DE VALORS PER A ZOD ---
-// Necessitem convertir els objectes de configuració a tuples d'strings per a Zod.
-// Això assegura que si afegim una categoria a constants.ts, automàticament és vàlida aquí.
-
 const SPLIT_TYPE_VALUES = Object.values(SPLIT_TYPES) as [string, ...string[]];
-
 const CATEGORY_IDS = CATEGORIES.map(c => c.id) as [string, ...string[]];
-
 const CURRENCY_CODES = CURRENCIES.map(c => c.code) as [string, ...string[]];
-
 
 // --- HELPERS DE TRANSFORMACIÓ (SANITIZERS) ---
 
 /**
  * Parser de moneda de precisió entera ("Integer-based").
- * Evita completament l'ús de floats per prevenir errors IEEE 754.
+ * Converteix strings d'entrada ("10,50") a cèntims (1050).
  */
 const parseMoneyString = (val: string): number => {
-  // 1. Neteja: normalitzem coma a punt i eliminem espais
   const cleanVal = val.trim().replace(',', '.');
-  
-  // 2. Validació de format bàsic (per evitar NaN)
   if (cleanVal === '' || isNaN(Number(cleanVal))) return 0;
 
-  // 3. Separació de part entera i decimal
   const [integerPart, decimalPart = ''] = cleanVal.split('.');
-
-  // 4. Normalització de decimals (sempre 2 dígits)
+  // Assegurem sempre 2 decimals
   const paddedDecimal = (decimalPart + '00').slice(0, 2);
-
-  // 5. Concatenació segura i conversió a Enter
   const centsString = `${integerPart}${paddedDecimal}`;
   const cents = parseInt(centsString, 10);
 
@@ -40,28 +27,28 @@ const parseMoneyString = (val: string): number => {
 };
 
 /**
- * Transforma qualsevol input a CÈNTIMS (Enter).
- * Prioritza el parsing de text segur.
+ * Transforma l'input a CÈNTIMS (Enter).
+ * MILLORA CRÍTICA (Fix Double Conversion):
+ * - Si és String: S'entén com a Unitats (User Input) -> Converteix a Cèntims.
+ * - Si és Number: S'entén com a Cèntims (Internal Data) -> Passa directament (Pass-through).
+ * La validació posterior .int() s'encarregarà de rebutjar floats (ex: 10.5).
  */
-const currencyInputToCents = (val: unknown): number => {
+const currencyInputToCents = (val: unknown): unknown => {
   if (typeof val === 'string') {
     return parseMoneyString(val);
   }
-  
-  if (typeof val === 'number') {
-    return parseMoneyString(val.toFixed(2));
-  }
-  
-  return 0;
+  // Si ja és un número, assumim que ve del sistema (cèntims) i no el toquem.
+  return val; 
 };
 
 /**
  * Validador de moneda robust.
+ * Accepta Strings (que converteix) o Enters. Rebutja Floats.
  */
 const MoneyAmountSchema = z.preprocess(
   currencyInputToCents,
-  z.number()
-    .int("L'import ha de ser un enter (cèntims)")
+  z.number({ invalid_type_error: "L'import ha de ser numèric" })
+    .int("L'import intern ha de ser un enter (cèntims). S'han detectat decimals.")
     .positive("L'import ha de ser major que 0")
     .max(Number.MAX_SAFE_INTEGER, "L'import excedeix el límit segur")
 );
@@ -82,12 +69,10 @@ export const TripUserSchema = z.object({
 export const ExpenseSchema = z.object({
   title: z.string().trim().min(1, "El títol és obligatori").max(50, "Títol massa llarg (màx 50)"),
   
-  // APLICACIÓ: Parser segur
+  // APLICACIÓ: Parser segur híbrid (String/Int)
   amount: MoneyAmountSchema,
   
   payer: z.string().trim().min(1, "El pagador és obligatori"),
-  
-  // [FIX] Ús dinàmic de les categories definides a constants
   category: z.enum(CATEGORY_IDS),
   
   involved: z.array(z.string())
@@ -100,13 +85,14 @@ export const ExpenseSchema = z.object({
     message: "La data no és vàlida"
   }),
   
-  // [FIX] Ús dinàmic dels tipus de repartiment
   splitType: z.enum(SPLIT_TYPE_VALUES).optional(),
   
+  // Els detalls també han de ser tractats amb cura (MoneyAmountSchema o similar)
+  // Aquí fem servir preprocess individual per a cada valor del mapa
   splitDetails: z.record(
     z.string(), 
     z.preprocess(
-      (val) => currencyInputToCents(val),
+      currencyInputToCents,
       z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
     )
   ).optional(),
@@ -114,21 +100,22 @@ export const ExpenseSchema = z.object({
   receiptUrl: z.string().url("L'enllaç de la imatge no és vàlid").optional().nullable(),
   
   originalAmount: z.number().positive().optional(),
-  // [FIX] Ús dinàmic de les divises
   originalCurrency: z.enum(CURRENCY_CODES).optional(),
   exchangeRate: z.number().positive().optional()
 })
 // --- REGLES DE NEGOCI (Integrity Checks) ---
 
 // REGLA 1: Mode EXACT (Suma <= Total)
+// Permetem que la suma sigui menor (el pagador assumeix la resta), però mai major.
 .refine((data) => {
   if (data.splitType === SPLIT_TYPES.EXACT && data.splitDetails) {
     const sumDetails = Object.values(data.splitDetails).reduce((a, b) => a + b, 0);
+    // Utilitzem una tolerància 0 estricta ja que treballem amb enters
     return sumDetails <= data.amount;
   }
   return true;
 }, {
-  message: "La suma de les parts supera l'import total",
+  message: "La suma de les parts assignades supera l'import total de la despesa.",
   path: ["splitDetails"] 
 })
 
@@ -140,7 +127,7 @@ export const ExpenseSchema = z.object({
   }
   return true;
 }, {
-  message: "Hi ha d'haver almenys una participació assignada",
+  message: "Hi ha d'haver almenys una participació assignada.",
   path: ["splitDetails"]
 })
 
@@ -149,11 +136,12 @@ export const ExpenseSchema = z.object({
   if ((data.splitType === SPLIT_TYPES.EXACT || data.splitType === SPLIT_TYPES.SHARES) && data.splitDetails) {
     const involvedSet = new Set(data.involved);
     const detailUids = Object.keys(data.splitDetails);
+    // Verifiquem que cada ID al mapa de detalls existeixi a la llista d'involucrats
     return detailUids.every(uid => involvedSet.has(uid));
   }
   return true;
 }, {
-  message: "Tots els usuaris amb assignació han de constar com a involucrats",
+  message: "Tots els usuaris amb assignació manual han de constar a la llista d'involucrats.",
   path: ["involved"] 
 });
 
