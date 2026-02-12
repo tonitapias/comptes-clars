@@ -132,11 +132,14 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
       const totalShares = entries.reduce((acc, curr) => acc + curr.shares, 0);
 
       if (totalShares > 0) {
-        const amountPerShare = exp.amount / totalShares;
+        // [AUDITORIA FIX] Matemàtica Entera: (Total * Participacions) / TotalParticipacions
+        // Evitem decimals intermedis (amountPerShare) per millorar precisió.
+        
         let distributedSoFar = toCents(0);
         
         const allocations = entries.map(entry => {
-          const rawAmount = toCents(Math.floor(entry.shares * amountPerShare));
+          // Multiplicació primer (segura fins a ~9e15), després divisió entera.
+          const rawAmount = toCents(Math.floor((exp.amount * entry.shares) / totalShares));
           return { ...entry, amountToPay: rawAmount };
         });
 
@@ -146,9 +149,9 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
         const offset = getStableDistributionOffset(exp.id, allocations.length);
         let distributionIdx = offset % allocations.length;
 
-        // [SEGURETAT] Circuit Breaker: Evitem bucle infinit si remainder és absurdament gran
+        // [SEGURETAT] Circuit Breaker
         let iterations = 0;
-        const MAX_ITERATIONS = allocations.length * 2 + remainder; // Marge de seguretat
+        const MAX_ITERATIONS = allocations.length * 2 + remainder;
 
         while (remainder > 0 && allocations.length > 0 && iterations < MAX_ITERATIONS) {
            const alloc = allocations[distributionIdx];
@@ -182,20 +185,17 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
  * REFACTORITZAT: Lògica estricta d'enters i comprovació d'integritat.
  */
 export const calculateSettlements = (balances: Balance[]): Settlement[] => {
-  // 1. SANITY CHECK: La suma de tots els balanços ha de ser 0.
-  // Si no ho és, hi ha un error crític. Aturem liquidacions per seguretat.
   const totalBalance = balances.reduce((acc, b) => acc + b.amount, 0);
   
+  // [AUDITORIA FIX] Best Effort
+  // Si hi ha desquadrament, avisem però NO bloquegem la visualització.
   if (totalBalance !== 0) {
-    console.warn(`[Audit Warning] Balanços desquadrats (${totalBalance} cèntims). Es cancel·len liquidacions per evitar errors.`);
-    return [];
+    console.warn(`[Audit Warning] Balanços desquadrats (${totalBalance} cèntims). Es procedeix amb liquidació parcial.`);
   }
 
   const debts: Settlement[] = [];
-  // Shallow copy suficient
   const workingBalances = balances.map(b => ({ ...b }));
 
-  // 2. FILTRATGE STRICTE: Sense "fudge factors" (0.9). Utilitzem 0.
   const debtors = workingBalances
     .filter(b => b.amount < 0) 
     .sort((a, b) => a.amount - b.amount);
@@ -211,7 +211,6 @@ export const calculateSettlements = (balances: Balance[]): Settlement[] => {
     const debtor = debtors[i];
     const creditor = creditors[j];
 
-    // Càlcul segur amb enters positius
     const amount = toCents(Math.min(Math.abs(debtor.amount), creditor.amount));
 
     if (amount >= MIN_SETTLEMENT_CENTS) {
@@ -222,11 +221,9 @@ export const calculateSettlements = (balances: Balance[]): Settlement[] => {
       });
     }
 
-    // Actualitzem saldos
     debtor.amount = toCents(debtor.amount + amount);
     creditor.amount = toCents(creditor.amount - amount);
 
-    // 3. AVANÇ D'ÍNDEXS: Matemàtica exacta. Si és 0, passem al següent.
     if (debtor.amount === 0) i++;
     if (creditor.amount === 0) j++;
   }
@@ -234,7 +231,7 @@ export const calculateSettlements = (balances: Balance[]): Settlement[] => {
   return debts;
 };
 
-// --- FUNCIONS AUXILIARS DE CÀLCUL ---
+// --- FUNCIONS AUXILIARS DE CÀLCUL (Sense canvis) ---
 
 export const calculateCategoryStats = (expenses: Expense[]): CategoryStat[] => {
   const stats: Record<string, MoneyCents> = {};

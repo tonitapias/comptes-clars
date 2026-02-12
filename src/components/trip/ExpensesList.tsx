@@ -1,6 +1,6 @@
 // src/components/trip/ExpensesList.tsx
-import React, { useMemo } from 'react';
-import { Search, Receipt, ArrowRightLeft, Paperclip } from 'lucide-react'; // <--- Eliminat 'Plus' dels imports
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { Search, Receipt, ArrowRightLeft, Paperclip, Loader2 } from 'lucide-react'; 
 import { CATEGORIES } from '../../utils/constants';
 import { Expense, CategoryId, TripUser } from '../../types';
 import { formatCurrency, formatDateDisplay } from '../../utils/formatters';
@@ -33,6 +33,8 @@ const getAvatarColor = (name: string) => {
   return colors[Math.abs(hash) % colors.length];
 };
 
+const PAGE_SIZE = 20;
+
 export default function ExpensesList({ 
   expenses, 
   searchQuery, 
@@ -42,8 +44,12 @@ export default function ExpensesList({
   onEdit
 }: ExpensesListProps) {
   const { tripData } = useTrip();
+  
+  // ESTAT: Control de paginació local
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const observerTarget = useRef<HTMLDivElement>(null);
 
-  // Optimització: Creem un mapa d'usuaris per a accés O(1)
+  // Optimització: Mapa d'usuaris O(1)
   const userMap = useMemo(() => {
     if (!tripData?.users) return {};
     return tripData.users.reduce((acc, user) => {
@@ -52,7 +58,34 @@ export default function ExpensesList({
     }, {} as Record<string, TripUser>);
   }, [tripData?.users]);
 
+  // RESET: Quan canvien els filtres, tornem a l'inici de la llista
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [searchQuery, filterCategory, expenses]); // Afegim expenses per si s'afegeix una de nova
+
+  // LOGICA: Infinite Scroll amb IntersectionObserver
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((prev) => prev + PAGE_SIZE);
+        }
+      },
+      { threshold: 0.1, rootMargin: '100px' } // Carrega abans d'arribar al final
+    );
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current);
+    }
+
+    return () => observer.disconnect();
+  }, [expenses.length]); // Recreem només si la longitud canvia (pocs renders)
+
   const getUserName = (id: string) => userMap[id]?.name || 'Desconegut';
+
+  // SLICE: Només renderitzem el subconjunt visible
+  const visibleExpenses = expenses.slice(0, visibleCount);
+  const hasMore = visibleCount < expenses.length;
 
   if (!tripData) return null;
   const { currency } = tripData;
@@ -99,76 +132,83 @@ export default function ExpensesList({
                 <p>No s'han trobat despeses</p>
             </div>
         ) : (
-            expenses.map((expense) => {
-                const category = CATEGORIES.find(c => c.id === expense.category) || CATEGORIES[0];
-                const isTransfer = expense.category === 'transfer';
-                const payerName = getUserName(expense.payer);
-                const hasForeignCurrency = expense.originalCurrency && expense.originalCurrency !== currency.code;
+            <>
+              {visibleExpenses.map((expense) => {
+                  const category = CATEGORIES.find(c => c.id === expense.category) || CATEGORIES[0];
+                  const isTransfer = expense.category === 'transfer';
+                  const payerName = getUserName(expense.payer);
+                  const hasForeignCurrency = expense.originalCurrency && expense.originalCurrency !== currency.code;
 
-                return (
-                  <div 
-                    key={expense.id}
-                    onClick={() => onEdit(expense)}
-                    className="group bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 transition-all cursor-pointer relative overflow-hidden"
-                  >
-                    {/* Category Color Bar */}
-                    <div className={`absolute left-0 top-0 bottom-0 w-1 ${category.barColor}`} />
+                  return (
+                    <div 
+                      key={expense.id}
+                      onClick={() => onEdit(expense)}
+                      className="group bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 transition-all cursor-pointer relative overflow-hidden"
+                    >
+                      {/* Category Color Bar */}
+                      <div className={`absolute left-0 top-0 bottom-0 w-1 ${category.barColor}`} />
 
-                    <div className="flex items-center justify-between pl-3">
-                      <div className="flex items-center gap-4 flex-1 min-w-0">
-                        <div className={`
-                            w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-colors
-                            ${isTransfer ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 group-hover:bg-slate-200 dark:group-hover:bg-slate-700'}
-                        `}>
-                            {isTransfer ? <ArrowRightLeft className="w-6 h-6" /> : <category.icon className="w-6 h-6" />}
+                      <div className="flex items-center justify-between pl-3">
+                        <div className="flex items-center gap-4 flex-1 min-w-0">
+                          <div className={`
+                              w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-colors
+                              ${isTransfer ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 group-hover:bg-slate-200 dark:group-hover:bg-slate-700'}
+                          `}>
+                              {isTransfer ? <ArrowRightLeft className="w-6 h-6" /> : <category.icon className="w-6 h-6" />}
+                          </div>
+                          
+                          <div className="flex flex-col min-w-0 flex-1 mr-2">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                  <span className="font-bold text-slate-800 dark:text-slate-100 truncate text-base">{expense.title}</span>
+                                  {expense.receiptUrl && <Paperclip className="w-3 h-3 text-slate-400 flex-shrink-0" />}
+                              </div>
+                              
+                              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                  <span>{formatDateDisplay(expense.date)}</span>
+                                  <span>•</span>
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                      <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold ${getAvatarColor(payerName)}`}>
+                                          {userMap[expense.payer]?.photoUrl ? (
+                                              <img src={userMap[expense.payer].photoUrl} alt={payerName} className="w-full h-full object-cover rounded-full" />
+                                          ) : payerName.charAt(0).toUpperCase()}
+                                      </div>
+                                      <span className="font-medium truncate max-w-[80px]">{payerName}</span>
+                                  </div>
+                                  <span>•</span>
+                                  <span className="truncate">
+                                      {isTransfer 
+                                          ? `→ ${expense.involved[0] ? getUserName(expense.involved[0]) : 'Tothom'}`
+                                          : (expense.splitType === 'equal' ? `${expense.involved.length} pers.` : (expense.splitType === 'exact' ? 'Exacte' : 'Parts'))
+                                      }
+                                  </span>
+                              </div>
+                          </div>
                         </div>
-                        
-                        <div className="flex flex-col min-w-0 flex-1 mr-2">
-                            <div className="flex items-center gap-2 mb-0.5">
-                                <span className="font-bold text-slate-800 dark:text-slate-100 truncate text-base">{expense.title}</span>
-                                {expense.receiptUrl && <Paperclip className="w-3 h-3 text-slate-400 flex-shrink-0" />}
-                            </div>
-                            
-                            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                                <span>{formatDateDisplay(expense.date)}</span>
-                                <span>•</span>
-                                <div className="flex items-center gap-1.5 min-w-0">
-                                    <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold ${getAvatarColor(payerName)}`}>
-                                        {userMap[expense.payer]?.photoUrl ? (
-                                            <img src={userMap[expense.payer].photoUrl} alt={payerName} className="w-full h-full object-cover rounded-full" />
-                                        ) : payerName.charAt(0).toUpperCase()}
-                                    </div>
-                                    <span className="font-medium truncate max-w-[80px]">{payerName}</span>
-                                </div>
-                                <span>•</span>
-                                <span className="truncate">
-                                    {isTransfer 
-                                        ? `→ ${expense.involved[0] ? getUserName(expense.involved[0]) : 'Tothom'}`
-                                        : (expense.splitType === 'equal' ? `${expense.involved.length} pers.` : (expense.splitType === 'exact' ? 'Exacte' : 'Parts'))
-                                    }
-                                </span>
-                            </div>
-                        </div>
-                      </div>
 
-                      <div className="flex flex-col items-end pl-2">
-                        <span className={`font-bold text-lg whitespace-nowrap ${isTransfer ? 'text-emerald-500' : 'text-slate-800 dark:text-white'}`}>
-                            {formatCurrency(expense.amount, currency)}
-                        </span>
-                        {hasForeignCurrency && (
-                            <span className="text-[10px] font-medium text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded whitespace-nowrap mt-1">
-                                {expense.originalAmount?.toFixed(2)} {expense.originalCurrency}
-                            </span>
-                        )}
+                        <div className="flex flex-col items-end pl-2">
+                          <span className={`font-bold text-lg whitespace-nowrap ${isTransfer ? 'text-emerald-500' : 'text-slate-800 dark:text-white'}`}>
+                              {formatCurrency(expense.amount, currency)}
+                          </span>
+                          {hasForeignCurrency && (
+                              <span className="text-[10px] font-medium text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded whitespace-nowrap mt-1">
+                                  {expense.originalAmount?.toFixed(2)} {expense.originalCurrency}
+                              </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-            })
+                  );
+              })}
+              
+              {/* TRIGGER per Infinite Scroll */}
+              {hasMore && (
+                <div ref={observerTarget} className="h-10 flex items-center justify-center w-full">
+                  <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+                </div>
+              )}
+            </>
         )}
       </div>
-
-      {/* --- HE ELIMINAT EL BOTÓ FLOTANT DUPLICAT I L'ESPAIADOR AQUÍ --- */}
     </div>
   );
 }
