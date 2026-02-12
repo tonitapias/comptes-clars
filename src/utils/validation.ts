@@ -1,14 +1,14 @@
 // src/utils/validation.ts
 import { z } from 'zod';
 
-// Definim els tipus de repartiment manualment per evitar dependències circulars
+// Definim els tipus de repartiment manualment
 const SPLIT_TYPES = ['equal', 'exact', 'shares'] as const;
 
 // Validació d'Usuaris
 export const TripUserSchema = z.object({
   id: z.string(), 
-  // MILLORA: Afegim .trim() per netejar entrades brutes
-  name: z.string().trim().min(1, "El nom no pot estar buit").max(50, "El nom és massa llarg"),
+  // MILLORA: Limitem la longitud per evitar trencaments de UI i fem trim.
+  name: z.string().trim().min(1, "El nom no pot estar buit").max(30, "El nom és massa llarg (màx 30)"),
   email: z.string().email().optional(),
   isAuth: z.boolean().optional(),
   linkedUid: z.string().optional().nullable(),
@@ -18,23 +18,28 @@ export const TripUserSchema = z.object({
 
 // Validació Base de Despesa
 export const ExpenseSchema = z.object({
-  title: z.string().trim().min(1, "El títol és obligatori").max(100, "Títol massa llarg"),
+  title: z.string().trim().min(1, "El títol és obligatori").max(50, "Títol massa llarg (màx 50)"),
   
-  // MILLORA: Forcem enter (cèntims) i positiu.
+  // Enter (cèntims) i positiu.
   amount: z.number().int("L'import ha de ser un enter (cèntims)").positive("L'import ha de ser positiu").finite(), 
   
   payer: z.string().trim().min(1, "El pagador és obligatori"),
   
   category: z.enum(['food', 'transport', 'home', 'drinks', 'travel', 'tickets', 'shopping', 'entertainment', 'transfer', 'other', 'all']),
   
-  involved: z.array(z.string()).min(1, "Hi ha d'haver almenys una persona involucrada"),
+  // MILLORA: Assegurem que no hi hagi duplicats a la llista d'involucrats
+  involved: z.array(z.string())
+    .min(1, "Hi ha d'haver almenys una persona involucrada")
+    .refine((items) => new Set(items).size === items.length, {
+      message: "No es poden repetir persones a la mateixa despesa"
+    }),
   
-  date: z.string(), // Acceptem ISO string
+  date: z.string(), // ISO string
   
   splitType: z.enum(SPLIT_TYPES).optional(),
   
   // Els detalls han de ser enters (cèntims)
-  splitDetails: z.record(z.string(), z.number().int()).optional(),
+  splitDetails: z.record(z.string(), z.number().int().nonnegative()).optional(),
   
   receiptUrl: z.string().url("L'enllaç de la imatge no és vàlid").optional().nullable(),
   
@@ -43,21 +48,23 @@ export const ExpenseSchema = z.object({
   originalCurrency: z.enum(['EUR', 'USD', 'GBP', 'JPY', 'MXN']).optional(),
   exchangeRate: z.number().positive().optional()
 })
-// MILLORA CRÍTICA: Validació de lògica de negoci (Refinement)
+// MILLORA UX: Eliminem la restricció estricta d'igualtat en 'exact'.
+// Permetem que l'usuari assigni MENYS del total (la diferència l'assumeix el pagador implícitament).
+// Això desbloqueja casos d'ús com "Tiquet de 50€, però només 20€ són del grup".
 .refine((data) => {
-  // Regla 1: Si és 'exact', la suma dels detalls ha de quadrar amb el total
+  // Regla 1: Validació de consistència bàsica per a 'exact'
   if (data.splitType === 'exact' && data.splitDetails) {
     const sumDetails = Object.values(data.splitDetails).reduce((a, b) => a + b, 0);
-    // Admetem una diferència de 0 per ser estrictes, ja que treballem amb enters
-    return sumDetails === data.amount;
+    // Només comprovem que no reparteixin MÉS diners dels que val la factura
+    return sumDetails <= data.amount;
   }
   return true;
 }, {
-  message: "La suma dels imports dividits no coincideix amb l'import total",
-  path: ["splitDetails"] // L'error s'associarà a aquest camp
+  message: "La suma dels imports dividits supera l'import total de la despesa",
+  path: ["splitDetails"] 
 })
 .refine((data) => {
-  // Regla 2: Si és 'shares', ha d'haver-hi almenys una participació definida
+  // Regla 2: Si és 'shares', ha d'haver-hi almenys una participació > 0
   if (data.splitType === 'shares' && data.splitDetails) {
     const totalShares = Object.values(data.splitDetails).reduce((a, b) => a + b, 0);
     return totalShares > 0;
@@ -70,13 +77,13 @@ export const ExpenseSchema = z.object({
 
 // Schema per a despeses ja guardades (amb ID)
 const PersistedExpenseSchema = ExpenseSchema.extend({
-  id: z.union([z.string(), z.number()]) // Suport legacy i UUID
+  id: z.union([z.string(), z.number()])
 });
 
 // Validació Completa del Viatge
 export const TripDataSchema = z.object({
   id: z.string(),
-  name: z.string().trim().min(1, "El nom del grup és obligatori"),
+  name: z.string().trim().min(1, "El nom del grup és obligatori").max(50),
   users: z.array(TripUserSchema),
   expenses: z.array(PersistedExpenseSchema),
   currency: z.object({

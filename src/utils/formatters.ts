@@ -1,37 +1,48 @@
 // src/utils/formatters.ts
 
-import { Currency } from '../types';
+import { Currency, MoneyCents } from '../types';
 
 /**
  * Formata un import en cèntims a una cadena de moneda localitzada.
- * @param amount Import en cèntims (enter)
- * @param currency Objecte amb el codi i locale (ex: {code: 'EUR', locale: 'ca-ES'})
+ * BLINDATGE: Gestió robusta d'errors de 'Intl' i valors nuls.
  */
-export const formatMoney = (amount: number | null | undefined, currency: Currency): string => {
-  // Gestió robusta de valors nuls o no numèrics
+export const formatMoney = (amount: MoneyCents | null | undefined, currency: Currency | undefined): string => {
+  // 1. Sanitització d'entrada: Si no hi ha import, mostrem 0.
   if (amount === null || amount === undefined || isNaN(amount)) {
-    return formatMoney(0, currency);
+    // Evitem recursió infinita passant 0 explícitament
+    if (amount !== 0) return formatMoney(0, currency);
   }
 
+  // 2. Valors per defecte segurs (Safe Defaults)
+  // Això evita errors "Cannot read property of undefined" dins del try/catch
+  const safeCode = currency?.code || 'EUR';
+  const safeLocale = currency?.locale || 'ca-ES';
+  const safeSymbol = currency?.symbol || '€';
+
+  // Convertim cèntims a unitats per a la visualització
+  const valueInUnits = (amount || 0) / 100;
+
   try {
-    return new Intl.NumberFormat(currency?.locale || 'ca-ES', { 
+    // Intentem utilitzar l'API nativa del navegador
+    return new Intl.NumberFormat(safeLocale, { 
       style: 'currency', 
-      currency: currency?.code || 'EUR',
+      currency: safeCode,
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
-    }).format(amount / 100);
+    }).format(valueInUnits);
   } catch (error) {
-    // Fallback d'últim recurs
-    const symbol = currency?.symbol || '€';
-    return `${(amount / 100).toFixed(2)} ${symbol}`;
+    // 3. Fallback d'últim recurs (Fail-safe)
+    // Si el navegador no suporta el locale o el codi de moneda, mostrem string manual
+    console.warn(`Error formatting currency (${safeCode}/${safeLocale}):`, error);
+    return `${valueInUnits.toFixed(2)} ${safeSymbol}`;
   }
 };
 
+// Mantenim l'àlies per compatibilitat
 export const formatCurrency = formatMoney;
 
 /**
- * Formata una data ISO a un format llegible (ex: 12 de maig).
- * @param dateString Data en format string (ISO)
+ * Formata una data ISO.
  */
 export const formatDate = (dateString: string): string => {
   if (!dateString) return '';

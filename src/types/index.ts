@@ -1,6 +1,13 @@
 // src/types/index.ts
 import { LucideIcon } from 'lucide-react';
 
+// --- NOUS TIPUS SEMÀNTICS (Robustesa) ---
+// Defineixen clarament què representen les primitives.
+// Risc Zero: TypeScript ho compila com a 'number'/'string', sense impacte en runtime.
+export type MoneyCents = number; // Sempre enter. Ex: 1000 = 10.00€
+export type UserId = string;
+export type ISODateString = string;
+
 // --- MONEDA ---
 export type CurrencyCode = 'EUR' | 'USD' | 'GBP' | 'JPY' | 'MXN';
 
@@ -23,7 +30,7 @@ export interface Category {
 
 // --- USUARIS ---
 export interface TripUser {
-  id: string;             
+  id: UserId;             
   name: string;           
   email?: string;         
   isAuth?: boolean;       
@@ -38,18 +45,21 @@ export type SplitType = 'equal' | 'exact' | 'shares';
 export interface Expense {
   id: string | number;    
   title: string;
-  amount: number;         // En cèntims (Integer)
-  payer: string;          
+  amount: MoneyCents;     // Clarament definit com a cèntims
+  payer: UserId;          
   category: CategoryId;
-  involved: string[];     
-  date: string;           
+  involved: UserId[];     
+  date: ISODateString;           
   splitType?: SplitType;  
-  splitDetails?: Record<string, number>; 
+  
+  // Detalls: ID Usuari -> Quantitat en Cèntims
+  splitDetails?: Record<UserId, MoneyCents>; 
+  
   receiptUrl?: string | null;
   
-  originalAmount?: number;      
+  originalAmount?: number; // Pot tenir decimals (divisa original)
   originalCurrency?: CurrencyCode; 
-  exchangeRate?: number;        
+  exchangeRate?: number;   // Float       
 }
 
 // --- LOGS I AUDITORIA ---
@@ -57,9 +67,9 @@ export interface LogEntry {
   id: string;
   action: 'create' | 'update' | 'delete' | 'join' | 'settle' | 'settings';
   message: string;
-  userId: string;
+  userId: UserId;
   userName: string;
-  timestamp: string;
+  timestamp: ISODateString;
 }
 
 // --- ESTRUCTURA PRINCIPAL (DOCUMENT) ---
@@ -69,26 +79,26 @@ export interface TripData {
   users: TripUser[];
   expenses: Expense[];
   currency: Currency;
-  createdAt: string;
+  createdAt: ISODateString;
   memberUids?: string[];   
   logs?: LogEntry[];
-  isDeleted?: boolean; // <--- SOFT DELETE
-  isSettled?: boolean; // <--- NOU ESTAT SALDAT
+  isDeleted?: boolean; 
+  isSettled?: boolean; 
 }
 
 // --- RESULTATS DE CÀLCULS ---
 export interface Balance {
-  userId: string;
-  amount: number;
+  userId: UserId;
+  amount: MoneyCents; // El saldo final també és en cèntims
 }
 
 export interface Settlement {
-  from: string; 
-  to: string;   
-  amount: number;
+  from: UserId; 
+  to: UserId;   
+  amount: MoneyCents; // La transacció a fer
 }
 
 export interface CategoryStat extends Category {
-  amount: number;
-  percentage: number;
+  amount: MoneyCents;
+  percentage: number; // Percentatge (0-100) sí que és float
 }

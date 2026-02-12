@@ -3,7 +3,7 @@
 import { Expense, TripUser, Balance, Settlement, CategoryStat } from '../types';
 import { CATEGORIES } from '../utils/constants';
 
-// MILLORA: Exportem constants per a ús compartit (DRY)
+// CONSTANTS
 export const SPLIT_TYPES = {
   EQUAL: 'equal',
   EXACT: 'exact',
@@ -15,37 +15,33 @@ export const SPECIAL_CATEGORIES = {
   OTHER: 'other',
 } as const;
 
-// Llindar mínim per suggerir una devolució (en cèntims). 
-// Reduït a 1 cèntim per garantir que el grup pugui quedar a zero absolut (Risc Zero: Integritat).
-const MIN_SETTLEMENT_CENTS = 1; 
+// Llindar mínim per a transaccions (1 cèntim)
+const MIN_SETTLEMENT_CENTS = 1;
 
 /**
  * Normalitza la identificació d'usuaris.
- * Prioritza ID i usa nom només per compatibilitat legacy.
+ * REFACTORITZAT: Eliminat el fallback per nom per garantir integritat referencial.
+ * Ara només resol si l'identificador coincideix exactament amb un ID d'usuari existent.
  */
 export const resolveUserId = (identifier: string, users: TripUser[]): string | undefined => {
   if (!identifier) return undefined;
   
-  // Optimització: cerca directa primer
+  // Cerca estricta per ID (O(n) - es podria optimitzar amb un Map si es crida molt, 
+  // però per a llistes d'usuaris petites (<50) és insignificant).
   const userById = users.find(u => u.id === identifier);
-  if (userById) return userById.id;
-
-  // Fallback: cerca per nom (Legacy support)
-  const userByName = users.find(u => u.name === identifier);
-  if (userByName) return userByName.id;
-
-  return undefined;
+  return userById?.id;
 };
 
 /**
- * Helper: Crea un mapa de resolució ràpida (Cache) per normalitzar IDs.
+ * Helper: Crea un mapa de resolució estricta (ID -> ID).
+ * REFACTORITZAT: S'ha eliminat la indexació per 'name' per evitar col·lisions 
+ * i suplantacions d'identitat en el càlcul de balanços.
  */
 const createUserResolutionMap = (users: TripUser[]): Record<string, string> => {
   const map: Record<string, string> = {};
   users.forEach(u => {
-    map[u.id] = u.id;
-    if (u.name) {
-      map[u.name] = u.id;
+    if (u.id) {
+      map[u.id] = u.id;
     }
   });
   return map;
@@ -53,30 +49,31 @@ const createUserResolutionMap = (users: TripUser[]): Record<string, string> => {
 
 /**
  * Calcula el balanç financer de cada usuari.
- * Lògica refactoritzada per garantir SUMA ZERO en tots els casos.
+ * Lògica de Suma Zero garantida.
  */
 export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balance[] => {
   const balanceMap: Record<string, number> = {};
+  
+  // Inicialitzem tots els usuaris a 0
   users.forEach(u => balanceMap[u.id] = 0);
 
+  // Mapa de resolució estricta
   const idResolver = createUserResolutionMap(users);
   const getCanonicalId = (rawId: string): string | undefined => idResolver[rawId];
 
   expenses.forEach(exp => {
+    // Si el pagador no és un ID vàlid del grup actual, ignorem la despesa (Seguretat per defecte)
     const payerId = getCanonicalId(exp.payer);
     if (!payerId) return;
 
-    // VARIABLE CLAU: Calculem quant s'ha de retornar realment al pagador
-    // per garantir que (Abonament Pagador) == (Suma Deutes).
     let amountCreditedToPayer = 0;
-
     const splitType = exp.splitType || SPLIT_TYPES.EQUAL;
 
+    // --- MODE EQUITATIU (EQUAL) ---
     if (splitType === SPLIT_TYPES.EQUAL) {
-      // MODE EQUITATIU
-      // Reparteix l'import total entre els participants
       const rawInvolved = (exp.involved && exp.involved.length > 0) ? exp.involved : users.map(u => u.id);
       
+      // Filtrem IDs vàlids i únics
       const receiversIds = Array.from(new Set(
         rawInvolved
           .map(id => getCanonicalId(id))
@@ -85,25 +82,21 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
 
       const count = receiversIds.length;
       if (count > 0) {
-        // Quantitat base (divisió entera)
         const baseAmount = Math.floor(exp.amount / count);
-        // Residu a repartir (cèntims solts)
         const remainder = exp.amount % count;
 
         receiversIds.forEach((uid, index) => {
-          // Els primers 'remainder' usuaris paguen 1 cèntim més
+          // Repartiment determinista del residu
           const amountToPay = baseAmount + (index < remainder ? 1 : 0);
           balanceMap[uid] -= amountToPay;
         });
 
-        // En mode EQUAL, sempre repartim tot l'import original
+        // En mode EQUAL, el pagador rep l'import total ja que s'ha repartit tot íntegrament
         amountCreditedToPayer = exp.amount;
       }
 
+    // --- MODE EXACTE (EXACT) ---
     } else if (splitType === SPLIT_TYPES.EXACT) {
-      // MODE EXACTE
-      // CORRECCIÓ CRÍTICA: L'import abonat al pagador ha de ser la suma dels detalls,
-      // no l'import teòric de la despesa, per evitar crear/destruir diners.
       const details = exp.splitDetails || {};
       let totalAllocated = 0;
 
@@ -114,17 +107,16 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
           totalAllocated += amount;
         }
       });
-
+      // El pagador només rep la suma del que s'ha pogut assignar a usuaris vàlids
       amountCreditedToPayer = totalAllocated;
 
+    // --- MODE PARTICIPACIONS (SHARES) ---
     } else if (splitType === SPLIT_TYPES.SHARES) {
-      // MODE PARTS (SHARES)
       const details = exp.splitDetails || {};
       
       const entries = Object.entries(details)
         .map(([key, shares]) => ({ uid: getCanonicalId(key), shares }))
         .filter((entry): entry is { uid: string, shares: number } => !!entry.uid && balanceMap[entry.uid] !== undefined)
-        // Ordenem per ID consistentment per a que el repartiment de residus sigui determinista
         .sort((a, b) => a.uid.localeCompare(b.uid));
 
       const totalShares = entries.reduce((acc, curr) => acc + curr.shares, 0);
@@ -133,7 +125,7 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
         const amountPerShare = exp.amount / totalShares;
         let distributedSoFar = 0;
         
-        // 1. Assignació base (arrodonint cap avall)
+        // 1. Assignació base
         const allocations = entries.map(entry => {
           const rawAmount = Math.floor(entry.shares * amountPerShare);
           return { ...entry, amountToPay: rawAmount };
@@ -141,10 +133,9 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
 
         const totalAllocatedBase = allocations.reduce((acc, curr) => acc + curr.amountToPay, 0);
         
-        // 2. Repartiment just del residu (cèntims)
+        // 2. Repartiment del residu
         let remainder = exp.amount - totalAllocatedBase;
 
-        // Repartim 1 cèntim als primers N usuaris fins esgotar el residu
         allocations.forEach((alloc) => {
           if (remainder > 0) {
             alloc.amountToPay += 1;
@@ -154,12 +145,11 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
           distributedSoFar += alloc.amountToPay;
         });
 
-        // En mode SHARES, assumim que l'objectiu és repartir tot l'import
         amountCreditedToPayer = distributedSoFar; 
       }
     }
 
-    // FINALMENT: Abonem al pagador la quantitat exacta que s'ha carregat als altres
+    // Abonament final al pagador
     if (balanceMap[payerId] !== undefined) {
       balanceMap[payerId] += amountCreditedToPayer;
     }
@@ -171,21 +161,21 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
 };
 
 /**
- * Algoritme per minimitzar transaccions (Greedy).
+ * Algoritme per minimitzar transaccions (Mantenim lògica existent per ara).
+ * TODO: En una futura iteració es pot optimitzar l'algorisme Greedy per reduir passos intermedis,
+ * però ara prioritzem l'estabilitat del canvi d'IDs.
  */
 export const calculateSettlements = (balances: Balance[]): Settlement[] => {
   const debts: Settlement[] = [];
-  // Treballem amb una còpia per no mutar l'entrada
   const workingBalances = balances.map(b => ({ ...b }));
 
-  // Separem deutors (negatiu) i creditors (positiu)
   const debtors = workingBalances
-    .filter(b => b.amount < -0.9) // Filtratge suau per evitar soroll de float molt petit
-    .sort((a, b) => a.amount - b.amount); // Més deutor primer (-100, -50...)
+    .filter(b => b.amount < -0.9) 
+    .sort((a, b) => a.amount - b.amount);
 
   const creditors = workingBalances
     .filter(b => b.amount > 0.9) 
-    .sort((a, b) => b.amount - a.amount); // Més creditor primer (100, 50...)
+    .sort((a, b) => b.amount - a.amount);
 
   let i = 0; 
   let j = 0; 
@@ -194,10 +184,8 @@ export const calculateSettlements = (balances: Balance[]): Settlement[] => {
     const debtor = debtors[i];
     const creditor = creditors[j];
 
-    // L'import a saldar és el mínim entre el que deu un i el que espera l'altre
     const amount = Math.min(Math.abs(debtor.amount), creditor.amount);
 
-    // Només generem la transacció si supera el mínim (ara 1 cèntim)
     if (amount >= MIN_SETTLEMENT_CENTS) {
       debts.push({ 
         from: debtor.userId, 
@@ -206,11 +194,9 @@ export const calculateSettlements = (balances: Balance[]): Settlement[] => {
       });
     }
 
-    // Ajustem els balanços temporals
     debtor.amount += amount;
     creditor.amount -= amount;
 
-    // Avancem índexs si s'han saldat (amb un marge d'error mínim per flotants)
     if (Math.abs(debtor.amount) < 1) i++;
     if (creditor.amount < 1) j++;
   }
@@ -218,9 +204,8 @@ export const calculateSettlements = (balances: Balance[]): Settlement[] => {
   return debts;
 };
 
-/**
- * Estadístiques per categoria.
- */
+// --- FUNCIONS AUXILIARS DE CÀLCUL (Sense canvis estructurals) ---
+
 export const calculateCategoryStats = (expenses: Expense[]): CategoryStat[] => {
   const stats: Record<string, number> = {};
   
@@ -235,9 +220,10 @@ export const calculateCategoryStats = (expenses: Expense[]): CategoryStat[] => {
   });
 
   return Object.entries(stats).map(([id, amount]) => {
+    // Safe lookup per a categories eliminades o custom
     const catInfo = CATEGORIES.find(c => c.id === id) || 
                    CATEGORIES.find(c => c.id === SPECIAL_CATEGORIES.OTHER) || 
-                   CATEGORIES[0];
+                   CATEGORIES[0]; // Fallback final
     
     return {
       ...catInfo,

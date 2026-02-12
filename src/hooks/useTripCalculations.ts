@@ -20,75 +20,84 @@ export function useTripCalculations(
   filterCategory: string
 ): CalculationsResult {
   
-  // 1. Optimització: Ordenació Memotitzada (Pas 1)
-  // Només es re-ordena si canvien les despeses, no quan busquem.
+  // 1. Optimització: Ordenació Memotitzada
   const sortedExpenses = useMemo(() => {
-    // Fem una còpia [...expenses] per no mutar l'array original
     return [...expenses].sort((a, b) => {
       const dateA = new Date(a.date).getTime();
       const dateB = new Date(b.date).getTime();
-      // Primer per data (més recent primer)
       if (dateA !== dateB) return dateB - dateA;
-      // Desempat per ID per estabilitat visual
       if (typeof a.id === 'number' && typeof b.id === 'number') return b.id - a.id;
       return String(b.id).localeCompare(String(a.id));
     });
   }, [expenses]);
 
-  // 2. Filtratge sobre la llista ja ordenada (Pas 2)
-  // Això és molt ràpid i reacciona al teclat de l'usuari.
+  // MILLORA: Creem un índex de cerca ràpida (ID -> Nom)
+  // Això evita fer un users.find() dins del bucle de filtratge (de O(N*M) a O(N)).
+  const userSearchIndex = useMemo(() => {
+    const map: Record<string, string> = {};
+    users.forEach(u => {
+      // Normalitzem a minúscules per facilitar la cerca
+      const nameKey = u.name.toLowerCase();
+      map[u.id] = nameKey;
+      // També indexem per nom directament per si hi ha dades legacy
+      if (u.name) map[u.name] = nameKey;
+    });
+    return map;
+  }, [users]);
+
+  // 2. Filtratge Optimitzat
   const filteredExpenses = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     const isCategoryFilterActive = filterCategory !== 'all';
 
-    // Si no hi ha filtres, retornem directament la llista ordenada (O(1))
     if (!q && !isCategoryFilterActive) {
       return sortedExpenses;
     }
     
     return sortedExpenses.filter(e => {
-        // Lògica de cerca: Títol, Pagador o Involucrats
-        let matchesSearch = true;
-        
-        if (q) {
-            // Resolució de noms per a la cerca
-            const payerUser = users.find(u => u.id === e.payer || u.name === e.payer);
-            const payerName = payerUser?.name.toLowerCase() || '';
-            
-            const involvedNames = e.involved.map(idOrName => {
-                const user = users.find(u => u.id === idOrName || u.name === idOrName);
-                return user ? user.name.toLowerCase() : '';
-            });
-
-            matchesSearch = 
-                e.title.toLowerCase().includes(q) || 
-                payerName.includes(q) ||
-                involvedNames.some(name => name.includes(q));
+        // Lògica de categoria (més ràpida, la comprovem primer)
+        if (isCategoryFilterActive && e.category !== filterCategory) {
+            return false;
         }
 
-        // Lògica de categoria
-        const matchesCategory = !isCategoryFilterActive || e.category === filterCategory;
+        // Si no hi ha text de cerca, ja hem acabat
+        if (!q) return true;
 
-        return matchesSearch && matchesCategory;
+        // Lògica de cerca optimitzada usant l'índex
+        const payerName = userSearchIndex[e.payer] || '';
+        
+        // Optimització: mirem títol i pagador primer
+        if (e.title.toLowerCase().includes(q) || payerName.includes(q)) {
+            return true;
+        }
+
+        // Només si no trobem res, iterem pels involucrats (més costós però inevitable)
+        // Utilitzem l'índex també aquí per evitar .find()
+        const involvedMatch = e.involved.some(idOrName => {
+            const name = userSearchIndex[idOrName] || '';
+            return name.includes(q);
+        });
+
+        return involvedMatch;
       });
-  }, [sortedExpenses, searchQuery, filterCategory, users]);
+  }, [sortedExpenses, searchQuery, filterCategory, userSearchIndex]); // Depenem de l'índex, no de 'users' directament
 
-  // 3. Balanços (Delegat al Service)
+  // 3. Balanços
   const balances = useMemo(() => {
     return billingService.calculateBalances(expenses, users);
   }, [users, expenses]);
 
-  // 4. Estadístiques (Delegat al Service)
+  // 4. Estadístiques
   const categoryStats = useMemo(() => {
     return billingService.calculateCategoryStats(expenses);
   }, [expenses]);
 
-  // 5. Liquidacions (Delegat al Service)
+  // 5. Liquidacions
   const settlements = useMemo(() => {
     return billingService.calculateSettlements(balances);
   }, [balances]);
 
-  // 6. Totals (Delegat al Service)
+  // 6. Totals
   const totalGroupSpending = useMemo(() => 
     billingService.calculateTotalSpending(expenses), 
   [expenses]);
