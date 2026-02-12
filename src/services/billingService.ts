@@ -11,6 +11,11 @@ export const SPECIAL_CATEGORIES = {
 // Llindar mínim per a transaccions
 const MIN_SETTLEMENT_CENTS = toCents(1);
 
+// --- TIPUS INTERNS PER A REPARTIMENT (Pure Functions) ---
+interface SplitResult {
+  allocations: Record<string, MoneyCents>; // Mapa de càrrecs (valors negatius)
+}
+
 // --- HELPERS BÀSICS ---
 
 export const resolveUserId = (identifier: string, users: TripUser[]): string | undefined => {
@@ -38,29 +43,31 @@ const getStableDistributionOffset = (seed: string | number | undefined, modulus:
   return Math.abs(hash) % modulus;
 };
 
-// --- ESTRATÈGIES DE REPARTIMENT (Refactoritzat SRP) ---
+// --- ESTRATÈGIES DE REPARTIMENT (Refactoritzat a Funcions Pures) ---
 
 /**
- * Estratègia EQUAL: Divideix l'import equitativament entre els participants.
- * Gestiona els cèntims romanents de forma determinista.
+ * Estratègia EQUAL: Divideix l'import equitativament.
+ * NO modifica l'estat, retorna les assignacions.
  */
-const applyEqualSplit = (
+const calculateEqualSplit = (
   exp: Expense, 
-  payerId: string,
-  balanceMap: Record<string, MoneyCents>,
+  validUserIds: Set<string>, // Passem un Set per cerca ràpida O(1)
   getCanonicalId: (id: string) => string | undefined,
   allUserIds: string[]
-): MoneyCents => {
+): SplitResult => {
+  const allocations: Record<string, MoneyCents> = {};
+  
   const rawInvolved = (exp.involved && exp.involved.length > 0) ? exp.involved : allUserIds;
   
+  // Normalitzem i filtrem usuaris vàlids
   const receiversIds = Array.from(new Set(
     rawInvolved
       .map(id => getCanonicalId(id))
-      .filter((id): id is string => !!id && balanceMap[id] !== undefined)
+      .filter((id): id is string => !!id && validUserIds.has(id))
   )).sort(); 
 
   const count = receiversIds.length;
-  if (count === 0) return toCents(0);
+  if (count === 0) return { allocations };
 
   const baseAmount = toCents(Math.floor(exp.amount / count));
   const remainder = exp.amount % count; 
@@ -71,143 +78,169 @@ const applyEqualSplit = (
     const paysExtraCent = rotatedIndex < remainder;
     const amountToPay = toCents(baseAmount + (paysExtraCent ? 1 : 0));
     
-    balanceMap[uid] = toCents(balanceMap[uid] - amountToPay);
+    // Assignem DEUTE (negatiu)
+    allocations[uid] = toCents(-amountToPay);
   });
 
-  return exp.amount; // Tot l'import s'acredita al pagador
+  return { allocations };
 };
 
 /**
- * Estratègia EXACT: Assigna quantitats específiques a cada usuari.
- * La diferència (si n'hi ha) s'assumeix com a cost propi del pagador.
+ * Estratègia EXACT: Assigna quantitats específiques.
+ * La diferència s'imputa al pagador com a despesa pròpia.
  */
-const applyExactSplit = (
+const calculateExactSplit = (
   exp: Expense,
   payerId: string,
-  balanceMap: Record<string, MoneyCents>,
+  validUserIds: Set<string>,
   getCanonicalId: (id: string) => string | undefined
-): MoneyCents => {
+): SplitResult => {
+  const allocations: Record<string, MoneyCents> = {};
   const details = exp.splitDetails || {};
   let totalAllocated = toCents(0);
 
   Object.entries(details).forEach(([identifier, amount]) => {
     const uid = getCanonicalId(identifier);
-    if (uid && balanceMap[uid] !== undefined) {
-      balanceMap[uid] = toCents(balanceMap[uid] - amount);
+    if (uid && validUserIds.has(uid)) {
+      // Deute directe de l'usuari
+      allocations[uid] = toCents((allocations[uid] || 0) - amount);
       totalAllocated = toCents(totalAllocated + amount);
     }
   });
 
   // Assignació de la diferència al pagador (cost propi)
   const remainder = exp.amount - totalAllocated;
-  if (remainder > 0 && balanceMap[payerId] !== undefined) {
-    balanceMap[payerId] = toCents(balanceMap[payerId] - remainder);
+  if (remainder > 0 && validUserIds.has(payerId)) {
+    // El pagador també "paga" (consumeix) la resta
+    allocations[payerId] = toCents((allocations[payerId] || 0) - remainder);
   }
 
-  return exp.amount;
+  return { allocations };
 };
 
 /**
- * Estratègia SHARES: Repartiment ponderat per participacions.
- * Utilitza matemàtica entera segura per evitar errors de punt flotant.
- * OPTIMITZACIÓ: Distribució determinista O(N) sense bucles 'while'.
+ * Estratègia SHARES: Repartiment ponderat.
+ * Pura i amb protecció d'Overflow.
  */
-const applySharesSplit = (
+const calculateSharesSplit = (
   exp: Expense,
-  balanceMap: Record<string, MoneyCents>,
+  validUserIds: Set<string>,
   getCanonicalId: (id: string) => string | undefined
-): MoneyCents => {
+): SplitResult => {
+  const allocations: Record<string, MoneyCents> = {};
   const details = exp.splitDetails || {};
   
   const entries = Object.entries(details)
     .map(([key, shares]) => ({ uid: getCanonicalId(key), shares }))
-    .filter((entry): entry is { uid: string, shares: number } => !!entry.uid && balanceMap[entry.uid] !== undefined)
+    .filter((entry): entry is { uid: string, shares: number } => !!entry.uid && validUserIds.has(entry.uid))
     .sort((a, b) => a.uid.localeCompare(b.uid));
 
   const totalShares = entries.reduce((acc, curr) => acc + curr.shares, 0);
 
-  if (totalShares <= 0) return toCents(0);
+  if (totalShares <= 0) return { allocations };
 
-  // 1. Càlcul base del romanent total abans de distribuir
-  // Calculem quant "hauríem" de pagar en total si féssim només la part entera
+  // 1. Càlcul base
   let totalBaseAllocated = 0;
-  const allocations = entries.map(entry => {
-    const rawAmount = Math.floor((exp.amount * entry.shares) / totalShares);
+  const distributionList = entries.map(entry => {
+    // PROTECCIÓ OVERFLOW: Comprovació de seguretat abans de multiplicar
+    const safeAmount = BigInt(exp.amount);
+    const safeShares = BigInt(entry.shares);
+    const safeTotal = BigInt(totalShares);
+    
+    // (Amount * Shares) / Total
+    const rawBigInt = (safeAmount * safeShares) / safeTotal;
+    
+    // Tornem a Number (segur perquè raw <= amount, i amount <= MAX_SAFE_INTEGER per validació Zod)
+    const rawAmount = Number(rawBigInt);
+
     totalBaseAllocated += rawAmount;
     return { ...entry, baseAmount: rawAmount };
   });
 
   const remainder = exp.amount - totalBaseAllocated;
   
-  // 2. Distribució determinista del romanent
-  // Utilitzem la mateixa lògica de rotació que a 'Equal Split' per ser justos
-  const offset = getStableDistributionOffset(exp.id, allocations.length);
-  const count = allocations.length;
-  let distributedSoFar = toCents(0);
+  // 2. Distribució determinista
+  const offset = getStableDistributionOffset(exp.id, distributionList.length);
+  const count = distributionList.length;
 
-  allocations.forEach((alloc, i) => {
-    // Si l'índex rotat cau dins del rang del romanent, li toca 1 cèntim extra
+  distributionList.forEach((item, i) => {
     const rotatedIndex = (i - offset + count) % count;
     const extraCent = rotatedIndex < remainder ? 1 : 0;
-    
-    const finalAmount = toCents(alloc.baseAmount + extraCent);
+    const finalAmount = toCents(item.baseAmount + extraCent);
 
-    balanceMap[alloc.uid] = toCents(balanceMap[alloc.uid] - finalAmount);
-    distributedSoFar = toCents(distributedSoFar + finalAmount);
+    allocations[item.uid] = toCents((allocations[item.uid] || 0) - finalAmount);
   });
 
-  return distributedSoFar;
+  return { allocations };
 };
 
 // --- FUNCIÓ PRINCIPAL ---
 
 export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balance[] => {
   const balanceMap: Record<string, MoneyCents> = {};
+  
+  // 1. Inicialització neta
   users.forEach(u => balanceMap[u.id] = toCents(0));
 
+  // 2. Preparació d'índexs
   const idResolver = createUserResolutionMap(users);
   const getCanonicalId = (rawId: string): string | undefined => idResolver[rawId];
   const allUserIds = users.map(u => u.id);
+  const validUserIds = new Set(allUserIds); // Set per a consultes O(1) a les funcions pures
 
+  // 3. Processament (Ara sense mutacions ocultes)
   expenses.forEach(exp => {
     const payerId = getCanonicalId(exp.payer);
     if (!payerId) return;
 
-    let amountCreditedToPayer = toCents(0);
     const splitType = exp.splitType || SPLIT_TYPES.EQUAL;
+    let result: SplitResult = { allocations: {} };
 
+    // A. Calculem QUI ha de pagar (sense tocar saldos encara)
     switch (splitType) {
       case SPLIT_TYPES.EQUAL:
-        amountCreditedToPayer = applyEqualSplit(exp, payerId, balanceMap, getCanonicalId, allUserIds);
+        result = calculateEqualSplit(exp, validUserIds, getCanonicalId, allUserIds);
         break;
       case SPLIT_TYPES.EXACT:
-        amountCreditedToPayer = applyExactSplit(exp, payerId, balanceMap, getCanonicalId);
+        result = calculateExactSplit(exp, payerId, validUserIds, getCanonicalId);
         break;
       case SPLIT_TYPES.SHARES:
-        amountCreditedToPayer = applySharesSplit(exp, balanceMap, getCanonicalId);
+        result = calculateSharesSplit(exp, validUserIds, getCanonicalId);
         break;
       default:
-        // Fallback segur a EQUAL si el tipus és desconegut
-        amountCreditedToPayer = applyEqualSplit(exp, payerId, balanceMap, getCanonicalId, allUserIds);
+        result = calculateEqualSplit(exp, validUserIds, getCanonicalId, allUserIds);
         break;
     }
 
+    // B. Apliquem canvis a l'estat (Centralitzat)
+    
+    // 1. Abonem l'import total al pagador (Crèdit)
     if (balanceMap[payerId] !== undefined) {
-      balanceMap[payerId] = toCents(balanceMap[payerId] + amountCreditedToPayer);
+      balanceMap[payerId] = toCents(balanceMap[payerId] + exp.amount);
     }
+
+    // 2. Restem els deutes als participants (Dèbit)
+    Object.entries(result.allocations).forEach(([uid, debtAmount]) => {
+      if (balanceMap[uid] !== undefined) {
+        // debtAmount ja ve en negatiu des de les estratègies, per això sumem
+        // (Saldo + (-Deute)) = Nou Saldo
+        balanceMap[uid] = toCents(balanceMap[uid] + debtAmount);
+      }
+    });
   });
 
+  // 4. Retorn formatat
   return Object.entries(balanceMap)
     .map(([userId, amount]) => ({ userId, amount }))
     .sort((a, b) => b.amount - a.amount);
 };
 
-// --- ALTRES FUNCIONS (Sense canvis, només verificades) ---
+// --- ALTRES FUNCIONS (Sense canvis funcionals, només manteniment) ---
 
 export const calculateSettlements = (balances: Balance[]): Settlement[] => {
   const totalBalance = balances.reduce((acc, b) => acc + b.amount, 0);
   
-  if (totalBalance !== 0) {
+  if (Math.abs(totalBalance) > 1) { // Tolerància d'1 cèntim per arrodoniments estranys
     console.warn(`[Audit Warning] Balanços desquadrats (${totalBalance} cèntims).`);
   }
 
@@ -242,8 +275,8 @@ export const calculateSettlements = (balances: Balance[]): Settlement[] => {
     debtor.amount = toCents(debtor.amount + amount);
     creditor.amount = toCents(creditor.amount - amount);
 
-    if (debtor.amount === 0) i++;
-    if (creditor.amount === 0) j++;
+    if (Math.abs(debtor.amount) < 1) i++;
+    if (Math.abs(creditor.amount) < 1) j++;
   }
 
   return debts;

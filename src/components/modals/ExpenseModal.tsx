@@ -10,6 +10,10 @@ import { useExpenseForm } from '../../hooks/useExpenseForm';
 import { useTrip } from '../../context/TripContext';
 import { formatMoney } from '../../utils/formatters';
 
+// --- HELPERS LOCALS ---
+// Permetem només números, punts i comes.
+const VALID_CURRENCY_REGEX = /^[0-9.,]*$/;
+
 // --- SUBCOMPONENTS (Modularitat Local) ---
 
 interface SplitModeSelectorProps {
@@ -87,7 +91,8 @@ interface ExpenseModalProps {
 export default function ExpenseModal({ isOpen, onClose, initialData, users, currency, onDelete, showToast }: ExpenseModalProps) {
   const { actions } = useTrip();
 
-  const { formState, setters, logic, isSubmitting } = useExpenseForm({
+  // Ara el hook gestiona strings, així que la integració és directa
+  const { formState, setters, logic, isSubmitting, exactSplitStats } = useExpenseForm({
     initialData: initialData || null,
     users,
     currency,
@@ -108,7 +113,6 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
     }
   });
 
-  // Estat visual local per a les pestanyes
   const [uiMode, setUiMode] = useState<string>(formState.splitType);
 
   useEffect(() => {
@@ -125,9 +129,14 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
     setters.setSplitType(targetType);
   };
 
-  // OPTIMITZACIÓ: Recuperem els càlculs directament del hook
-  // Eliminada la duplicitat de codi (useMemo) que hi havia aquí.
-  const { exactSplitStats } = formState;
+  // HANDLER SEGUR PER A INPUTS DE MONEDA
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    // Només actualitzem l'estat si compleix la regex (números i puntuació)
+    if (val === '' || VALID_CURRENCY_REGEX.test(val)) {
+      setters.setAmount(val);
+    }
+  };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={initialData ? 'Editar Despesa' : 'Nova Despesa'}>
@@ -138,13 +147,14 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
             <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Import Total</label>
                 <div className="relative">
+                    {/* INPUT MILLORAT: Text + InputMode Decimal */}
                     <input 
-                        type="number" 
-                        step="0.01" 
+                        type="text" 
+                        inputMode="decimal" 
                         placeholder="0.00" 
                         required 
                         value={formState.amount} 
-                        onChange={(e) => setters.setAmount(e.target.value)} 
+                        onChange={handleAmountChange} 
                         className={`w-full p-4 pl-12 text-3xl font-bold rounded-2xl border outline-none transition-all
                             bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 
                             focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10
@@ -264,9 +274,16 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                              {formState.splitType === SPLIT_TYPES.EXACT ? (
                                 <div className="relative w-28">
                                     <input 
-                                        type="number" step="0.01" min="0" placeholder="0" 
+                                        type="text" 
+                                        inputMode="decimal"
+                                        placeholder="0" 
                                         value={formState.splitDetails[u.id] ?? ''} 
-                                        onChange={(e) => logic.handleDetailChange(u.id, e.target.value)} 
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            if (val === '' || VALID_CURRENCY_REGEX.test(val)) {
+                                                logic.handleDetailChange(u.id, val);
+                                            }
+                                        }}
                                         className={`w-full p-1.5 pl-6 text-right bg-white dark:bg-slate-900 border rounded-md text-sm font-bold outline-none focus:border-indigo-500
                                             ${(exactSplitStats?.isOverAllocated && (formState.splitDetails[u.id] || 0) > 0) 
                                                 ? 'border-rose-200 text-rose-600' 

@@ -1,4 +1,5 @@
 // src/utils/validation.ts
+
 import { z } from 'zod';
 import { SPLIT_TYPES, CATEGORIES, CURRENCIES } from './constants';
 
@@ -10,11 +11,50 @@ const CURRENCY_CODES = CURRENCIES.map(c => c.code) as [string, ...string[]];
 // --- HELPERS DE TRANSFORMACIÓ (SANITIZERS) ---
 
 /**
+ * Normalitza un string de moneda a un format numèric estàndard (1234.56).
+ * Gestiona intel·ligentment formats EU (1.000,50) i US (1,000.50).
+ */
+const normalizeCurrencyString = (val: string): string => {
+  let clean = val.trim();
+  
+  // Cas 1: Format mixt (conté punts i comes) -> Ex: 1.000,50 o 1,000.50
+  if (clean.includes(',') && clean.includes('.')) {
+    const lastComma = clean.lastIndexOf(',');
+    const lastDot = clean.lastIndexOf('.');
+    
+    if (lastComma > lastDot) {
+      // Format EU: 1.000,50 -> Eliminem punts, canviem coma per punt
+      clean = clean.replace(/\./g, '').replace(',', '.');
+    } else {
+      // Format US: 1,000.50 -> Eliminem comes
+      clean = clean.replace(/,/g, '');
+    }
+  } 
+  // Cas 2: Només comes -> Ex: 10,50 -> Canviem a punt
+  else if (clean.includes(',')) {
+    clean = clean.replace(',', '.');
+  } 
+  // Cas 3: Només punts
+  else if (clean.includes('.')) {
+    // Si hi ha més d'un punt, són milers -> Ex: 1.000.000 -> Eliminem tots
+    if ((clean.match(/\./g) || []).length > 1) {
+      clean = clean.replace(/\./g, '');
+    }
+    // Si només hi ha un punt (10.50 o 1.000), assumim estàndard JS (Decimal)
+    // NOTA: Això implica que 1.000 serà 1, no 1000. És el comportament segur estàndard.
+  }
+
+  return clean;
+};
+
+/**
  * Parser de moneda de precisió entera ("Integer-based").
- * Converteix strings d'entrada ("10,50") a cèntims (1050).
+ * Converteix strings d'entrada a cèntims (1050).
  */
 const parseMoneyString = (val: string): number => {
-  const cleanVal = val.trim().replace(',', '.');
+  // Pas 1: Normalització robusta (FIX CRÍTIC)
+  const cleanVal = normalizeCurrencyString(val);
+  
   if (cleanVal === '' || isNaN(Number(cleanVal))) return 0;
 
   const [integerPart, decimalPart = ''] = cleanVal.split('.');

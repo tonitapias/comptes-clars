@@ -1,188 +1,149 @@
 // src/hooks/useExpenseForm.ts
-import { useState, useMemo } from 'react';
-import { Expense, TripUser, Currency, CategoryId, SplitType, MoneyCents, toCents } from '../types';
-import { SPLIT_TYPES } from '../utils/constants';
+
+import { useState, useEffect, useMemo } from 'react';
+import { TripUser, Expense, Currency, SplitType, toCents, MoneyCents } from '../types';
+import { SPLIT_TYPES, CATEGORIES } from '../utils/constants';
+import { ExpenseSchema } from '../utils/validation';
+import { z } from 'zod';
+
+// Tipus auxiliar per a l'estat del formulari (Tot String per a millor UX)
+interface ExpenseFormState {
+  title: string;
+  amount: string; // String per Input Masking
+  payer: string;
+  category: string;
+  date: string;
+  splitType: SplitType;
+  involved: string[];
+  splitDetails: Record<string, string>; // String per Input Masking
+}
 
 interface UseExpenseFormProps {
   initialData: Expense | null;
   users: TripUser[];
   currency: Currency;
-  onSubmit: (data: Omit<Expense, 'id'>) => Promise<void>;
+  onSubmit: (data: any) => Promise<void>; // El tipus real serà inferit per Zod
 }
 
-/**
- * HELPER: Conversió segura d'String a MoneyCents
- * Gestiona entrades incompletes com "10." o ".5" sense trencar l'app.
- */
-const stringToCents = (value: string): MoneyCents => {
-  const clean = value.replace(/[^0-9.,]/g, '').replace(',', '.');
-  if (!clean || clean === '.') return toCents(0);
-
-  const [integerStr, decimalStr] = clean.split('.');
-  const integerPart = parseInt(integerStr || '0', 10);
-  const decimalPart = decimalStr 
-    ? parseInt(decimalStr.slice(0, 2).padEnd(2, '0'), 10) 
-    : 0;
-
-  return toCents((integerPart * 100) + decimalPart);
-};
-
 export function useExpenseForm({ initialData, users, currency, onSubmit }: UseExpenseFormProps) {
-  // --- ESTAT DEL FORMULARI ---
-  const [title, setTitle] = useState(initialData?.title || '');
-  
-  // Guardem com a string per a una edició UX fluida (evita salts de cursor)
-  const [amount, setAmount] = useState(
-    initialData?.amount 
-      ? (initialData.amount / 100).toFixed(2) 
-      : ''
-  );
-  
-  const [payer, setPayer] = useState(initialData?.payer || (users.find(u => !u.isDeleted)?.id || ''));
-  const [category, setCategory] = useState<CategoryId>(initialData?.category || 'food');
-  const [date, setDate] = useState(initialData?.date || new Date().toISOString());
-  const [receiptUrl, setReceiptUrl] = useState(initialData?.receiptUrl || '');
-  
-  const [splitType, setSplitType] = useState<SplitType>(initialData?.splitType || SPLIT_TYPES.EQUAL);
-  const [involved, setInvolved] = useState<string[]>(initialData?.involved || users.map(u => u.id));
-  
-  const [splitDetails, setSplitDetails] = useState<Record<string, string>>(() => {
-    if (!initialData?.splitDetails) return {};
-    const details: Record<string, string> = {};
-    Object.entries(initialData.splitDetails).forEach(([uid, val]) => {
-      details[uid] = (val / 100).toFixed(2);
-    });
-    return details;
-  });
-
-  // Camps opcionals de divisa (no crítics per a la lògica core actual)
-  const [isForeignCurrency, setIsForeignCurrency] = useState(!!initialData?.originalCurrency);
-  const [foreignAmount, setForeignAmount] = useState(initialData?.originalAmount?.toString() || '');
-  const [foreignCurrency, setForeignCurrency] = useState(initialData?.originalCurrency || 'USD');
-  const [exchangeRate, setExchangeRate] = useState(initialData?.exchangeRate?.toString() || '');
-
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // --- LÒGICA DERIVADA (Validació en temps real) ---
-  
-  // Càlcul centralitzat de l'estat del repartiment Exacte
-  const exactSplitStats = useMemo(() => {
-    if (splitType !== SPLIT_TYPES.EXACT) return null;
+  // --- ESTAT INICIAL ---
+  // Convertim cèntims a string formatat (Ex: 1050 -> "10.50") per a l'edició
+  const initialAmount = initialData 
+    ? (initialData.amount / 100).toFixed(2) 
+    : '';
 
-    const totalCents = stringToCents(amount);
-    const allocatedCents = Object.values(splitDetails).reduce((sum, val) => sum + stringToCents(val), 0);
+  const initialDetails: Record<string, string> = {};
+  if (initialData?.splitDetails) {
+    Object.entries(initialData.splitDetails).forEach(([uid, cents]) => {
+      initialDetails[uid] = (cents / 100).toFixed(2);
+    });
+  }
+
+  const [formState, setFormState] = useState<ExpenseFormState>({
+    title: initialData?.title || '',
+    amount: initialAmount,
+    payer: initialData?.payer || (users[0]?.id || ''),
+    category: initialData?.category || CATEGORIES[0].id,
+    date: initialData?.date || new Date().toISOString().split('T')[0],
+    splitType: initialData?.splitType || SPLIT_TYPES.EQUAL,
+    involved: initialData?.involved || users.map(u => u.id),
+    splitDetails: initialDetails
+  });
+
+  // --- SETTERS ---
+  const setters = {
+    setTitle: (v: string) => setFormState(s => ({ ...s, title: v })),
+    setAmount: (v: string) => setFormState(s => ({ ...s, amount: v })),
+    setPayer: (v: string) => setFormState(s => ({ ...s, payer: v })),
+    setCategory: (v: string) => setFormState(s => ({ ...s, category: v })),
+    setDate: (v: string) => setFormState(s => ({ ...s, date: v })),
+    setSplitType: (v: SplitType) => setFormState(s => ({ ...s, splitType: v })),
+  };
+
+  // --- LOGIC ---
+  const logic = {
+    toggleInvolved: (uid: string) => {
+      setFormState(prev => {
+        const newInvolved = prev.involved.includes(uid)
+          ? prev.involved.filter(id => id !== uid)
+          : [...prev.involved, uid];
+        return { ...prev, involved: newInvolved };
+      });
+    },
+    
+    handleDetailChange: (uid: string, value: string) => {
+      setFormState(prev => ({
+        ...prev,
+        splitDetails: {
+          ...prev.splitDetails,
+          [uid]: value
+        }
+      }));
+    },
+
+    handleSubmit: async (e: React.FormEvent) => {
+      e.preventDefault();
+      setIsSubmitting(true);
+
+      try {
+        // 1. Preparem l'objecte cru (Raw)
+        // La màgia de Zod a 'validation.ts' s'encarregarà de convertir strings a cèntims
+        const rawData = {
+          ...formState,
+          id: initialData?.id, // Mantenim ID si editem
+          // Netegem splitDetails de valors buits o zero
+          splitDetails: formState.splitType === SPLIT_TYPES.EQUAL 
+            ? undefined 
+            : formState.splitDetails
+        };
+
+        // 2. Validació i Transformació (Safety First)
+        // Això llançarà error si les regles de negoci (com Exact Split sum) no es compleixen
+        const validatedData = ExpenseSchema.parse(rawData);
+
+        // 3. Enviament
+        await onSubmit(validatedData);
+
+      } catch (error) {
+        console.error("Validation Error:", error);
+        // Aquí podríem connectar amb un sistema de Toast d'errors si fos necessari
+        if (error instanceof z.ZodError) {
+             const firstMsg = error.errors[0]?.message || 'Error de validació';
+             alert(firstMsg); // Fallback simple
+        }
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+  };
+
+  // --- COMPUTED: EXACT SPLIT STATS (Feedback Visual) ---
+  const exactSplitStats = useMemo(() => {
+    if (formState.splitType !== SPLIT_TYPES.EXACT) return null;
+
+    // Helper intern per parsejar (duplicat minim de validation per a feedback UI ràpid)
+    const parseQuick = (val: string) => {
+      const clean = val.replace(/,/g, '.');
+      const num = parseFloat(clean);
+      return isNaN(num) ? 0 : Math.round(num * 100);
+    };
+
+    const totalCents = parseQuick(formState.amount);
+    const allocatedCents = Object.values(formState.splitDetails)
+      .reduce((acc, val) => acc + parseQuick(val), 0);
+    
     const remainderCents = totalCents - allocatedCents;
 
     return {
       totalCents,
       allocatedCents,
       remainderCents,
-      isOverAllocated: remainderCents < 0,
       isFullyAllocated: remainderCents === 0,
-      isValid: remainderCents >= 0 // Validació de negoci: no es pot repartir més del que hi ha
+      isOverAllocated: remainderCents < 0
     };
-  }, [amount, splitDetails, splitType]);
+  }, [formState.amount, formState.splitDetails, formState.splitType]);
 
-
-  // --- HANDLERS ---
-
-  const toggleInvolved = (userId: string) => {
-    setInvolved(prev => {
-      if (prev.includes(userId)) {
-        // Evitem deixar la llista buida
-        if (prev.length === 1) return prev; 
-        return prev.filter(id => id !== userId);
-      }
-      return [...prev, userId];
-    });
-  };
-
-  const handleDetailChange = (userId: string, value: string) => {
-    // Permetem només números i un punt/coma decimal
-    if (/^\d*[.,]?\d*$/.test(value)) {
-      setSplitDetails(prev => ({
-        ...prev,
-        [userId]: value
-      }));
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isSubmitting) return;
-
-    // Validació prèvia a l'enviament (Client-Side Gatekeeper)
-    if (splitType === SPLIT_TYPES.EXACT && exactSplitStats?.isOverAllocated) {
-        // Opcional: Podríem llançar un error o fer vibrar la UI, 
-        // però el botó de submit hauria d'estar deshabilitat a la UI.
-        return; 
-    }
-
-    try {
-      setIsSubmitting(true);
-      
-      const amountInCents = stringToCents(amount);
-      
-      const expenseData: any = {
-        title: title.trim(),
-        amount: amountInCents,
-        payer,
-        category,
-        date: new Date(date).toISOString(),
-        splitType,
-        involved,
-      };
-
-      if (splitType !== SPLIT_TYPES.EQUAL) {
-        const detailsInCents: Record<string, MoneyCents> = {};
-        Object.entries(splitDetails).forEach(([uid, val]) => {
-          const valCents = stringToCents(val);
-          // Només enviem detalls amb valor > 0 per netejar la DB
-          if (valCents > 0) {
-            detailsInCents[uid] = valCents;
-          }
-        });
-        expenseData.splitDetails = detailsInCents;
-      }
-
-      if (receiptUrl?.trim()) {
-        expenseData.receiptUrl = receiptUrl.trim();
-      }
-
-      if (isForeignCurrency) {
-        expenseData.originalAmount = parseFloat(foreignAmount);
-        expenseData.originalCurrency = foreignCurrency;
-        expenseData.exchangeRate = parseFloat(exchangeRate);
-      }
-
-      await onSubmit(expenseData);
-
-    } catch (error) {
-      console.error("Error submitting expense:", error);
-      throw error; 
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return {
-    formState: {
-      title, amount, payer, category, date, receiptUrl, 
-      splitType, involved, splitDetails, 
-      isForeignCurrency, foreignAmount, foreignCurrency, exchangeRate,
-      // Exposem l'estat de validació calculat
-      exactSplitStats 
-    },
-    setters: {
-      setTitle, setAmount, setPayer, setCategory, setDate, setReceiptUrl,
-      setSplitType, setInvolved, setSplitDetails,
-      setIsForeignCurrency, setForeignAmount, setForeignCurrency, setExchangeRate
-    },
-    logic: {
-      toggleInvolved,
-      handleDetailChange,
-      handleSubmit
-    },
-    isSubmitting
-  };
+  return { formState, setters, logic, isSubmitting, exactSplitStats };
 }
