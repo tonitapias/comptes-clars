@@ -119,7 +119,19 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
           totalAllocated = toCents(totalAllocated + amount);
         }
       });
-      amountCreditedToPayer = totalAllocated;
+
+      // FIX CRÍTIC D'AUDITORIA:
+      // Abans: amountCreditedToPayer = totalAllocated. 
+      // Això feia que si la suma no quadrava, diners "desapareixien".
+      // Ara: El pagador rep el crèdit TOTAL de la factura.
+      amountCreditedToPayer = exp.amount;
+
+      // Si la suma dels detalls és menor que el total, la diferència és cost propi del pagador.
+      // (Validation.ts garanteix que totalAllocated <= exp.amount, així que remainder >= 0)
+      const remainder = exp.amount - totalAllocated;
+      if (remainder > 0 && balanceMap[payerId] !== undefined) {
+        balanceMap[payerId] = toCents(balanceMap[payerId] - remainder);
+      }
 
     // --- MODE PARTICIPACIONS (SHARES) ---
     } else if (splitType === SPLIT_TYPES.SHARES) {
@@ -145,11 +157,21 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
         
         let remainder = exp.amount - totalAllocatedBase;
 
+        // FIX D'AUDITORIA: FAIR ROTATION
+        // Utilitzem el mateix offset que a EQUAL per no penalitzar sempre el primer de la llista (alfabètic).
+        const offset = getStableDistributionOffset(exp.id, allocations.length);
+        let distributionIdx = offset % allocations.length;
+
+        while (remainder > 0 && allocations.length > 0) {
+           const alloc = allocations[distributionIdx];
+           alloc.amountToPay = toCents(alloc.amountToPay + 1);
+           remainder--;
+           
+           // Avancem circularment
+           distributionIdx = (distributionIdx + 1) % allocations.length;
+        }
+
         allocations.forEach((alloc) => {
-          if (remainder > 0) {
-            alloc.amountToPay = toCents(alloc.amountToPay + 1);
-            remainder--;
-          }
           balanceMap[alloc.uid] = toCents(balanceMap[alloc.uid] - alloc.amountToPay);
           distributedSoFar = toCents(distributedSoFar + alloc.amountToPay);
         });
