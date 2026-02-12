@@ -1,7 +1,7 @@
 // src/hooks/useExpenseForm.ts
 import { useState, useEffect } from 'react';
 import { Expense, TripUser, Currency, CategoryId, SplitType, MoneyCents, toCents } from '../types';
-import { SPLIT_TYPES } from '../services/billingService';
+import { SPLIT_TYPES } from '../utils/constants'; // [FIX] Importació corregida (abans billingService)
 
 interface UseExpenseFormProps {
   initialData: Expense | null;

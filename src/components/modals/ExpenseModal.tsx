@@ -1,10 +1,10 @@
 // src/components/modals/ExpenseModal.tsx
-import React, { useMemo } from 'react';
-import { X, Calendar, User as UserIcon, CheckSquare, Square, Calculator, PieChart, Users, AlertCircle } from 'lucide-react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { X, Calendar, User as UserIcon, CheckSquare, Square, AlertCircle } from 'lucide-react';
 import Modal from '../Modal';
 import Button from '../Button';
-import { CATEGORIES } from '../../utils/constants';
-import { TripUser, Currency, Expense, CurrencyCode, toCents } from '../../types'; // [FIX] Importem toCents
+import { CATEGORIES, UI_SPLIT_MODES, SPLIT_TYPES } from '../../utils/constants'; // [FIX] Constants centralitzades
+import { TripUser, Currency, Expense, toCents, SplitType } from '../../types';
 import { ToastType } from '../Toast';
 import { useExpenseForm } from '../../hooks/useExpenseForm';
 import { useTrip } from '../../context/TripContext';
@@ -45,22 +45,46 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
     }
   });
 
-  // --- UI LOGIC & CALCULATIONS (REFACTORITZAT: INTEGER MATH) ---
-  
-  const exactModeStats = useMemo(() => {
-    if (formState.splitType !== 'exact') return null;
+  // --- UI STATE: Gestionem la pestanya activa visualment ---
+  // Si venim d'editar 'shares', per defecte ho mostrem com a 'percent' si la suma és 100? 
+  // Per simplicitat i Risc Zero, si és shares ho mostrem com a 'percent' (mode més comú) o mantenim la lògica simple.
+  // Aquí inicialitzem l'estat visual basat en el tipus real.
+  const [uiMode, setUiMode] = useState<string>(formState.splitType);
 
-    // Helper intern: Convertim string d'input a Cèntims (Enter)
-    // Això elimina els errors de coma flotant a la vista
+  // Sincronitzem l'estat visual quan canvia l'extern (ex: reset form)
+  useEffect(() => {
+    // Si el tipus és SHARES, podríem voler mantenir l'últim mode visual seleccionat ('percent' o 'shares').
+    // Per defecte, si ve de DB com a SHARES, ho tractem com a 'percent' que és l'ús més habitual.
+    if (formState.splitType === SPLIT_TYPES.SHARES && uiMode !== 'percent' && uiMode !== 'shares') {
+       setUiMode('percent');
+    } else if (formState.splitType !== SPLIT_TYPES.SHARES) {
+       setUiMode(formState.splitType);
+    }
+  }, [formState.splitType]);
+
+
+  // --- HANDLER DE CANVI DE MODE ---
+  const handleModeChange = (modeId: string, mappedType?: SplitType) => {
+    setUiMode(modeId); // Canvi visual immediat (pestanya activa)
+    
+    // Si el mode té un mapeig (ex: percent -> shares), usem el mapeig.
+    // Si no, usem l'ID directament (ex: equal, exact).
+    const targetType = mappedType || (modeId as SplitType);
+    setters.setSplitType(targetType);
+  };
+
+
+  // --- CÀLCULS VISUALS (Mode Exacte) ---
+  const exactModeStats = useMemo(() => {
+    if (formState.splitType !== SPLIT_TYPES.EXACT) return null;
+
     const parseToCents = (val: string | number): number => {
         const floatVal = typeof val === 'string' ? parseFloat(val) : val;
-        // Multipliquem per 100 i arrodonim per assegurar enter
         return isNaN(floatVal) ? 0 : Math.round(floatVal * 100);
     };
 
     const totalCents = parseToCents(formState.amount);
     
-    // Suma exacta d'enters
     const allocatedCents = Object.values(formState.splitDetails || {}).reduce((acc, val) => {
         return acc + parseToCents(val);
     }, 0);
@@ -70,7 +94,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
     return {
         isOverAllocated: remainderCents < 0,
         isFullyAllocated: remainderCents === 0,
-        remainderCents // Guardem el valor en cèntims per mostrar-lo
+        remainderCents 
     };
   }, [formState.amount, formState.splitDetails, formState.splitType]);
 
@@ -174,30 +198,27 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
 
         {/* DIVISIÓ DE LA DESPESA */}
         <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
+            {/* [FIX] Generació dinàmica de botons basada en constants UI */}
             <div className="flex gap-1 bg-slate-200 dark:bg-slate-800 p-1 rounded-xl mb-4">
-                {[
-                    { id: 'equal', icon: Users, label: 'Equitatiu' },
-                    { id: 'exact', icon: Calculator, label: 'Exacte' },
-                    { id: 'percent', icon: PieChart, label: 'Percentatge' }, 
-                ].map((type) => (
+                {UI_SPLIT_MODES.map((mode) => (
                     <button
-                        key={type.id}
+                        key={mode.id}
                         type="button"
-                        onClick={() => setters.setSplitType(type.id as any)}
+                        onClick={() => handleModeChange(mode.id, mode.mappedType)}
                         className={`flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${
-                            formState.splitType === type.id 
+                            uiMode === mode.id 
                                 ? 'bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-indigo-400' 
                                 : 'text-slate-500 hover:text-slate-700'
                         }`}
                     >
-                        <type.icon size={16} />
-                        <span className="hidden sm:inline">{type.label}</span>
+                        <mode.icon size={16} />
+                        <span className="hidden sm:inline">{mode.label}</span>
                     </button>
                 ))}
             </div>
 
-            {/* FEEDBACK VISUAL MODE EXACTE (REFACTORITZAT) */}
-            {formState.splitType === 'exact' && exactModeStats && (
+            {/* FEEDBACK VISUAL MODE EXACTE */}
+            {formState.splitType === SPLIT_TYPES.EXACT && exactModeStats && (
                 <div className={`mb-3 p-3 rounded-xl text-sm font-medium border flex items-center gap-2
                     ${exactModeStats.isOverAllocated 
                         ? 'bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-900/20 dark:border-rose-800 dark:text-rose-400' 
@@ -213,7 +234,6 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                                     : 'Falten per assignar (ho paga el pagador):'}
                         </span>
                         <span className="font-bold">
-                            {/* FIX: Passem els cèntims directament, usant toCents per satisfer TypeScript */}
                             {formatMoney(toCents(Math.abs(exactModeStats.remainderCents)), currency)}
                         </span>
                     </div>
@@ -221,7 +241,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
             )}
 
             {/* EQUAL MODE */}
-            {formState.splitType === 'equal' && (
+            {formState.splitType === SPLIT_TYPES.EQUAL && (
                 <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
                     {users.map(u => {
                         const isSelected = formState.involved.includes(u.id);
@@ -249,8 +269,8 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                 </div>
             )}
 
-            {/* EXACT MODE & SHARES MODE */}
-            {formState.splitType !== 'equal' && (
+            {/* CUSTOM MODES (EXACT, SHARES, PERCENT) */}
+            {formState.splitType !== SPLIT_TYPES.EQUAL && (
                 <div className="space-y-2 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
                     {users.map(u => (
                          <div key={u.id} className="flex items-center justify-between p-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800">
@@ -261,7 +281,8 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                                 <span className="font-medium text-sm">{u.name}</span>
                              </div>
                              
-                             {formState.splitType === 'exact' ? (
+                             {/* INPUT DIFERENCIAT PER MODE */}
+                             {formState.splitType === SPLIT_TYPES.EXACT ? (
                                 <div className="relative w-28">
                                     <input 
                                         type="number" 
@@ -279,11 +300,14 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                                     <span className="absolute left-2 top-1.5 text-slate-400 text-xs">{currency.symbol}</span>
                                 </div>
                              ) : (
+                                // MODE SHARES / PERCENT
                                 <div className="flex items-center gap-2">
-                                    <span className="text-xs text-slate-400 font-medium uppercase">Parts</span>
+                                    <span className="text-xs text-slate-400 font-medium uppercase">
+                                        {uiMode === 'percent' ? '%' : 'Parts'}
+                                    </span>
                                     <input 
                                         type="number" 
-                                        step="0.5" 
+                                        step={uiMode === 'percent' ? "0.1" : "1"} 
                                         min="0" 
                                         placeholder="0" 
                                         value={formState.splitDetails[u.id] ?? ''} 
@@ -308,7 +332,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                 type="submit" 
                 className="flex-1" 
                 loading={isSubmitting}
-                disabled={formState.splitType === 'exact' && exactModeStats?.isOverAllocated}
+                disabled={formState.splitType === SPLIT_TYPES.EXACT && exactModeStats?.isOverAllocated}
             >
                 {initialData ? 'Guardar Canvis' : 'Crear Despesa'}
             </Button>

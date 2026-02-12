@@ -1,14 +1,17 @@
 // src/utils/validation.ts
 import { z } from 'zod';
+import { SPLIT_TYPES, CATEGORIES, CURRENCIES } from './constants'; // [FIX] Importació centralitzada
 
-// CONSTANTS
-const SPLIT_TYPES = ['equal', 'exact', 'shares'] as const;
-const CURRENCIES = ['EUR', 'USD', 'GBP', 'JPY', 'MXN'] as const;
-const CATEGORIES = [
-  'food', 'transport', 'home', 'drinks', 'travel', 
-  'tickets', 'shopping', 'entertainment', 'transfer', 
-  'other', 'all'
-] as const;
+// --- EXTRACCIÓ DE VALORS PER A ZOD ---
+// Necessitem convertir els objectes de configuració a tuples d'strings per a Zod.
+// Això assegura que si afegim una categoria a constants.ts, automàticament és vàlida aquí.
+
+const SPLIT_TYPE_VALUES = Object.values(SPLIT_TYPES) as [string, ...string[]];
+
+const CATEGORY_IDS = CATEGORIES.map(c => c.id) as [string, ...string[]];
+
+const CURRENCY_CODES = CURRENCIES.map(c => c.code) as [string, ...string[]];
+
 
 // --- HELPERS DE TRANSFORMACIÓ (SANITIZERS) ---
 
@@ -27,11 +30,9 @@ const parseMoneyString = (val: string): number => {
   const [integerPart, decimalPart = ''] = cleanVal.split('.');
 
   // 4. Normalització de decimals (sempre 2 dígits)
-  // "10.5" -> "50" | "10.05" -> "05" | "10" -> "00" | "10.123" -> "12" (truncat)
   const paddedDecimal = (decimalPart + '00').slice(0, 2);
 
   // 5. Concatenació segura i conversió a Enter
-  // "10" + "50" = "1050" -> 1050
   const centsString = `${integerPart}${paddedDecimal}`;
   const cents = parseInt(centsString, 10);
 
@@ -48,9 +49,6 @@ const currencyInputToCents = (val: unknown): number => {
   }
   
   if (typeof val === 'number') {
-    // Si rebem un número (ex: de controls de tipus 'number'), 
-    // l'assumim com a Unitats (Euros) i el convertim amb cura.
-    // .toFixed(2) ens converteix a string segur "10.56" i usem el parser.
     return parseMoneyString(val.toFixed(2));
   }
   
@@ -59,7 +57,6 @@ const currencyInputToCents = (val: unknown): number => {
 
 /**
  * Validador de moneda robust.
- * Accepta Strings (input text) o Numbers, els converteix a Cèntims.
  */
 const MoneyAmountSchema = z.preprocess(
   currencyInputToCents,
@@ -85,11 +82,13 @@ export const TripUserSchema = z.object({
 export const ExpenseSchema = z.object({
   title: z.string().trim().min(1, "El títol és obligatori").max(50, "Títol massa llarg (màx 50)"),
   
-  // APLICACIÓ: El nou parser segur s'activa aquí
+  // APLICACIÓ: Parser segur
   amount: MoneyAmountSchema,
   
   payer: z.string().trim().min(1, "El pagador és obligatori"),
-  category: z.enum(CATEGORIES),
+  
+  // [FIX] Ús dinàmic de les categories definides a constants
+  category: z.enum(CATEGORY_IDS),
   
   involved: z.array(z.string())
     .min(1, "Hi ha d'haver almenys una persona involucrada")
@@ -101,9 +100,9 @@ export const ExpenseSchema = z.object({
     message: "La data no és vàlida"
   }),
   
-  splitType: z.enum(SPLIT_TYPES).optional(),
+  // [FIX] Ús dinàmic dels tipus de repartiment
+  splitType: z.enum(SPLIT_TYPE_VALUES).optional(),
   
-  // Validació de Detalls: També apliquem la transformació segura
   splitDetails: z.record(
     z.string(), 
     z.preprocess(
@@ -115,16 +114,16 @@ export const ExpenseSchema = z.object({
   receiptUrl: z.string().url("L'enllaç de la imatge no és vàlid").optional().nullable(),
   
   originalAmount: z.number().positive().optional(),
-  originalCurrency: z.enum(CURRENCIES).optional(),
+  // [FIX] Ús dinàmic de les divises
+  originalCurrency: z.enum(CURRENCY_CODES).optional(),
   exchangeRate: z.number().positive().optional()
 })
 // --- REGLES DE NEGOCI (Integrity Checks) ---
 
 // REGLA 1: Mode EXACT (Suma <= Total)
 .refine((data) => {
-  if (data.splitType === 'exact' && data.splitDetails) {
+  if (data.splitType === SPLIT_TYPES.EXACT && data.splitDetails) {
     const sumDetails = Object.values(data.splitDetails).reduce((a, b) => a + b, 0);
-    // Comprovem igualtat estricta, però permetem que sigui menor (cost propi)
     return sumDetails <= data.amount;
   }
   return true;
@@ -135,7 +134,7 @@ export const ExpenseSchema = z.object({
 
 // REGLA 2: Mode SHARES (Participacions > 0)
 .refine((data) => {
-  if (data.splitType === 'shares' && data.splitDetails) {
+  if (data.splitType === SPLIT_TYPES.SHARES && data.splitDetails) {
     const totalShares = Object.values(data.splitDetails).reduce((a, b) => a + b, 0);
     return totalShares > 0;
   }
@@ -147,10 +146,9 @@ export const ExpenseSchema = z.object({
 
 // REGLA 3: Integritat Referencial
 .refine((data) => {
-  if ((data.splitType === 'exact' || data.splitType === 'shares') && data.splitDetails) {
+  if ((data.splitType === SPLIT_TYPES.EXACT || data.splitType === SPLIT_TYPES.SHARES) && data.splitDetails) {
     const involvedSet = new Set(data.involved);
     const detailUids = Object.keys(data.splitDetails);
-    // Verifiquem que tothom qui paga (té detall) està a la llista d'involucrats
     return detailUids.every(uid => involvedSet.has(uid));
   }
   return true;
@@ -169,7 +167,7 @@ export const TripDataSchema = z.object({
   users: z.array(TripUserSchema),
   expenses: z.array(PersistedExpenseSchema),
   currency: z.object({
-    code: z.enum(CURRENCIES),
+    code: z.enum(CURRENCY_CODES),
     symbol: z.string(),
     locale: z.string()
   }),

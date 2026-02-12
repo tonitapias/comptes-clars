@@ -1,14 +1,9 @@
 // src/services/billingService.ts
 
 import { Expense, TripUser, Balance, Settlement, CategoryStat, MoneyCents, toCents } from '../types';
-import { CATEGORIES } from '../utils/constants';
+import { CATEGORIES, SPLIT_TYPES } from '../utils/constants'; // [FIX] Importem la font de veritat
 
-// CONSTANTS
-export const SPLIT_TYPES = {
-  EQUAL: 'equal',
-  EXACT: 'exact',
-  SHARES: 'shares',
-} as const;
+// [FIX] Eliminada constant SPLIT_TYPES duplicada per evitar conflictes.
 
 export const SPECIAL_CATEGORIES = {
   TRANSFER: 'transfer',
@@ -211,13 +206,12 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
     .sort((a, b) => b.amount - a.amount);
 };
 
-// --- ALTRES FUNCIONS (Sense canvis funcionals, només manteniment) ---
+// --- ALTRES FUNCIONS ---
 
 export const calculateSettlements = (balances: Balance[]): Settlement[] => {
   const totalBalance = balances.reduce((acc, b) => acc + b.amount, 0);
   
   if (totalBalance !== 0) {
-    // TODO: En un futur, retornar aquest error a la UI enlloc de només fer log.
     console.warn(`[Audit Warning] Balanços desquadrats (${totalBalance} cèntims).`);
   }
 

@@ -1,8 +1,42 @@
 import { 
   Utensils, Car, Home, Beer, Plane, ShoppingBag, 
-  Music, Banknote, HelpCircle, Ticket, Filter 
+  Music, Banknote, HelpCircle, Ticket, Filter,
+  Users, Calculator, PieChart
 } from 'lucide-react';
 import { Category, Currency } from '../types';
+
+// --- CONSTANTS DE DOMINI (Single Source of Truth) ---
+
+export const SPLIT_TYPES = {
+  EQUAL: 'equal',
+  EXACT: 'exact',
+  SHARES: 'shares',
+} as const;
+
+// --- CONFIGURACIÓ UI ---
+
+// Definim els modes de repartiment disponibles a la interfície.
+// Nota: El mode 'percent' és visual i es tradueix a 'shares' (SPLIT_TYPES.SHARES) internament.
+export const UI_SPLIT_MODES = [
+  { 
+    id: SPLIT_TYPES.EQUAL, 
+    label: 'Equitatiu', 
+    icon: Users 
+  },
+  { 
+    id: SPLIT_TYPES.EXACT, 
+    label: 'Exacte', 
+    icon: Calculator 
+  },
+  { 
+    id: 'percent', // ID visual, no existeix a la BD
+    label: 'Percentatge', 
+    icon: PieChart,
+    mappedType: SPLIT_TYPES.SHARES // El tipus real que farem servir
+  },
+] as const;
+
+// --- DADES ESTÀTIQUES ---
 
 export const CATEGORIES: Category[] = [
   { id: 'all', label: 'Totes', icon: Filter, color: 'bg-slate-100 text-slate-600', barColor: 'bg-slate-400' },

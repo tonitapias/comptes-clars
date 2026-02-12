@@ -4,10 +4,10 @@ import { describe, it, expect } from 'vitest';
 import { 
   calculateBalances, 
   calculateSettlements, 
-  resolveUserId, 
-  SPLIT_TYPES 
-} from './billingService';
+  resolveUserId
+  } from './billingService';
 import { TripUser, Expense, toCents, MoneyCents } from '../types';
+import { SPLIT_TYPES } from '../utils/constants';
 
 // --- MOCK DATA ---
 const userA: TripUser = { id: 'u1', name: 'Alice', email: 'alice@test.com' };
