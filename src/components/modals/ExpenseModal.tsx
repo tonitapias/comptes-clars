@@ -4,7 +4,7 @@ import { X, Calendar, User as UserIcon, CheckSquare, Square, Calculator, PieChar
 import Modal from '../Modal';
 import Button from '../Button';
 import { CATEGORIES } from '../../utils/constants';
-import { TripUser, Currency, Expense, CurrencyCode, toCents } from '../../types';
+import { TripUser, Currency, Expense, CurrencyCode, toCents } from '../../types'; // [FIX] Importem toCents
 import { ToastType } from '../Toast';
 import { useExpenseForm } from '../../hooks/useExpenseForm';
 import { useTrip } from '../../context/TripContext';
@@ -45,31 +45,32 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
     }
   });
 
-  // --- UI LOGIC & CALCULATIONS ---
+  // --- UI LOGIC & CALCULATIONS (REFACTORITZAT: INTEGER MATH) ---
   
-  // Calculem en temps real l'estat del repartiment exacte
   const exactModeStats = useMemo(() => {
     if (formState.splitType !== 'exact') return null;
 
-    const totalAmount = parseFloat(formState.amount) || 0;
+    // Helper intern: Convertim string d'input a Cèntims (Enter)
+    // Això elimina els errors de coma flotant a la vista
+    const parseToCents = (val: string | number): number => {
+        const floatVal = typeof val === 'string' ? parseFloat(val) : val;
+        // Multipliquem per 100 i arrodonim per assegurar enter
+        return isNaN(floatVal) ? 0 : Math.round(floatVal * 100);
+    };
+
+    const totalCents = parseToCents(formState.amount);
     
-    // Sumem els detalls (assumim que el hook guarda strings o numbers, ho convertim segur)
-    const allocatedAmount = Object.values(formState.splitDetails || {}).reduce((acc, val) => {
-        const num = parseFloat(val as string);
-        return acc + (isNaN(num) ? 0 : num);
+    // Suma exacta d'enters
+    const allocatedCents = Object.values(formState.splitDetails || {}).reduce((acc, val) => {
+        return acc + parseToCents(val);
     }, 0);
 
-    const remainder = totalAmount - allocatedAmount;
-    // Fem servir una petita epsilon per evitar errors visuals de flotants (0.0000001)
-    const isOverAllocated = remainder < -0.001; 
-    const isFullyAllocated = Math.abs(remainder) < 0.001;
+    const remainderCents = totalCents - allocatedCents;
 
     return {
-        totalAmount,
-        allocatedAmount,
-        remainder,
-        isOverAllocated,
-        isFullyAllocated
+        isOverAllocated: remainderCents < 0,
+        isFullyAllocated: remainderCents === 0,
+        remainderCents // Guardem el valor en cèntims per mostrar-lo
     };
   }, [formState.amount, formState.splitDetails, formState.splitType]);
 
@@ -78,7 +79,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
     <Modal isOpen={isOpen} onClose={onClose} title={initialData ? 'Editar Despesa' : 'Nova Despesa'}>
       <form onSubmit={logic.handleSubmit} className="space-y-6">
         
-        {/* --- AMOUNT INPUT (DESBLOQUEJAT PER UX) --- */}
+        {/* --- AMOUNT INPUT --- */}
         <div className="flex gap-4">
             <div className="flex-1">
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Import Total</label>
@@ -88,8 +89,6 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                         step="0.01" 
                         placeholder="0.00" 
                         required 
-                        // UX UPGRADE: Ja no bloquegem l'input en mode exacte.
-                        // L'usuari pot definir el total i l'app calcula el romanent.
                         value={formState.amount} 
                         onChange={(e) => setters.setAmount(e.target.value)} 
                         className={`w-full p-4 pl-12 text-3xl font-bold rounded-2xl border outline-none transition-all
@@ -179,7 +178,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                 {[
                     { id: 'equal', icon: Users, label: 'Equitatiu' },
                     { id: 'exact', icon: Calculator, label: 'Exacte' },
-                    { id: 'percent', icon: PieChart, label: 'Percentatge' }, // 'shares' mode
+                    { id: 'percent', icon: PieChart, label: 'Percentatge' }, 
                 ].map((type) => (
                     <button
                         key={type.id}
@@ -197,7 +196,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                 ))}
             </div>
 
-            {/* FEEDBACK VISUAL MODE EXACTE (NOU) */}
+            {/* FEEDBACK VISUAL MODE EXACTE (REFACTORITZAT) */}
             {formState.splitType === 'exact' && exactModeStats && (
                 <div className={`mb-3 p-3 rounded-xl text-sm font-medium border flex items-center gap-2
                     ${exactModeStats.isOverAllocated 
@@ -214,7 +213,8 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                                     : 'Falten per assignar (ho paga el pagador):'}
                         </span>
                         <span className="font-bold">
-                            {formatMoney(toCents(Math.abs(exactModeStats.remainder) * 100), currency)}
+                            {/* FIX: Passem els cèntims directament, usant toCents per satisfer TypeScript */}
+                            {formatMoney(toCents(Math.abs(exactModeStats.remainderCents)), currency)}
                         </span>
                     </div>
                 </div>
@@ -308,7 +308,6 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                 type="submit" 
                 className="flex-1" 
                 loading={isSubmitting}
-                // UX UPGRADE: Bloquegem el botó si els números no quadren (només en excés)
                 disabled={formState.splitType === 'exact' && exactModeStats?.isOverAllocated}
             >
                 {initialData ? 'Guardar Canvis' : 'Crear Despesa'}

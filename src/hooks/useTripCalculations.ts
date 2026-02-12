@@ -1,7 +1,7 @@
 // src/hooks/useTripCalculations.ts
 
 import { useMemo } from 'react';
-import type { Expense, TripUser } from '../types';
+import type { Expense, TripUser, MoneyCents } from '../types'; // [FIX] Importem MoneyCents
 import * as billingService from '../services/billingService';
 
 interface CalculationsResult {
@@ -9,8 +9,9 @@ interface CalculationsResult {
   balances: ReturnType<typeof billingService.calculateBalances>;
   categoryStats: ReturnType<typeof billingService.calculateCategoryStats>;
   settlements: ReturnType<typeof billingService.calculateSettlements>;
-  totalGroupSpending: number;
-  displayedTotal: number;
+  // [FIX] Blindatge de tipus: evitem que la UI rebi un 'number' genèric
+  totalGroupSpending: MoneyCents;
+  displayedTotal: MoneyCents;
 }
 
 export function useTripCalculations(
@@ -32,14 +33,11 @@ export function useTripCalculations(
   }, [expenses]);
 
   // MILLORA: Creem un índex de cerca ràpida (ID -> Nom)
-  // Això evita fer un users.find() dins del bucle de filtratge (de O(N*M) a O(N)).
   const userSearchIndex = useMemo(() => {
     const map: Record<string, string> = {};
     users.forEach(u => {
-      // Normalitzem a minúscules per facilitar la cerca
       const nameKey = u.name.toLowerCase();
       map[u.id] = nameKey;
-      // També indexem per nom directament per si hi ha dades legacy
       if (u.name) map[u.name] = nameKey;
     });
     return map;
@@ -55,24 +53,18 @@ export function useTripCalculations(
     }
     
     return sortedExpenses.filter(e => {
-        // Lògica de categoria (més ràpida, la comprovem primer)
         if (isCategoryFilterActive && e.category !== filterCategory) {
             return false;
         }
 
-        // Si no hi ha text de cerca, ja hem acabat
         if (!q) return true;
 
-        // Lògica de cerca optimitzada usant l'índex
         const payerName = userSearchIndex[e.payer] || '';
         
-        // Optimització: mirem títol i pagador primer
         if (e.title.toLowerCase().includes(q) || payerName.includes(q)) {
             return true;
         }
 
-        // Només si no trobem res, iterem pels involucrats (més costós però inevitable)
-        // Utilitzem l'índex també aquí per evitar .find()
         const involvedMatch = e.involved.some(idOrName => {
             const name = userSearchIndex[idOrName] || '';
             return name.includes(q);
@@ -80,7 +72,7 @@ export function useTripCalculations(
 
         return involvedMatch;
       });
-  }, [sortedExpenses, searchQuery, filterCategory, userSearchIndex]); // Depenem de l'índex, no de 'users' directament
+  }, [sortedExpenses, searchQuery, filterCategory, userSearchIndex]);
 
   // 3. Balanços
   const balances = useMemo(() => {
@@ -98,6 +90,7 @@ export function useTripCalculations(
   }, [balances]);
 
   // 6. Totals
+  // Nota: billingService ja retorna MoneyCents, ara el tipatge ho respecta.
   const totalGroupSpending = useMemo(() => 
     billingService.calculateTotalSpending(expenses), 
   [expenses]);

@@ -58,10 +58,7 @@ const getStableDistributionOffset = (seed: string | number | undefined, modulus:
  * Lògica de Suma Zero garantida i Tipus Segurs (MoneyCents).
  */
 export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balance[] => {
-  // El mapa emmagatzema estrictament MoneyCents
   const balanceMap: Record<string, MoneyCents> = {};
-  
-  // Inicialitzem a 0 (tipat)
   users.forEach(u => balanceMap[u.id] = toCents(0));
 
   const idResolver = createUserResolutionMap(users);
@@ -86,7 +83,6 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
 
       const count = receiversIds.length;
       if (count > 0) {
-        // Càlcul base: Divisió entera segura
         const baseAmount = toCents(Math.floor(exp.amount / count));
         const remainder = exp.amount % count; 
 
@@ -95,11 +91,8 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
         receiversIds.forEach((uid, i) => {
           const rotatedIndex = (i - offset + count) % count;
           const paysExtraCent = rotatedIndex < remainder;
-
-          // Sumem el cèntim extra si toca
           const amountToPay = toCents(baseAmount + (paysExtraCent ? 1 : 0));
           
-          // Actualitzem balanç (Resta segura)
           balanceMap[uid] = toCents(balanceMap[uid] - amountToPay);
         });
 
@@ -113,21 +106,15 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
 
       Object.entries(details).forEach(([identifier, amount]) => {
         const uid = getCanonicalId(identifier);
-        // 'amount' ve del tipus Expense, així que ja és MoneyCents
         if (uid && balanceMap[uid] !== undefined) {
           balanceMap[uid] = toCents(balanceMap[uid] - amount);
           totalAllocated = toCents(totalAllocated + amount);
         }
       });
 
-      // FIX CRÍTIC D'AUDITORIA:
-      // Abans: amountCreditedToPayer = totalAllocated. 
-      // Això feia que si la suma no quadrava, diners "desapareixien".
-      // Ara: El pagador rep el crèdit TOTAL de la factura.
       amountCreditedToPayer = exp.amount;
 
-      // Si la suma dels detalls és menor que el total, la diferència és cost propi del pagador.
-      // (Validation.ts garanteix que totalAllocated <= exp.amount, així que remainder >= 0)
+      // Assignació de la diferència al pagador (cost propi)
       const remainder = exp.amount - totalAllocated;
       if (remainder > 0 && balanceMap[payerId] !== undefined) {
         balanceMap[payerId] = toCents(balanceMap[payerId] - remainder);
@@ -145,7 +132,7 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
       const totalShares = entries.reduce((acc, curr) => acc + curr.shares, 0);
 
       if (totalShares > 0) {
-        const amountPerShare = exp.amount / totalShares; // Float temporal
+        const amountPerShare = exp.amount / totalShares;
         let distributedSoFar = toCents(0);
         
         const allocations = entries.map(entry => {
@@ -154,21 +141,21 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
         });
 
         const totalAllocatedBase = allocations.reduce((acc, curr) => toCents(acc + curr.amountToPay), toCents(0));
-        
         let remainder = exp.amount - totalAllocatedBase;
 
-        // FIX D'AUDITORIA: FAIR ROTATION
-        // Utilitzem el mateix offset que a EQUAL per no penalitzar sempre el primer de la llista (alfabètic).
         const offset = getStableDistributionOffset(exp.id, allocations.length);
         let distributionIdx = offset % allocations.length;
 
-        while (remainder > 0 && allocations.length > 0) {
+        // [SEGURETAT] Circuit Breaker: Evitem bucle infinit si remainder és absurdament gran
+        let iterations = 0;
+        const MAX_ITERATIONS = allocations.length * 2 + remainder; // Marge de seguretat
+
+        while (remainder > 0 && allocations.length > 0 && iterations < MAX_ITERATIONS) {
            const alloc = allocations[distributionIdx];
            alloc.amountToPay = toCents(alloc.amountToPay + 1);
            remainder--;
-           
-           // Avancem circularment
            distributionIdx = (distributionIdx + 1) % allocations.length;
+           iterations++;
         }
 
         allocations.forEach((alloc) => {
@@ -180,7 +167,6 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
       }
     }
 
-    // Abonament final al pagador
     if (balanceMap[payerId] !== undefined) {
       balanceMap[payerId] = toCents(balanceMap[payerId] + amountCreditedToPayer);
     }
@@ -193,18 +179,29 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
 
 /**
  * Algoritme per minimitzar transaccions.
+ * REFACTORITZAT: Lògica estricta d'enters i comprovació d'integritat.
  */
 export const calculateSettlements = (balances: Balance[]): Settlement[] => {
+  // 1. SANITY CHECK: La suma de tots els balanços ha de ser 0.
+  // Si no ho és, hi ha un error crític. Aturem liquidacions per seguretat.
+  const totalBalance = balances.reduce((acc, b) => acc + b.amount, 0);
+  
+  if (totalBalance !== 0) {
+    console.warn(`[Audit Warning] Balanços desquadrats (${totalBalance} cèntims). Es cancel·len liquidacions per evitar errors.`);
+    return [];
+  }
+
   const debts: Settlement[] = [];
-  // Clonem per no mutar l'original (shallow copy és suficient aquí)
+  // Shallow copy suficient
   const workingBalances = balances.map(b => ({ ...b }));
 
+  // 2. FILTRATGE STRICTE: Sense "fudge factors" (0.9). Utilitzem 0.
   const debtors = workingBalances
-    .filter(b => b.amount < -0.9) 
+    .filter(b => b.amount < 0) 
     .sort((a, b) => a.amount - b.amount);
 
   const creditors = workingBalances
-    .filter(b => b.amount > 0.9) 
+    .filter(b => b.amount > 0) 
     .sort((a, b) => b.amount - a.amount);
 
   let i = 0; 
@@ -214,7 +211,7 @@ export const calculateSettlements = (balances: Balance[]): Settlement[] => {
     const debtor = debtors[i];
     const creditor = creditors[j];
 
-    // Math.min amb MoneyCents retorna number, cal fer cast o toCents
+    // Càlcul segur amb enters positius
     const amount = toCents(Math.min(Math.abs(debtor.amount), creditor.amount));
 
     if (amount >= MIN_SETTLEMENT_CENTS) {
@@ -225,13 +222,13 @@ export const calculateSettlements = (balances: Balance[]): Settlement[] => {
       });
     }
 
-    // Actualitzem els saldos temporals
+    // Actualitzem saldos
     debtor.amount = toCents(debtor.amount + amount);
     creditor.amount = toCents(creditor.amount - amount);
 
-    // Ajustem índexs (amb marge de tolerància per errors de rounding minúsculs, encara que amb enters és 0)
-    if (Math.abs(debtor.amount) < 1) i++;
-    if (creditor.amount < 1) j++;
+    // 3. AVANÇ D'ÍNDEXS: Matemàtica exacta. Si és 0, passem al següent.
+    if (debtor.amount === 0) i++;
+    if (creditor.amount === 0) j++;
   }
 
   return debts;
@@ -260,8 +257,8 @@ export const calculateCategoryStats = (expenses: Expense[]): CategoryStat[] => {
     
     return {
       ...catInfo,
-      amount, // Ara és MoneyCents
-      percentage: (amount / total) * 100 // Float
+      amount,
+      percentage: (amount / total) * 100
     };
   }).sort((a, b) => b.amount - a.amount);
 };
