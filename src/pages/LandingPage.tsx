@@ -130,7 +130,6 @@ export default function LandingPage({ user }: LandingPageProps) {
             const newId = Math.random().toString(36).substring(2, 9);
             
             // CONSTRUCCIÓ SEGURA DE L'USUARI
-            // Utilitzem null si és undefined per evitar errors de Firestore
             const newTripUser: TripUser = {
                 id: crypto.randomUUID(),
                 name: creatorName.trim() || user.displayName?.split(' ')[0] || 'Admin',
@@ -151,7 +150,6 @@ export default function LandingPage({ user }: LandingPageProps) {
                 memberUids: [user.uid] 
             };
             
-            // TripService.createTrip ja aplica sanitizeData internament
             await TripService.createTrip(newTrip);
             navigate(`/trip/${newId}`);
         } catch (err) { 
@@ -167,12 +165,7 @@ export default function LandingPage({ user }: LandingPageProps) {
     
     try {
         if (internalUserId) {
-            // Cas normal: Usuari dins del viatge
             await TripService.leaveTrip(tripId, internalUserId);
-        } else if (user) {
-            // Cas de fallback (error dades antigues o inconsistència)
-            console.warn("Usuari no trobat internament, contactant amb suport o netejant localment.");
-            // Si no tenim ID intern, no podem netejar expenses correctament, però l'eliminem de la llista visual
         }
         setMyTrips(prev => prev.filter(t => t.id !== tripId));
     } catch (err) { 
@@ -188,10 +181,10 @@ export default function LandingPage({ user }: LandingPageProps) {
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-slate-950 flex flex-col items-center p-4 md:p-8 font-sans transition-colors duration-300 relative overflow-x-hidden">
       
-      {/* BACKGROUND EFFECTS */}
+      {/* BACKGROUND EFFECTS (OPTIMITZAT GPU) */}
       <div className="fixed inset-0 pointer-events-none z-0">
-         <div className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] bg-purple-200/40 dark:bg-purple-900/20 rounded-full blur-[120px] animate-pulse-slow"></div>
-         <div className="absolute bottom-[-10%] left-[20%] w-[50%] h-[50%] bg-pink-200/40 dark:bg-pink-900/20 rounded-full blur-[120px] animate-pulse-slow" style={{animationDelay: '4s'}}></div>
+         <div className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] bg-purple-200/40 dark:bg-purple-900/20 rounded-full blur-[100px] animate-pulse-slow transform-gpu will-change-transform"></div>
+         <div className="absolute bottom-[-10%] left-[20%] w-[50%] h-[50%] bg-pink-200/40 dark:bg-pink-900/20 rounded-full blur-[100px] animate-pulse-slow transform-gpu will-change-transform" style={{animationDelay: '4s'}}></div>
       </div>
 
       <div className="w-full max-w-6xl relative z-10 flex flex-col gap-8 h-full">
@@ -206,7 +199,7 @@ export default function LandingPage({ user }: LandingPageProps) {
            </div>
            
            {user ? (
-             <div className="flex items-center gap-3 bg-white/60 dark:bg-slate-800/60 backdrop-blur-md px-2 py-1.5 rounded-full border border-white/50 dark:border-white/10">
+             <div className="flex items-center gap-3 bg-white/60 dark:bg-slate-800/60 backdrop-blur-md px-2 py-1.5 rounded-full border border-white/50 dark:border-white/10 shadow-sm">
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 p-0.5">
                     <img src={user.photoURL || `https://ui-avatars.com/api/?name=${userName}`} className="w-full h-full rounded-full object-cover border-2 border-white dark:border-slate-800" alt="Avatar" referrerPolicy="no-referrer" />
                 </div>
@@ -216,7 +209,7 @@ export default function LandingPage({ user }: LandingPageProps) {
                 </button>
              </div>
            ) : (
-             <button onClick={() => setIsAuthModalOpen(true)} className="px-5 py-2.5 bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 font-bold rounded-xl shadow-sm border border-white/50 dark:border-white/10 text-sm">
+             <button onClick={() => setIsAuthModalOpen(true)} className="px-5 py-2.5 bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 font-bold rounded-xl shadow-sm border border-white/50 dark:border-white/10 text-sm hover:scale-105 transition-transform active:scale-95">
                 Iniciar Sessió
              </button>
            )}
@@ -228,30 +221,41 @@ export default function LandingPage({ user }: LandingPageProps) {
             {!user ? (
                 <div className="flex flex-col items-center text-center gap-10 py-10 md:py-20 animate-fade-in">
                     <div className="max-w-3xl space-y-6">
-                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800 text-xs font-bold uppercase tracking-wider mb-4">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50/80 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800 text-xs font-bold uppercase tracking-wider mb-4 backdrop-blur-sm shadow-sm">
                             <Sparkles size={14}/> Gestió de despeses en grup
                         </div>
-                        <h1 className="text-5xl md:text-7xl font-black text-slate-900 dark:text-white leading-[1.1] tracking-tight">
+                        <h1 className="text-5xl md:text-7xl font-black text-slate-900 dark:text-white leading-[1.05] tracking-tight">
                             Divideix despeses,<br/>
                             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500">multiplica vivències.</span>
                         </h1>
-                        <p className="text-lg md:text-xl text-slate-500 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
-                            L'eina definitiva per gestionar els comptes de projectes, viatges i esdeveniments.
+                        <p className="text-lg md:text-xl text-slate-500 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed font-medium">
+                            L'eina definitiva per gestionar els comptes de projectes, viatges i esdeveniments sense fricció.
                         </p>
                     </div>
 
-                    <div className="w-full max-w-md bg-white dark:bg-slate-900 p-2 rounded-3xl shadow-2xl border border-indigo-50 dark:border-slate-800">
-                        <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700">
+                    {/* HERO CARD (Input & CTA) */}
+                    <div className="w-full max-w-md p-2 rounded-[2rem] shadow-2xl shadow-indigo-200/50 dark:shadow-none bg-white/40 dark:bg-slate-900/40 backdrop-blur-xl border border-white/50 dark:border-slate-700/50">
+                        <div className="bg-white/80 dark:bg-slate-900/80 rounded-[1.5rem] p-6 border border-white/20 dark:border-slate-800 backdrop-blur-sm">
                              <form onSubmit={handleJoinManual} className="flex gap-2 mb-4">
-                                <input type="text" placeholder="Tens un codi?..." className="flex-1 px-4 py-3.5 rounded-xl border-2 border-slate-200 dark:border-slate-600 focus:border-indigo-500 bg-white dark:bg-slate-900 text-slate-800 dark:text-white" value={inputValue} onChange={(e) => setInputValue(e.target.value)} />
-                                <button type="submit" disabled={!inputValue} className="bg-indigo-600 text-white px-5 rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 transition-colors"><ArrowRight size={24}/></button>
+                                <input 
+                                    type="text" 
+                                    placeholder="Codi de projecte..." 
+                                    className="flex-1 px-4 py-3.5 rounded-xl border-2 border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-white font-bold placeholder:text-slate-400 outline-none transition-all" 
+                                    value={inputValue} 
+                                    onChange={(e) => setInputValue(e.target.value)} 
+                                />
+                                <button type="submit" disabled={!inputValue} className="bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white px-5 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors border border-slate-200 dark:border-slate-700">
+                                    <ArrowRight size={24}/>
+                                </button>
                              </form>
+                             
                              <div className="relative flex py-2 items-center">
-                                <div className="flex-grow border-t border-slate-200 dark:border-slate-600"></div>
-                                <span className="flex-shrink-0 mx-4 text-slate-400 text-xs font-bold uppercase">o crea el teu projecte</span>
-                                <div className="flex-grow border-t border-slate-200 dark:border-slate-600"></div>
+                                <div className="flex-grow border-t border-slate-200 dark:border-slate-700"></div>
+                                <span className="flex-shrink-0 mx-4 text-slate-400 text-[10px] font-bold uppercase tracking-widest">o crea el teu projecte</span>
+                                <div className="flex-grow border-t border-slate-200 dark:border-slate-700"></div>
                              </div>
-                             <button onClick={() => setIsAuthModalOpen(true)} className="w-full mt-2 py-4 bg-slate-900 dark:bg-indigo-600 text-white font-bold text-lg rounded-xl hover:bg-black transition shadow-lg flex items-center justify-center gap-2">
+                             
+                             <button onClick={() => setIsAuthModalOpen(true)} className="w-full mt-2 py-4 bg-gradient-to-r from-slate-900 to-slate-800 dark:from-indigo-600 dark:to-indigo-500 text-white font-bold text-lg rounded-xl hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-xl shadow-slate-200 dark:shadow-indigo-500/20">
                                 Començar Gratis <ChevronRight size={20}/>
                              </button>
                         </div>
@@ -268,17 +272,17 @@ export default function LandingPage({ user }: LandingPageProps) {
                 <div className="w-full max-w-5xl mx-auto py-6 animate-fade-in">
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
                         <div>
-                            <h2 className="text-3xl md:text-4xl font-black text-slate-800 dark:text-white mb-1">{greeting}, <span className="text-indigo-600 dark:text-indigo-400">{userName}.</span></h2>
+                            <h2 className="text-3xl md:text-4xl font-black text-slate-800 dark:text-white mb-1 tracking-tight">{greeting}, <span className="text-indigo-600 dark:text-indigo-400">{userName}.</span></h2>
                             <p className="text-slate-500 dark:text-slate-400 font-medium">Aquí tens els teus projectes actius.</p>
                         </div>
                         <div className="flex gap-2">
                              {actionState === 'idle' ? (
-                                <button onClick={() => setActionState('creating')} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-2xl font-bold shadow-lg transition-all flex items-center gap-2"><Plus size={20} /> Nou Projecte</button>
+                                <button onClick={() => setActionState('creating')} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-indigo-200 dark:shadow-none transition-all flex items-center gap-2 active:scale-95"><Plus size={20} /> Nou Projecte</button>
                              ) : (
-                                <button onClick={() => { setActionState('idle'); setInputValue(''); }} className="bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-300 px-6 py-3 rounded-2xl font-bold border border-slate-200 dark:border-slate-700 transition-all">Cancel·lar</button>
+                                <button onClick={() => { setActionState('idle'); setInputValue(''); }} className="bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-300 px-6 py-3 rounded-2xl font-bold border border-slate-200 dark:border-slate-700 transition-all hover:bg-slate-50">Cancel·lar</button>
                              )}
                              {actionState === 'idle' && (
-                                <button onClick={() => setActionState('joining')} className="bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 px-6 py-3 rounded-2xl font-bold border border-indigo-100 transition-all flex items-center gap-2"><KeyRound size={20} /> Tinc codi</button>
+                                <button onClick={() => setActionState('joining')} className="bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 px-6 py-3 rounded-2xl font-bold border border-indigo-100 dark:border-slate-700 transition-all flex items-center gap-2 hover:border-indigo-200"><KeyRound size={20} /> Tinc codi</button>
                              )}
                         </div>
                     </div>
@@ -293,10 +297,10 @@ export default function LandingPage({ user }: LandingPageProps) {
                                 <form onSubmit={handleQuickAction} className="flex flex-col md:flex-row gap-4">
                                     <div className="flex-1 space-y-3">
                                         <label className="text-xs font-bold text-slate-400 uppercase ml-1">{actionState === 'creating' ? 'Nom del projecte' : 'Codi d\'invitació'}</label>
-                                        <input autoFocus type="text" className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl px-4 py-3 outline-none text-lg font-bold text-slate-800 dark:text-white" placeholder={actionState === 'creating' ? "Ex: Sopar Estiu" : "XXX-YYY-ZZZ"} value={inputValue} onChange={e => setInputValue(e.target.value)} />
+                                        <input autoFocus type="text" className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl px-4 py-3 outline-none text-lg font-bold text-slate-800 dark:text-white focus:border-indigo-500 transition-colors" placeholder={actionState === 'creating' ? "Ex: Sopar Estiu" : "XXX-YYY-ZZZ"} value={inputValue} onChange={e => setInputValue(e.target.value)} />
                                     </div>
                                     <div className="flex items-end">
-                                        <button disabled={!inputValue || isSubmitting} className="h-[54px] px-8 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition disabled:opacity-50 flex items-center gap-2">
+                                        <button disabled={!inputValue || isSubmitting} className="h-[54px] px-8 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition disabled:opacity-50 flex items-center gap-2 shadow-lg shadow-indigo-200/50 dark:shadow-none">
                                             {isSubmitting ? <Loader2 className="animate-spin"/> : <ArrowRight size={24}/>}
                                         </button>
                                     </div>
@@ -320,7 +324,7 @@ export default function LandingPage({ user }: LandingPageProps) {
                                 />
                             ))
                         ) : (
-                            <div className="col-span-full py-16 text-center bg-white/50 dark:bg-slate-800/50 rounded-[2rem] border-2 border-dashed border-slate-200 dark:border-slate-700">
+                            <div className="col-span-full py-16 text-center bg-white/50 dark:bg-slate-800/50 rounded-[2rem] border-2 border-dashed border-slate-200 dark:border-slate-700 backdrop-blur-sm">
                                 <Sparkles size={40} className="mx-auto mb-4 text-indigo-300"/>
                                 <h3 className="text-xl font-bold text-slate-700 dark:text-white">Encara no tens projectes</h3>
                                 <p className="text-slate-400 mt-2">Crea el primer o uneix-te a un amb el codi.</p>

@@ -10,7 +10,7 @@ import TripHeader from '../components/trip/TripHeader';
 import ExpensesList from '../components/trip/ExpensesList';
 import BalancesView from '../components/trip/BalancesView';
 import SettlementsView from '../components/trip/SettlementsView';
-import TripModals from '../components/trip/TripModals'; // <--- Nou Orchestrator
+import TripModals from '../components/trip/TripModals'; 
 
 // Context & Hooks
 import { TripProvider, useTrip } from '../context/TripContext';
@@ -42,7 +42,7 @@ function TripView() {
   const filters = useTripFilters();
   const { toast, clearToast, showToast, mutations } = useTripMutations();
 
-  // 2. Càlculs (Ara optimitzats amb el servei pur)
+  // 2. Càlculs
   const { filteredExpenses, balances, categoryStats, settlements, totalGroupSpending, displayedTotal, isSearching } = useTripCalculations(
     expenses, 
     tripData?.users || [], 
@@ -58,7 +58,7 @@ function TripView() {
   const canChangeCurrency = expenses.length === 0;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 pb-24 md:pb-10 transition-colors duration-300">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 pb-24 md:pb-10 transition-colors duration-300 relative">
       {toast && <Toast message={toast.msg} type={toast.type} onClose={clearToast} />}
       
       <TripHeader 
@@ -159,13 +159,26 @@ function TripView() {
         </div>
       </main>
       
-      {/* Botó Flotant */}
+      {/* --- BOTÓ FLOTANT (FAB) OPTIMITZAT --- 
+          - bottom-8: Més marge per seguretat a iOS
+          - shadow-indigo-500/40: Ombra "glow" més moderna
+          - bg-gradient: Volum subtil
+      */}
       <button 
         onClick={() => modals.openExpenseModal(null)} 
-        className="fixed bottom-6 right-6 md:right-[calc(50%-350px)] bg-indigo-600 text-white p-4 rounded-2xl shadow-xl hover:bg-indigo-700 transition-all z-40 shadow-indigo-200 dark:shadow-none active:scale-95 focus:outline-none focus:ring-4 focus:ring-indigo-500/30"
+        className="
+            fixed bottom-8 right-6 md:right-[calc(50%-350px)] 
+            bg-gradient-to-r from-indigo-600 to-indigo-500 
+            text-white p-4 rounded-2xl 
+            shadow-xl shadow-indigo-500/40 dark:shadow-none 
+            hover:shadow-2xl hover:shadow-indigo-500/50 hover:scale-105 hover:-translate-y-1
+            active:scale-95 active:translate-y-0
+            transition-all duration-300 ease-out z-40 
+            focus:outline-none focus:ring-4 focus:ring-indigo-500/30
+        "
         aria-label="Afegir nova despesa"
       >
-        <Plus size={28} aria-hidden="true" />
+        <Plus size={28} strokeWidth={2.5} aria-hidden="true" />
       </button>
       
       {/* 4. MODALS ORCHESTRATOR */}
