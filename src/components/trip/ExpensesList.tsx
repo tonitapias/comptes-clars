@@ -96,7 +96,6 @@ export default function ExpensesList({
     <div className="space-y-6 animate-fade-in pb-24">
       
       {/* --- SEARCH & FILTERS (Sticky) --- */}
-      {/* MILLORA 1: Reducció de padding (py-3 -> py-2) i gap (gap-4 -> gap-3) */}
       <div className="flex flex-col gap-3 sticky top-0 z-30 bg-surface-ground/95 backdrop-blur-md py-2 -mx-4 px-4 border-b border-transparent transition-all shadow-sm" role="search">
         {/* Search Input */}
         <div className="relative group">
@@ -117,8 +116,7 @@ export default function ExpensesList({
           )}
         </div>
         
-        {/* Category Pills (Improved A11y & Design) */}
-        {/* MILLORA 2: Padding inferior reduït */}
+        {/* Category Pills */}
         <div className="flex gap-2 overflow-x-auto pb-0.5 no-scrollbar mask-gradient-right" role="tablist" aria-label="Filtre per categories">
             <button
                  onClick={() => setFilterCategory('all')}
@@ -183,7 +181,6 @@ export default function ExpensesList({
                     <React.Fragment key={expense.id}>
                         {/* --- DATE HEADER --- */}
                         {showDateHeader && (
-                            // MILLORA 3: Recalibratge top-36 -> top-32 per coincidir amb el nou header més prim
                             <li className="sticky top-32 z-20 py-3 flex justify-center pointer-events-none">
                                 <div className={`
                                     px-4 py-1.5 rounded-full text-xs font-bold shadow-sm backdrop-blur-xl border select-none
@@ -227,14 +224,16 @@ export default function ExpensesList({
                                         
                                         {/* Meta Row: Payer Badge + Split Info */}
                                         <div className="flex flex-wrap items-center gap-3">
-                                            {/* Payer Badge (Cleaner UI) */}
-                                            <div className="flex items-center gap-2 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shrink-0">
-                                                 <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${getAvatarColor(payerName)}`}>
+                                            {/* --- MILLORA UX: Payer Badge Accessible (v2) --- */}
+                                            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shrink-0">
+                                                 {/* Augmentem la mida a 20px (w-5) i text a 12px (text-xxs) */}
+                                                 <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xxs font-bold ${getAvatarColor(payerName)}`}>
                                                         {payerPhoto ? (
                                                             <img src={payerPhoto} alt="" className="w-full h-full object-cover rounded-full" />
                                                         ) : payerName.charAt(0).toUpperCase()}
                                                  </div>
-                                                 <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 max-w-[80px] truncate">
+                                                 {/* Text accessible i truncament suau */}
+                                                 <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 max-w-[90px] truncate">
                                                     {payerName}
                                                  </span>
                                             </div>
@@ -270,7 +269,7 @@ export default function ExpensesList({
             </ul>
         )}
         
-        {/* Infinite Scroll Loader with Feedback */}
+        {/* Infinite Scroll Loader */}
         {hasMore && !isSearching && (
           <div ref={observerTarget} className="h-24 flex flex-col items-center justify-center w-full gap-2 text-content-subtle animate-fade-in">
             <Loader2 className="w-6 h-6 animate-spin text-primary" />

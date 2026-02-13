@@ -47,7 +47,7 @@ export default function TripHeader({
           <button 
             onClick={toggleTheme}
             className="p-3 rounded-full text-content-subtle hover:bg-surface-ground hover:text-status-warning transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            aria-label="Canviar tema"
+            aria-label={`Canviar a mode ${theme === 'dark' ? 'clar' : 'fosc'}`}
           >
             {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
           </button>
@@ -68,12 +68,12 @@ export default function TripHeader({
           {name}
         </h1>
 
-        {/* Canvi Clau: text-[10px] -> text-xxs + text-content-subtle */}
-        <span className="text-xxs font-bold text-content-subtle uppercase tracking-widest mb-2">
+        {/* MILLORA 1: Contrast Augmentat (text-content-subtle -> text-content-muted) */}
+        <span className="text-xxs font-bold text-content-muted uppercase tracking-widest mb-2">
           {isFiltered ? 'Total Filtrat' : 'Despesa Total'}
         </span>
 
-        {/* Big Number amb Gradient Semàntic */}
+        {/* Big Number */}
         <div className="relative group cursor-default">
           <div className="text-5xl sm:text-6xl font-black tracking-tighter tabular-nums text-transparent bg-clip-text bg-gradient-to-br from-primary via-violet-600 to-primary-dark drop-shadow-sm transition-transform duration-300 hover:scale-105">
             {formatCurrency(isFiltered ? displayedTotal : totalGroupSpending, currency)}
@@ -85,12 +85,18 @@ export default function TripHeader({
         </div>
 
         {!isFiltered && (
+            // MILLORA 2: Botó més robust i accessible
             <button 
               onClick={onExportPDF} 
-              // Refactoritzat: colors semàntics i mida xxs
-              className="mt-3 flex items-center gap-1.5 text-xxs font-bold text-primary bg-primary-light/50 px-3 py-1 rounded-full hover:bg-primary-light transition-colors"
+              className="
+                mt-4 flex items-center gap-2 text-xs font-bold text-primary 
+                bg-primary-light/50 hover:bg-primary-light border border-primary/10
+                px-4 py-2 rounded-full transition-all active:scale-95
+                focus:outline-none focus-visible:ring-2 focus-visible:ring-primary
+              "
+              aria-label="Exportar informe en PDF"
             >
-              <FileText size={12} />
+              <FileText size={14} /> {/* Icona lleugerament més gran (12 -> 14) */}
               Exportar PDF
             </button>
         )}
@@ -101,7 +107,7 @@ export default function TripHeader({
         <Button 
           variant="secondary" 
           onClick={onOpenGroup} 
-          className="flex-1 min-w-[100px] h-10 text-xs shadow-sm bg-surface-card/50 backdrop-blur-sm text-content-muted" 
+          className="flex-1 min-w-[100px] h-10 text-xs shadow-sm bg-surface-card/50 backdrop-blur-sm text-content-muted hover:text-content-body border border-transparent hover:border-slate-200 dark:hover:border-slate-700" 
           icon={Users}
         >
           {activeUserCount} <span className="hidden sm:inline">membres</span>
@@ -110,7 +116,7 @@ export default function TripHeader({
         <Button 
           variant="secondary" 
           onClick={onOpenActivity} 
-          className="flex-1 min-w-[100px] h-10 text-xs shadow-sm bg-surface-card/50 backdrop-blur-sm text-content-muted" 
+          className="flex-1 min-w-[100px] h-10 text-xs shadow-sm bg-surface-card/50 backdrop-blur-sm text-content-muted hover:text-content-body border border-transparent hover:border-slate-200 dark:hover:border-slate-700" 
           icon={History}
         >
           Activitat
@@ -119,7 +125,7 @@ export default function TripHeader({
         <Button 
           variant="secondary" 
           onClick={onOpenShare} 
-          className="w-10 h-10 p-0 flex items-center justify-center rounded-xl shadow-sm bg-surface-card/50 backdrop-blur-sm text-content-muted"
+          className="w-10 h-10 p-0 flex items-center justify-center rounded-xl shadow-sm bg-surface-card/50 backdrop-blur-sm text-content-muted hover:text-primary border border-transparent hover:border-primary/20"
           aria-label="Compartir viatge"
         >
           <Share2 size={18} />

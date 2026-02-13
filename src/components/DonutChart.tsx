@@ -7,12 +7,20 @@ interface DonutChartProps {
 }
 
 const DonutChart: React.FC<DonutChartProps> = ({ data }) => {
+  // Si no hi ha dades, mostrem un cercle buit (opcional) o null
   if (!data || data.length === 0) return null;
+
+  // --- CONFIGURACIÓ VISUAL ---
   const size = 100;
-  const strokeWidth = 15;
+  const strokeWidth = 12; // Una mica més fi per a elegància (era 15)
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  let offset = 0;
+  
+  // Gap entre segments (en unitats de circumferència)
+  // Si només hi ha 1 segment, no posem gap.
+  const gapSize = data.length > 1 ? 4 : 0; 
+  
+  let offset = 0; // Comencem des de dalt (-90deg al SVG)
 
   const colorMap: Record<string, string> = {
     'bg-orange-500': '#f97316', 
@@ -41,32 +49,59 @@ const DonutChart: React.FC<DonutChartProps> = ({ data }) => {
   };
 
   return (
-    <div className="relative w-32 h-32 mx-auto">
+    <div className="relative w-32 h-32 mx-auto group">
+      {/* SVG amb rotació per començar a les 12 en punt */}
       <svg width="100%" height="100%" viewBox={`0 0 ${size} ${size}`} className="transform -rotate-90">
+        
+        {/* 1. Anell de fons (Track) - Dóna estructura visual */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="transparent"
+          stroke="currentColor"
+          strokeWidth={strokeWidth}
+          className="text-slate-100 dark:text-slate-800"
+        />
+
+        {/* 2. Segments de Dades */}
         {data.map((item) => {
-          const dashArray = (item.percentage / 100) * circumference;
+          // Calculem la longitud del segment restant el gap
+          const rawLength = (item.percentage / 100) * circumference;
+          // Assegurem que el dashArray no sigui negatiu si el segment és molt petit
+          const dashLength = Math.max(0, rawLength - gapSize);
+          
           const currentOffset = offset;
-          offset += dashArray;
+          
+          // Avancem l'offset pel següent segment (usant la longitud real sense restar gap per mantenir la posició correcta)
+          offset += rawLength;
           
           const strokeColor = colorMap[item.barColor] || '#cbd5e1';
 
           return (
-            <circle key={item.id} cx={size / 2} cy={size / 2} r={radius} fill="transparent" 
+            <circle 
+              key={item.id} 
+              cx={size / 2} 
+              cy={size / 2} 
+              r={radius} 
+              fill="transparent" 
               stroke={strokeColor} 
               strokeWidth={strokeWidth} 
-              strokeDasharray={`${dashArray} ${circumference}`} 
+              strokeDasharray={`${dashLength} ${circumference}`} 
               strokeDashoffset={-currentOffset} 
-              className="transition-all duration-1000 ease-out" 
+              strokeLinecap="round" 
+              className="transition-all duration-500 ease-out hover:opacity-80 origin-center"
             />
           );
         })}
       </svg>
+      
+      {/* 3. Icona Central */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        {/* AFEGIT: dark:text-slate-700 per enfosquir-la una mica si el fons és fosc, o deixar-la clara. 
-            En aquest cas, com que està dins d'un cercle buit, el fons serà el del card (slate-900). 
-            Per tant, la icona hauria de ser una mica visible. Slate-700 és molt fosc. 
-            Millor dark:text-slate-600. */}
-        <PieChartIcon className="text-slate-300 dark:text-slate-700" size={24} />
+        <PieChartIcon 
+          className="text-slate-300 dark:text-slate-600 transition-colors duration-300" 
+          size={24} 
+        />
       </div>
     </div>
   );

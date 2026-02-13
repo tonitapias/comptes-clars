@@ -11,6 +11,8 @@ interface BalancesViewProps {
 }
 
 // Helper per generar color consistent basat en el nom (Identitat)
+// NOTA: Mantenim la duplicació temporalment (Risc Zero). 
+// En una fase posterior de "Refactoring", mourem això a /utils/colors.ts
 const getAvatarColor = (name: string) => {
   const colors = [
     'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 border-red-200 dark:border-red-800', 
@@ -60,7 +62,8 @@ export default function BalancesView({ balances, categoryStats }: BalancesViewPr
                         <span className="text-3xl font-black text-content-body tracking-tighter">
                             {categoryStats.length}
                         </span>
-                        <span className="text-[10px] font-bold text-content-subtle uppercase tracking-widest">Cats</span>
+                        {/* Canvi UX: text-[10px] -> text-xxs */}
+                        <span className="text-xxs font-bold text-content-subtle uppercase tracking-widest">Cats</span>
                     </div>
                 </div>
                 
@@ -78,7 +81,8 @@ export default function BalancesView({ balances, categoryStats }: BalancesViewPr
                                 <div className="font-bold text-content-body text-sm tabular-nums">
                                     {formatCurrency(stat.amount, currency)}
                                 </div>
-                                <div className="text-[10px] font-bold text-content-subtle">
+                                {/* Canvi UX: text-[10px] -> text-xxs */}
+                                <div className="text-xxs font-bold text-content-subtle">
                                     {Math.round(stat.percentage)}%
                                 </div>
                             </div>
@@ -100,7 +104,7 @@ export default function BalancesView({ balances, categoryStats }: BalancesViewPr
                     const user = userMap[balance.userId];
                     const userName = user?.name || 'Usuari Desconegut';
 
-                    // LÒGICA NOVA: Color consistent vs Gris si és zero
+                    // Color consistent vs Gris si és zero
                     const avatarClasses = isZero 
                         ? 'bg-slate-100 text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700 grayscale'
                         : getAvatarColor(userName);
@@ -122,11 +126,15 @@ export default function BalancesView({ balances, categoryStats }: BalancesViewPr
                                     )}
                                 </div>
                                 
-                                <div className="flex flex-col gap-0.5">
+                                <div className="flex flex-col gap-1"> {/* Petit augment de gap: 0.5 -> 1 */}
                                     <span className="font-bold text-content-body text-lg leading-tight">
                                         {userName}
                                     </span>
-                                    <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md w-fit
+                                    
+                                    {/* MILLORA UX: Badge Status Accessible */}
+                                    {/* 1. text-[10px] -> text-xxs (12px) */}
+                                    {/* 2. py-0.5 -> py-1 (Més aire) */}
+                                    <span className={`text-xxs uppercase font-bold tracking-wider px-2.5 py-1 rounded-lg w-fit
                                         ${isZero 
                                             ? 'bg-slate-100 text-slate-400 dark:bg-slate-800' 
                                             : isPositive 
