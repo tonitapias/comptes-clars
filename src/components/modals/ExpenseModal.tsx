@@ -1,6 +1,6 @@
 // src/components/modals/ExpenseModal.tsx
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, User as UserIcon, CheckSquare, Square, AlertCircle } from 'lucide-react';
+import { X, Calendar, User as UserIcon, CheckSquare, Square, AlertCircle, Check } from 'lucide-react';
 import Modal from '../Modal';
 import Button from '../Button';
 import { CATEGORIES, UI_SPLIT_MODES, SPLIT_TYPES } from '../../utils/constants';
@@ -11,10 +11,9 @@ import { useTrip } from '../../context/TripContext';
 import { formatMoney } from '../../utils/formatters';
 
 // --- HELPERS LOCALS ---
-// Permetem només números, punts i comes.
 const VALID_CURRENCY_REGEX = /^[0-9.,]*$/;
 
-// --- SUBCOMPONENTS (Modularitat Local) ---
+// --- SUBCOMPONENTS ---
 
 interface SplitModeSelectorProps {
   currentMode: string;
@@ -22,17 +21,21 @@ interface SplitModeSelectorProps {
 }
 
 const SplitModeSelector: React.FC<SplitModeSelectorProps> = ({ currentMode, onModeChange }) => (
-  <div className="flex gap-1 bg-slate-200 dark:bg-slate-800 p-1 rounded-xl mb-4">
+  <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-xl mb-4">
     {UI_SPLIT_MODES.map((mode) => (
       <button
         key={mode.id}
         type="button"
         onClick={() => onModeChange(mode.id, mode.mappedType)}
-        className={`flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${
-          currentMode === mode.id 
-            ? 'bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-indigo-400' 
-            : 'text-slate-500 hover:text-slate-700'
-        }`}
+        // UX: Padding més generós i estats de focus clars
+        className={`
+          flex-1 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all duration-200
+          focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500
+          ${currentMode === mode.id 
+            ? 'bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-indigo-400 ring-1 ring-black/5 dark:ring-white/5' 
+            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/50'
+          }
+        `}
       >
         <mode.icon size={16} />
         <span className="hidden sm:inline">{mode.label}</span>
@@ -48,7 +51,8 @@ interface EqualSplitSectionProps {
 }
 
 const EqualSplitSection: React.FC<EqualSplitSectionProps> = ({ users, involved, onToggle }) => (
-  <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+  // UX: Eliminat max-h-48. Ara la llista creix i usa l'scroll del modal principal.
+  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
     {users.map(u => {
       const isSelected = involved.includes(u.id);
       return (
@@ -56,11 +60,13 @@ const EqualSplitSection: React.FC<EqualSplitSectionProps> = ({ users, involved, 
           key={u.id}
           type="button"
           onClick={() => onToggle(u.id)}
+          // UX: Augment de l'àrea tàctil (min-h-[3.5rem]) i millor feedback visual
           className={`
-            flex items-center gap-3 p-3 rounded-xl border transition-all text-left
+            flex items-center gap-3 p-3.5 rounded-xl border transition-all text-left outline-none
+            focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1
             ${isSelected 
-              ? 'bg-indigo-50 border-indigo-200 text-indigo-900 dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-200' 
-              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 opacity-60 grayscale hover:opacity-100'
+              ? 'bg-indigo-50 border-indigo-200 text-indigo-900 dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-200 shadow-sm' 
+              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 opacity-75 hover:opacity-100'
             }
           `}
         >
@@ -91,7 +97,6 @@ interface ExpenseModalProps {
 export default function ExpenseModal({ isOpen, onClose, initialData, users, currency, onDelete, showToast }: ExpenseModalProps) {
   const { actions } = useTrip();
 
-  // Ara el hook gestiona strings, així que la integració és directa
   const { formState, setters, logic, isSubmitting, exactSplitStats } = useExpenseForm({
     initialData: initialData || null,
     users,
@@ -129,10 +134,8 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
     setters.setSplitType(targetType);
   };
 
-  // HANDLER SEGUR PER A INPUTS DE MONEDA
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    // Només actualitzem l'estat si compleix la regex (números i puntuació)
     if (val === '' || VALID_CURRENCY_REGEX.test(val)) {
       setters.setAmount(val);
     }
@@ -140,42 +143,46 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={initialData ? 'Editar Despesa' : 'Nova Despesa'}>
-      <form onSubmit={logic.handleSubmit} className="space-y-6">
+      <form onSubmit={logic.handleSubmit} className="space-y-8"> 
+        {/* space-y-8 per donar més aire entre seccions */}
         
         {/* --- HEADER: AMOUNT & TITLE --- */}
-        <div className="space-y-4">
+        <div className="space-y-5">
             <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Import Total</label>
-                <div className="relative">
-                    {/* INPUT MILLORAT: Text + InputMode Decimal */}
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Import Total</label>
+                <div className="relative group">
                     <input 
                         type="text" 
                         inputMode="decimal" 
                         placeholder="0.00" 
                         required 
+                        autoFocus={!initialData} // UX: Focus automàtic en crear
                         value={formState.amount} 
                         onChange={handleAmountChange} 
-                        className={`w-full p-4 pl-12 text-3xl font-bold rounded-2xl border outline-none transition-all
-                            bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 
-                            focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10
-                            ${exactSplitStats?.isOverAllocated ? 'border-rose-500 text-rose-600 focus:border-rose-500' : ''}
+                        className={`
+                            w-full p-4 pl-12 text-4xl font-black rounded-2xl outline-none transition-all duration-200
+                            bg-slate-50 dark:bg-slate-900 
+                            border-2 border-slate-100 dark:border-slate-800
+                            focus:border-indigo-500 focus:bg-white dark:focus:bg-black focus:shadow-xl focus:shadow-indigo-500/10
+                            placeholder:text-slate-300 dark:placeholder:text-slate-700
+                            ${exactSplitStats?.isOverAllocated ? 'border-rose-500 text-rose-600 focus:border-rose-500' : 'text-slate-900 dark:text-white'}
                         `}
                     />
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-bold text-slate-400">
+                    <span className="absolute left-5 top-1/2 -translate-y-1/2 text-2xl font-bold text-slate-400 group-focus-within:text-indigo-500 transition-colors">
                         {currency.symbol}
                     </span>
                 </div>
             </div>
 
             <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Concepte</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Concepte</label>
                 <input 
                     type="text" 
                     placeholder="Ex: Sopar, Taxi..." 
                     required 
                     value={formState.title} 
                     onChange={(e) => setters.setTitle(e.target.value)} 
-                    className="w-full p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:border-indigo-500 font-medium text-lg"
+                    className="w-full p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 font-medium text-lg transition-all"
                 />
             </div>
         </div>
@@ -183,27 +190,27 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
         {/* --- META: PAYER & DATE --- */}
         <div className="grid grid-cols-2 gap-4">
             <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Pagador</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Pagador</label>
                 <div className="relative">
-                    <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+                    <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 pointer-events-none" />
                     <select 
                         value={formState.payer} 
                         onChange={(e) => setters.setPayer(e.target.value)} 
-                        className="w-full p-3 pl-10 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 appearance-none font-medium"
+                        className="w-full p-3 pl-10 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl outline-none focus:border-indigo-500 appearance-none font-bold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                     >
                         {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                     </select>
                 </div>
             </div>
             <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Data</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Data</label>
                 <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 pointer-events-none" />
                     <input 
                         type="date" 
                         value={formState.date} 
                         onChange={(e) => setters.setDate(e.target.value)} 
-                        className="w-full p-3 pl-10 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-indigo-500 font-medium"
+                        className="w-full p-3 pl-10 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl outline-none focus:border-indigo-500 font-bold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                     />
                 </div>
             </div>
@@ -211,68 +218,81 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
 
         {/* --- CATEGORIES --- */}
         <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Categoria</label>
-            <div className="grid grid-cols-4 gap-2">
-                {CATEGORIES.filter(c => c.id !== 'all').map(cat => (
-                    <button
-                        key={cat.id}
-                        type="button"
-                        onClick={() => setters.setCategory(cat.id)}
-                        className={`
-                            flex flex-col items-center justify-center p-2 rounded-xl border-2 transition-all
-                            ${formState.category === cat.id 
-                                ? `border-${cat.color.split('-')[1]}-500 bg-${cat.color.split('-')[1]}-50 text-${cat.color.split('-')[1]}-700` 
-                                : 'border-slate-100 dark:border-slate-800 hover:border-slate-200 text-slate-500'
-                            }
-                        `}
-                    >
-                        <cat.icon className="w-6 h-6 mb-1" />
-                        <span className="text-[10px] font-bold">{cat.label}</span>
-                    </button>
-                ))}
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Categoria</label>
+            <div className="grid grid-cols-4 sm:grid-cols-4 gap-3">
+                {CATEGORIES.filter(c => c.id !== 'all').map(cat => {
+                    const isSelected = formState.category === cat.id;
+                    const colorBase = cat.color.split('-')[1]; // ex: 'red' de 'text-red-500'
+                    
+                    return (
+                        <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => setters.setCategory(cat.id)}
+                            aria-pressed={isSelected}
+                            className={`
+                                relative flex flex-col items-center justify-center p-3 rounded-2xl transition-all duration-200 outline-none
+                                ${isSelected 
+                                    ? `bg-${colorBase}-50 text-${colorBase}-700 ring-2 ring-${colorBase}-500 ring-offset-2 dark:ring-offset-slate-900 dark:bg-${colorBase}-900/30 dark:text-${colorBase}-300` 
+                                    : 'bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-slate-400 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800'
+                                }
+                            `}
+                        >
+                            {/* Icona de check flotant per confirmar selecció (A11y High Contrast) */}
+                            {isSelected && (
+                                <div className={`absolute -top-2 -right-2 bg-${colorBase}-500 text-white p-0.5 rounded-full shadow-sm`}>
+                                    <Check size={12} strokeWidth={3} />
+                                </div>
+                            )}
+                            
+                            <cat.icon className={`w-6 h-6 mb-1.5 ${isSelected ? 'scale-110' : 'scale-100'}`} />
+                            <span className="text-[10px] font-bold leading-none">{cat.label}</span>
+                        </button>
+                    );
+                })}
             </div>
         </div>
 
         {/* --- SPLIT SECTION --- */}
-        <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
+        <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-3xl border border-slate-200 dark:border-slate-800">
             <SplitModeSelector currentMode={uiMode} onModeChange={handleModeChange} />
 
-            {/* FEEDBACK VISUAL MODE EXACTE (Connectat al Hook) */}
+            {/* FEEDBACK VISUAL MODE EXACTE */}
             {formState.splitType === SPLIT_TYPES.EXACT && exactSplitStats && (
-                <div className={`mb-3 p-3 rounded-xl text-sm font-medium border flex items-center gap-2
+                <div className={`mb-4 p-4 rounded-2xl text-sm font-medium border flex items-center gap-3 animate-in slide-in-from-top-2
                     ${exactSplitStats.isOverAllocated 
                         ? 'bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-900/20 dark:border-rose-800 dark:text-rose-400' 
                         : 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-900/20 dark:border-indigo-800 dark:text-indigo-300'}
                 `}>
-                    <AlertCircle size={16} className={exactSplitStats.isOverAllocated ? 'animate-pulse' : ''} />
-                    <div className="flex-1 flex justify-between">
-                        <span>
+                    <AlertCircle size={20} className={exactSplitStats.isOverAllocated ? 'animate-pulse' : ''} />
+                    <div className="flex-1 flex justify-between items-center">
+                        <span className="font-semibold">
                             {exactSplitStats.isOverAllocated ? 'Sobren:' : exactSplitStats.isFullyAllocated ? 'Repartit:' : 'Falten:'}
                         </span>
-                        <span className="font-bold">
+                        <span className="font-black text-lg">
                             {formatMoney(toCents(Math.abs(exactSplitStats.remainderCents)), currency)}
                         </span>
                     </div>
                 </div>
             )}
 
-            {/* CONTINGUT DINÀMIC */}
+            {/* UX: Eliminat scroll intern (max-h-60) per evitar "scroll trap" en mòbil. */}
             {formState.splitType === SPLIT_TYPES.EQUAL ? (
                 <EqualSplitSection users={users} involved={formState.involved} onToggle={logic.toggleInvolved} />
             ) : (
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+                <div className="space-y-3 mt-2">
                     {users.map(u => (
-                         <div key={u.id} className="flex items-center justify-between p-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800">
-                             <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-400">
+                         <div key={u.id} className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                             <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-sm font-bold text-slate-600 dark:text-slate-400">
                                     {u.name.charAt(0)}
                                 </div>
-                                <span className="font-medium text-sm">{u.name}</span>
+                                <span className="font-bold text-slate-700 dark:text-slate-200">{u.name}</span>
                              </div>
                              
-                             {/* Selector d'Input */}
+                             {/* Inputs de repartiment manual */}
                              {formState.splitType === SPLIT_TYPES.EXACT ? (
-                                <div className="relative w-28">
+                                <div className="relative w-32">
                                     <input 
                                         type="text" 
                                         inputMode="decimal"
@@ -284,18 +304,18 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                                                 logic.handleDetailChange(u.id, val);
                                             }
                                         }}
-                                        className={`w-full p-1.5 pl-6 text-right bg-white dark:bg-slate-900 border rounded-md text-sm font-bold outline-none focus:border-indigo-500
+                                        className={`w-full p-2 pl-6 text-right bg-slate-50 dark:bg-slate-800 border rounded-xl text-base font-bold outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all
                                             ${(exactSplitStats?.isOverAllocated && (formState.splitDetails[u.id] || 0) > 0) 
                                                 ? 'border-rose-200 text-rose-600' 
-                                                : 'border-slate-200 dark:border-slate-600'}
+                                                : 'border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white'}
                                         `}
                                     />
-                                    <span className="absolute left-2 top-1.5 text-slate-400 text-xs">{currency.symbol}</span>
+                                    <span className="absolute left-3 top-2 text-slate-400 text-sm font-bold">{currency.symbol}</span>
                                 </div>
                              ) : (
                                 <div className="flex items-center gap-2">
-                                    <span className="text-xs text-slate-400 font-medium uppercase">
-                                        {uiMode === 'percent' ? '%' : 'Parts'}
+                                    <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                                        {uiMode === 'percent' ? '%' : 'PARTS'}
                                     </span>
                                     <input 
                                         type="number" 
@@ -303,7 +323,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                                         min="0" placeholder="0" 
                                         value={formState.splitDetails[u.id] ?? ''} 
                                         onChange={(e) => logic.handleDetailChange(u.id, e.target.value)} 
-                                        className="w-16 p-1.5 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-md text-sm font-bold outline-none focus:border-indigo-500"
+                                        className="w-20 p-2 text-center bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-base font-bold outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
                                     />
                                 </div>
                              )}
@@ -313,15 +333,21 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
             )}
         </div>
 
-        <div className="flex gap-3 pt-2">
+        {/* Footer Actions */}
+        <div className="flex gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
             {initialData && onDelete && (
-                <button type="button" onClick={() => onDelete(initialData.id)} className="p-4 rounded-xl bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 transition-colors">
-                    <X size={20} />
+                <button 
+                    type="button" 
+                    onClick={() => onDelete(initialData.id)} 
+                    className="p-4 rounded-xl bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors border border-transparent hover:border-rose-200"
+                    aria-label="Eliminar despesa"
+                >
+                    <X size={24} />
                 </button>
             )}
             <Button 
                 type="submit" 
-                className="flex-1" 
+                className="flex-1 text-lg py-4" 
                 loading={isSubmitting}
                 disabled={formState.splitType === SPLIT_TYPES.EXACT && exactSplitStats?.isOverAllocated}
             >

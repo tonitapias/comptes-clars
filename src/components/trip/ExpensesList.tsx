@@ -1,6 +1,6 @@
 // src/components/trip/ExpensesList.tsx
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Search, Receipt, ArrowRightLeft, Paperclip, Loader2 } from 'lucide-react'; 
+import { Search, Receipt, ArrowRightLeft, Paperclip, Loader2, Filter } from 'lucide-react'; 
 import { CATEGORIES } from '../../utils/constants';
 import { Expense, CategoryId, TripUser } from '../../types';
 import { formatCurrency, formatDateDisplay } from '../../utils/formatters';
@@ -13,19 +13,19 @@ interface ExpensesListProps {
   filterCategory: CategoryId | 'all';
   setFilterCategory: (c: CategoryId | 'all') => void;
   onEdit: (e: Expense | null) => void;
-  isSearching: boolean; // [NOU] Estat de càrrega per debounce
+  isSearching: boolean;
 }
 
+// Helper per generar colors d'avatar consistents
 const getAvatarColor = (name: string) => {
   const colors = [
-    'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-300', 
-    'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300', 
-    'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-300', 
-    'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-300',
-    'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-300',
-    'bg-pink-100 text-pink-600 dark:bg-pink-900/30 dark:text-pink-300',
-    'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-300',
-    'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-300',
+    'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 border-red-200 dark:border-red-800', 
+    'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800', 
+    'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800', 
+    'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+    'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 border-purple-200 dark:border-purple-800',
+    'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300 border-pink-200 dark:border-pink-800',
+    'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800',
   ];
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
@@ -36,19 +36,14 @@ const getAvatarColor = (name: string) => {
 
 const PAGE_SIZE = 20;
 
-// [NOU] Component Skeleton per a estat de càrrega suau
 const ExpenseSkeleton = () => (
-  <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 animate-pulse" aria-hidden="true">
-    <div className="flex items-center justify-between pl-3">
-      <div className="flex items-center gap-4 flex-1">
-        <div className="w-12 h-12 rounded-2xl bg-slate-200 dark:bg-slate-800" />
-        <div className="flex flex-col flex-1 gap-2">
-           <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-1/2" />
-           <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-1/3" />
-        </div>
-      </div>
-      <div className="w-16 h-6 bg-slate-200 dark:bg-slate-800 rounded" />
+  <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center gap-4 animate-pulse">
+    <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 flex-shrink-0" />
+    <div className="flex-1 space-y-2">
+       <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded w-3/4" />
+       <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded w-1/2" />
     </div>
+    <div className="w-16 h-6 bg-slate-100 dark:bg-slate-800 rounded" />
   </div>
 );
 
@@ -73,12 +68,12 @@ export default function ExpensesList({
     }, {} as Record<string, TripUser>);
   }, [tripData?.users]);
 
-  // RESET
+  // Reset pagination on filter change
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
   }, [searchQuery, filterCategory, expenses]);
 
-  // INFINITE SCROLL
+  // Infinite Scroll
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -86,7 +81,7 @@ export default function ExpensesList({
           setVisibleCount((prev) => prev + PAGE_SIZE);
         }
       },
-      { threshold: 0.1, rootMargin: '100px' }
+      { threshold: 0.1, rootMargin: '200px' }
     );
 
     if (observerTarget.current) {
@@ -94,7 +89,7 @@ export default function ExpensesList({
     }
 
     return () => observer.disconnect();
-  }, [expenses.length, isSearching]); // Dependència afegida per reenganxar després de buscar
+  }, [expenses.length, isSearching, visibleCount]); 
 
   const getUserName = (id: string) => userMap[id]?.name || 'Desconegut';
 
@@ -105,39 +100,52 @@ export default function ExpensesList({
   const { currency } = tripData;
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Search and Filters */}
-      <div className="flex flex-col gap-4" role="search">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+    <div className="space-y-6 animate-fade-in pb-20">
+      {/* --- SEARCH & FILTERS --- */}
+      <div className="flex flex-col gap-4 sticky top-0 z-10 bg-slate-50/95 dark:bg-black/95 backdrop-blur-md py-2 -mx-2 px-2" role="search">
+        <div className="relative group">
+          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors w-5 h-5" />
           <input 
             type="text"
-            placeholder="Cerca despeses..."
+            placeholder="Cerca per concepte, persona..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-600 transition-all text-slate-800 dark:text-slate-100"
-            aria-label="Cerca despeses per títol o persona"
+            className="w-full pl-12 pr-4 py-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all shadow-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 font-medium"
+            aria-label="Cerca despeses"
           />
-          {/* Spinner dins l'input per feedback immediat */}
           {isSearching && (
              <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
-                <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+                <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
              </div>
           )}
         </div>
         
-        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar" role="tablist" aria-label="Filtre per categories">
-            {CATEGORIES.map(cat => (
+        {/* Category Filter Pills */}
+        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar mask-gradient-right" role="tablist" aria-label="Filtre per categories">
+            <button
+                 onClick={() => setFilterCategory('all')}
+                 role="tab"
+                 aria-selected={filterCategory === 'all'}
+                 className={`
+                    flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-all text-sm font-bold border
+                    ${filterCategory === 'all'
+                        ? 'bg-slate-800 text-white border-slate-800 dark:bg-slate-200 dark:text-slate-900' 
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800'}
+                 `}
+            >
+                <Filter size={14} /> Tots
+            </button>
+            {CATEGORIES.filter(c => c.id !== 'all').map(cat => (
                 <button
                     key={cat.id}
                     onClick={() => setFilterCategory(cat.id)}
                     role="tab"
                     aria-selected={filterCategory === cat.id}
                     className={`
-                        flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-all text-sm font-medium
+                        flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-all text-sm font-bold border
                         ${filterCategory === cat.id 
-                            ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-lg scale-105' 
-                            : 'bg-white text-slate-600 dark:bg-slate-900 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'}
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200 dark:shadow-none' 
+                            : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800'}
                     `}
                 >
                     <cat.icon className="w-4 h-4" />
@@ -147,64 +155,78 @@ export default function ExpensesList({
         </div>
       </div>
 
-      {/* Expenses List */}
-      <div className="space-y-4" aria-busy={isSearching} aria-live="polite">
+      {/* --- EXPENSES LIST --- */}
+      <div className="space-y-3" aria-busy={isSearching} aria-live="polite">
         {isSearching ? (
-           // [UX] Loading State: Mostrem Skeletons
-           Array.from({ length: 3 }).map((_, i) => <ExpenseSkeleton key={i} />)
+           Array.from({ length: 4 }).map((_, i) => <ExpenseSkeleton key={i} />)
         ) : expenses.length === 0 ? (
-            <div className="text-center py-12 text-slate-400">
-                <Receipt className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                <p>No s'han trobat despeses</p>
+            <div className="flex flex-col items-center justify-center py-16 text-slate-400 dark:text-slate-600">
+                <div className="bg-slate-100 dark:bg-slate-800 p-6 rounded-full mb-4">
+                    <Receipt className="w-10 h-10 opacity-50" />
+                </div>
+                <p className="font-medium">No s'han trobat despeses</p>
             </div>
         ) : (
-            // [ACCESS] Canvi a <ul> per semàntica
-            <ul className="space-y-4">
+            <ul className="space-y-3">
               {visibleExpenses.map((expense) => {
                   const category = CATEGORIES.find(c => c.id === expense.category) || CATEGORIES[0];
                   const isTransfer = expense.category === 'transfer';
                   const payerName = getUserName(expense.payer);
+                  const payerPhoto = userMap[expense.payer]?.photoUrl;
                   const hasForeignCurrency = expense.originalCurrency && expense.originalCurrency !== currency.code;
+                  
+                  // Extreure color base de la categoria (ex: 'bg-blue-100')
+                  const catColorBase = category.color.split('-')[1];
 
                   return (
                     <li key={expense.id}>
-                    {/* [ACCESS] Button interactiu en lloc de Div onClick */}
                     <button 
                       type="button"
                       onClick={() => onEdit(expense)}
-                      className="w-full text-left group bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700 transition-all cursor-pointer relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full text-left group bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-all cursor-pointer relative overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:z-10 shadow-sm hover:shadow-md"
                     >
-                      {/* Category Color Bar */}
-                      <div className={`absolute left-0 top-0 bottom-0 w-1 ${category.barColor}`} />
-
-                      <div className="flex items-center justify-between pl-3">
-                        <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
+                          {/* CATEGORY ICON: Ara és el punt focal de color */}
                           <div className={`
-                              w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-colors
-                              ${isTransfer ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 group-hover:bg-slate-200 dark:group-hover:bg-slate-700'}
+                              w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center flex-shrink-0 transition-colors border
+                              ${isTransfer 
+                                ? 'bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900/50' 
+                                : `bg-${catColorBase}-50 text-${catColorBase}-600 border-${catColorBase}-100 dark:bg-${catColorBase}-900/20 dark:text-${catColorBase}-400 dark:border-${catColorBase}-900/50`
+                              }
                           `}>
-                              {isTransfer ? <ArrowRightLeft className="w-6 h-6" /> : <category.icon className="w-6 h-6" />}
+                              {isTransfer ? <ArrowRightLeft className="w-5 h-5 sm:w-6 sm:h-6" /> : <category.icon className="w-5 h-5 sm:w-6 sm:h-6" />}
                           </div>
                           
-                          <div className="flex flex-col min-w-0 flex-1 mr-2">
-                              <div className="flex items-center gap-2 mb-0.5">
-                                  <span className="font-bold text-slate-800 dark:text-slate-100 truncate text-base">{expense.title}</span>
-                                  {expense.receiptUrl && <Paperclip className="w-3 h-3 text-slate-400 flex-shrink-0" />}
+                          {/* CONTENT */}
+                          <div className="flex flex-col min-w-0 flex-1 pt-0.5">
+                              <div className="flex items-center gap-2 mb-1">
+                                  <span className="font-bold text-slate-900 dark:text-slate-100 truncate text-base leading-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                                      {expense.title}
+                                  </span>
+                                  {expense.receiptUrl && <Paperclip className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />}
                               </div>
                               
-                              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                                  {/* Data */}
                                   <span>{formatDateDisplay(expense.date)}</span>
-                                  <span aria-hidden="true">•</span>
+                                  
+                                  <span className="text-slate-300 dark:text-slate-700">•</span>
+                                  
+                                  {/* Pagador */}
                                   <div className="flex items-center gap-1.5 min-w-0">
-                                      <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold ${getAvatarColor(payerName)}`}>
-                                          {userMap[expense.payer]?.photoUrl ? (
-                                              <img src={userMap[expense.payer].photoUrl} alt="" className="w-full h-full object-cover rounded-full" />
+                                      <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold border-2 border-white dark:border-slate-800 box-content ${getAvatarColor(payerName)}`}>
+                                          {payerPhoto ? (
+                                              <img src={payerPhoto} alt="" className="w-full h-full object-cover rounded-full" />
                                           ) : payerName.charAt(0).toUpperCase()}
                                       </div>
-                                      <span className="font-medium truncate max-w-[80px]">{payerName}</span>
+                                      <span className="truncate max-w-[100px]">{payerName}</span>
                                   </div>
-                                  <span aria-hidden="true">•</span>
-                                  <span className="truncate">
+                                  
+                                  <span className="text-slate-300 dark:text-slate-700 hidden sm:inline">•</span>
+                                  
+                                  {/* Info Repartiment */}
+                                  <span className="truncate hidden sm:inline bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[10px]">
                                       {isTransfer 
                                           ? `→ ${expense.involved[0] ? getUserName(expense.involved[0]) : 'Tothom'}`
                                           : (expense.splitType === 'equal' ? `${expense.involved.length} pers.` : (expense.splitType === 'exact' ? 'Exacte' : 'Parts'))
@@ -214,12 +236,13 @@ export default function ExpensesList({
                           </div>
                         </div>
 
-                        <div className="flex flex-col items-end pl-2">
-                          <span className={`font-bold text-lg whitespace-nowrap ${isTransfer ? 'text-emerald-500' : 'text-slate-800 dark:text-white'}`}>
+                        {/* AMOUNT */}
+                        <div className="flex flex-col items-end pl-2 pt-0.5">
+                          <span className={`font-black text-lg tracking-tight whitespace-nowrap ${isTransfer ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'}`}>
                               {formatCurrency(expense.amount, currency)}
                           </span>
                           {hasForeignCurrency && (
-                              <span className="text-[10px] font-medium text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded whitespace-nowrap mt-1">
+                              <span className="text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 px-1.5 py-0.5 rounded-md whitespace-nowrap mt-1">
                                   {expense.originalAmount?.toFixed(2)} {expense.originalCurrency}
                               </span>
                           )}
@@ -232,10 +255,10 @@ export default function ExpensesList({
             </ul>
         )}
         
-        {/* TRIGGER per Infinite Scroll (només si no estem cercant) */}
+        {/* Infinite Scroll Trigger */}
         {hasMore && !isSearching && (
-          <div ref={observerTarget} className="h-10 flex items-center justify-center w-full">
-            <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+          <div ref={observerTarget} className="h-16 flex items-center justify-center w-full">
+            <Loader2 className="w-6 h-6 animate-spin text-slate-300 dark:text-slate-700" />
           </div>
         )}
       </div>

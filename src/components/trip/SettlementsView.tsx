@@ -3,6 +3,7 @@ import { ArrowRight, CheckCircle2, ThumbsUp } from 'lucide-react';
 import { Settlement } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
 import { useTrip } from '../../context/TripContext';
+import Button from '../Button'; // Importem el component Button millorat
 
 interface SettlementsViewProps {
   settlements: Settlement[];
@@ -14,7 +15,7 @@ export default function SettlementsView({ settlements, onSettle }: SettlementsVi
   if (!tripData) return null;
   const { users, currency } = tripData;
 
-  // Optimització: Creem un mapa d'usuaris per a cerques O(1)
+  // Optimització: Mapa O(1)
   const userMap = useMemo(() => {
     return users.reduce((acc, user) => {
       acc[user.id] = user;
@@ -37,9 +38,12 @@ export default function SettlementsView({ settlements, onSettle }: SettlementsVi
   }
 
   return (
-    <div className="space-y-4 animate-fade-in">
-        <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-2xl mb-6">
-            <p className="text-sm text-indigo-800 dark:text-indigo-300 font-medium text-center">
+    <div className="space-y-4 animate-fade-in pb-4"> {/* Padding bottom extra pel scroll */}
+        <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-2xl mb-6 flex gap-3 items-start">
+            <div className="bg-indigo-100 dark:bg-indigo-800 p-1.5 rounded-full text-indigo-600 dark:text-indigo-300 mt-0.5 shrink-0">
+               <ArrowRight size={16} />
+            </div>
+            <p className="text-sm text-indigo-800 dark:text-indigo-300 font-medium leading-relaxed">
                 Pla òptim per liquidar deutes amb el mínim de moviments.
             </p>
         </div>
@@ -47,55 +51,67 @@ export default function SettlementsView({ settlements, onSettle }: SettlementsVi
         {settlements.map((settlement) => {
             const debtor = getUser(settlement.from);
             const creditor = getUser(settlement.to);
-            // Key única basada en els IDs
             const settleKey = `${settlement.from}-${settlement.to}-${settlement.amount}`;
 
             return (
-                <div key={settleKey} className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 transition-all hover:shadow-md">
-                    <div className="flex-1 min-w-0 flex items-center gap-3">
+                <div 
+                    key={settleKey} 
+                    className="bg-white dark:bg-slate-900 p-5 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-6 transition-all hover:shadow-md"
+                >
+                    {/* VISUALITZACIÓ DEL FLUX (Debtor -> Creditor) */}
+                    <div className="flex-1 w-full flex items-center justify-between gap-2">
                         {/* Pagador */}
-                        <div className="flex flex-col items-center min-w-[70px]">
-                            <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-1 overflow-hidden border-2 border-rose-100 dark:border-rose-900/30">
+                        <div className="flex flex-col items-center w-20 shrink-0">
+                            <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-2 overflow-hidden border-2 border-rose-100 dark:border-rose-900/30 shadow-sm">
                                 {debtor?.photoUrl ? (
-                                    <img src={debtor.photoUrl} alt={debtor.name} className="w-full h-full object-cover" />
+                                    <img src={debtor.photoUrl} alt="" className="w-full h-full object-cover" />
                                 ) : (
-                                    <span className="text-xs font-bold text-slate-500">{debtor?.name.charAt(0)}</span>
+                                    <span className="text-lg font-bold text-slate-500">{debtor?.name.charAt(0)}</span>
                                 )}
                             </div>
-                            <span className="font-bold text-xs text-slate-800 dark:text-slate-200 truncate w-full text-center">{debtor?.name || 'Usuari'}</span>
-                            <span className="text-[10px] text-rose-500 font-bold uppercase tracking-wider">Paga</span>
+                            <span className="font-bold text-xs text-slate-700 dark:text-slate-300 truncate w-full text-center block leading-tight">
+                                {debtor?.name || 'Usuari'}
+                            </span>
                         </div>
                         
-                        {/* Fletxa / Mètode */}
-                        <div className="flex-1 flex flex-col items-center">
-                            <span className="text-[10px] text-slate-400 mb-1 font-medium">via Bizum/etc</span>
-                            <div className="h-[2px] w-full bg-slate-100 dark:bg-slate-800 relative">
-                                 <ArrowRight size={14} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600 bg-white dark:bg-slate-900 px-1"/>
-                            </div>
+                        {/* Fletxa / Connectors */}
+                        <div className="flex-1 flex flex-col items-center px-2 relative top-[-8px]">
+                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Paga a</span>
+                            <div className="h-[2px] w-full bg-gradient-to-r from-rose-200 via-slate-200 to-emerald-200 dark:from-rose-900 dark:via-slate-700 dark:to-emerald-900 rounded-full" />
+                            <ArrowRight size={14} className="text-slate-400 absolute top-[19px]" />
                         </div>
 
                         {/* Receptor */}
-                        <div className="flex flex-col items-center min-w-[70px]">
-                            <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-1 overflow-hidden border-2 border-emerald-100 dark:border-emerald-900/30">
+                        <div className="flex flex-col items-center w-20 shrink-0">
+                            <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-2 overflow-hidden border-2 border-emerald-100 dark:border-emerald-900/30 shadow-sm">
                                 {creditor?.photoUrl ? (
-                                    <img src={creditor.photoUrl} alt={creditor.name} className="w-full h-full object-cover" />
+                                    <img src={creditor.photoUrl} alt="" className="w-full h-full object-cover" />
                                 ) : (
-                                    <span className="text-xs font-bold text-slate-500">{creditor?.name.charAt(0)}</span>
+                                    <span className="text-lg font-bold text-slate-500">{creditor?.name.charAt(0)}</span>
                                 )}
                             </div>
-                            <span className="font-bold text-xs text-slate-800 dark:text-slate-200 truncate w-full text-center">{creditor?.name || 'Usuari'}</span>
-                            <span className="text-[10px] text-emerald-500 font-bold uppercase tracking-wider">Rep</span>
+                            <span className="font-bold text-xs text-slate-700 dark:text-slate-300 truncate w-full text-center block leading-tight">
+                                {creditor?.name || 'Usuari'}
+                            </span>
                         </div>
                     </div>
 
-                    <div className="text-right border-l border-slate-50 dark:border-slate-800 pl-4">
-                        <span className="block text-lg font-black text-slate-900 dark:text-white">{formatCurrency(settlement.amount, currency)}</span>
-                        <button 
+                    {/* BLOC D'ACCIÓ (Import + Botó) */}
+                    <div className="w-full sm:w-auto flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 sm:border-l border-slate-100 dark:border-slate-800 pt-4 sm:pt-0 sm:pl-6 gap-3">
+                        <span className="block text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                            {formatCurrency(settlement.amount, currency)}
+                        </span>
+                        
+                        {/* Botó UX Millorat: Àrea de toc gran i clara */}
+                        <Button 
+                            variant="secondary"
                             onClick={() => onSettle(settlement)} 
-                            className="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center justify-end gap-1 hover:text-indigo-700 dark:hover:text-indigo-300 mt-1 transition-colors"
+                            className="text-xs h-10 px-5 shadow-sm border-indigo-100 dark:border-indigo-900/50 hover:border-indigo-300 text-indigo-700 dark:text-indigo-300 bg-indigo-50/50 dark:bg-indigo-900/20"
+                            icon={CheckCircle2}
+                            aria-label={`Liquidar deute de ${formatCurrency(settlement.amount, currency)} de ${debtor?.name} a ${creditor?.name}`}
                         >
-                            <CheckCircle2 size={12}/> Liquidar
-                        </button>
+                            Liquidar
+                        </Button>
                     </div>
                 </div>
             );
