@@ -96,7 +96,8 @@ export default function ExpensesList({
     <div className="space-y-6 animate-fade-in pb-24">
       
       {/* --- SEARCH & FILTERS (Sticky) --- */}
-      <div className="flex flex-col gap-4 sticky top-0 z-30 bg-surface-ground/95 backdrop-blur-md py-3 -mx-4 px-4 border-b border-transparent transition-all shadow-sm" role="search">
+      {/* MILLORA 1: Reducció de padding (py-3 -> py-2) i gap (gap-4 -> gap-3) */}
+      <div className="flex flex-col gap-3 sticky top-0 z-30 bg-surface-ground/95 backdrop-blur-md py-2 -mx-4 px-4 border-b border-transparent transition-all shadow-sm" role="search">
         {/* Search Input */}
         <div className="relative group">
           <label htmlFor="search-expenses" className="sr-only">Cerca despeses</label>
@@ -117,7 +118,8 @@ export default function ExpensesList({
         </div>
         
         {/* Category Pills (Improved A11y & Design) */}
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar mask-gradient-right" role="tablist" aria-label="Filtre per categories">
+        {/* MILLORA 2: Padding inferior reduït */}
+        <div className="flex gap-2 overflow-x-auto pb-0.5 no-scrollbar mask-gradient-right" role="tablist" aria-label="Filtre per categories">
             <button
                  onClick={() => setFilterCategory('all')}
                  role="tab"
@@ -181,8 +183,8 @@ export default function ExpensesList({
                     <React.Fragment key={expense.id}>
                         {/* --- DATE HEADER --- */}
                         {showDateHeader && (
-                            // Ajust de posició sticky per respectar la search bar
-                            <li className="sticky top-36 z-20 py-4 flex justify-center pointer-events-none">
+                            // MILLORA 3: Recalibratge top-36 -> top-32 per coincidir amb el nou header més prim
+                            <li className="sticky top-32 z-20 py-3 flex justify-center pointer-events-none">
                                 <div className={`
                                     px-4 py-1.5 rounded-full text-xs font-bold shadow-sm backdrop-blur-xl border select-none
                                     ${isToday 

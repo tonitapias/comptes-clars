@@ -1,3 +1,4 @@
+// src/pages/TripPage.tsx
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Plus, Loader2, AlertTriangle, UserPlus, Wallet, Receipt, CheckCircle2 } from 'lucide-react'; 
@@ -159,10 +160,9 @@ function TripView() {
         </div>
       </main>
       
-      {/* --- BOTÓ FLOTANT (FAB) OPTIMITZAT --- 
-          - bottom-8: Més marge per seguretat a iOS
-          - shadow-indigo-500/40: Ombra "glow" més moderna
-          - bg-gradient: Volum subtil
+      {/* --- BOTÓ FLOTANT (FAB) OPTIMITZAT V2 --- 
+          - Millora Dark Mode: afegit dark:border i dark:shadow amb color
+          - Animació: animate-scale-in per entrada suau
       */}
       <button 
         onClick={() => modals.openExpenseModal(null)} 
@@ -170,11 +170,13 @@ function TripView() {
             fixed bottom-8 right-6 md:right-[calc(50%-350px)] 
             bg-gradient-to-r from-indigo-600 to-indigo-500 
             text-white p-4 rounded-2xl 
-            shadow-xl shadow-indigo-500/40 dark:shadow-none 
+            shadow-xl shadow-indigo-500/40 
+            dark:shadow-indigo-900/20 dark:border dark:border-white/10
             hover:shadow-2xl hover:shadow-indigo-500/50 hover:scale-105 hover:-translate-y-1
             active:scale-95 active:translate-y-0
             transition-all duration-300 ease-out z-40 
             focus:outline-none focus:ring-4 focus:ring-indigo-500/30
+            animate-scale-in
         "
         aria-label="Afegir nova despesa"
       >

@@ -10,9 +10,6 @@ import { useExpenseForm } from '../../hooks/useExpenseForm';
 import { useTrip } from '../../context/TripContext';
 import { formatMoney } from '../../utils/formatters';
 
-// --- HELPERS LOCALS ---
-const VALID_CURRENCY_REGEX = /^[0-9.,]*$/;
-
 // --- SUBCOMPONENTS ---
 
 interface SplitModeSelectorProps {
@@ -139,9 +136,17 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
     setters.setSplitType(targetType);
   };
 
+  // 2. MILLORA UX: Validació estricta d'entrada (Només un punt/coma i màxim 2 decimals)
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    if (val === '' || VALID_CURRENCY_REGEX.test(val)) {
+    
+    // Regex: 
+    // ^\d* -> Comença amb dígits (pot ser buit)
+    // ([.,]\d{0,2})? -> Opcionalment un grup amb punt O coma seguit de 0 a 2 dígits
+    // $          -> Final de cadena
+    const isValidFormat = /^\d*([.,]\d{0,2})?$/.test(val);
+
+    if (isValidFormat) {
       setters.setAmount(val);
     }
   };
@@ -157,7 +162,8 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                 <div className="relative group">
                     <input 
                         type="text" 
-                        inputMode="decimal" 
+                        inputMode="decimal" // Força teclat numèric a iOS/Android
+                        autoComplete="off"  // Evita suggeriments que tapin el teclat
                         placeholder="0.00" 
                         required 
                         autoFocus={!initialData}
@@ -250,7 +256,6 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                             )}
                             
                             <cat.icon className={`w-6 h-6 mb-1.5 ${isSelected ? 'scale-110' : 'scale-100'}`} />
-                            {/* UX: Text size pujat a text-xs i font-medium per llegibilitat */}
                             <span className="text-xs font-medium leading-none mt-1">{cat.label}</span>
                         </button>
                     );
@@ -302,7 +307,8 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                                         value={formState.splitDetails[u.id] ?? ''} 
                                         onChange={(e) => {
                                             const val = e.target.value;
-                                            if (val === '' || VALID_CURRENCY_REGEX.test(val)) {
+                                            // Apliquem la mateixa lògica de validació aquí també per consistència
+                                            if (/^\d*([.,]\d{0,2})?$/.test(val)) {
                                                 logic.handleDetailChange(u.id, val);
                                             }
                                         }}
