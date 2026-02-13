@@ -2,6 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    /* Mode Clar (Default) */
+    --surface-ground: #f8fafc; /* slate-50 */
+    --surface-card: #ffffff;   /* white */
+    --surface-elevated: #ffffff;
+    
+    --text-body: #0f172a;      /* slate-900 */
+    --text-muted: #64748b;     /* slate-500 */
+    --text-subtle: #94a3b8;    /* slate-400 */
+  }
+
+  .dark {
+    /* Mode Fosc */
+    --surface-ground: #020617; /* slate-950 */
+    --surface-card: #0f172a;   /* slate-900 */
+    --surface-elevated: #1e293b; /* slate-800 */
+    
+    --text-body: #f1f5f9;      /* slate-100 */
+    --text-muted: #94a3b8;     /* slate-400 */
+    --text-subtle: #475569;    /* slate-600 */
+  }
+}
+
 /* --- CUSTOM ANIMATIONS --- */
 @layer utilities {
   .animate-fade-in {

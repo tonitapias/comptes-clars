@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { useTrip } from '../../context/TripContext';
 import { useTheme } from '../../hooks/useTheme';
 import { formatCurrency } from '../../utils/formatters';
-import Button from '../Button'; // Integrem el nostre component Button robust
+import Button from '../Button';
 
 interface TripHeaderProps {
   displayedTotal: number;
@@ -33,11 +33,11 @@ export default function TripHeader({
   return (
     <header className="relative z-30 flex flex-col items-center pt-6 pb-2 px-4 animate-fade-in">
       
-      {/* --- TOP BAR (Navegació i Eines) --- */}
+      {/* --- TOP BAR --- */}
       <div className="w-full flex items-center justify-between mb-6 max-w-3xl">
         <Link 
           to="/" 
-          className="p-3 -ml-3 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+          className="p-3 -ml-3 rounded-full text-content-subtle hover:bg-surface-ground hover:text-content-body transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           aria-label="Tornar a l'inici"
         >
           <ArrowLeft size={24} />
@@ -46,7 +46,7 @@ export default function TripHeader({
         <div className="flex items-center gap-1">
           <button 
             onClick={toggleTheme}
-            className="p-3 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-amber-500 dark:hover:text-amber-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            className="p-3 rounded-full text-content-subtle hover:bg-surface-ground hover:text-status-warning transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label="Canviar tema"
           >
             {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
@@ -54,7 +54,7 @@ export default function TripHeader({
           
           <button 
             onClick={onOpenSettings}
-            className="p-3 -mr-3 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            className="p-3 -mr-3 rounded-full text-content-subtle hover:bg-surface-ground hover:text-primary transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label="Configuració del viatge"
           >
             <Settings size={20} />
@@ -62,35 +62,33 @@ export default function TripHeader({
         </div>
       </div>
 
-      {/* --- HERO SECTION (Total) --- */}
+      {/* --- HERO SECTION --- */}
       <div className="flex flex-col items-center text-center w-full mb-8">
-        {/* Títol del Viatge */}
-        <h1 className="text-lg font-bold text-slate-600 dark:text-slate-300 mb-1 flex items-center gap-2">
+        <h1 className="text-lg font-bold text-content-muted mb-1 flex items-center gap-2">
           {name}
         </h1>
 
-        {/* Label Contextual */}
-        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+        {/* Canvi Clau: text-[10px] -> text-xxs + text-content-subtle */}
+        <span className="text-xxs font-bold text-content-subtle uppercase tracking-widest mb-2">
           {isFiltered ? 'Total Filtrat' : 'Despesa Total'}
         </span>
 
-        {/* Big Number */}
+        {/* Big Number amb Gradient Semàntic */}
         <div className="relative group cursor-default">
-          <div className="text-5xl sm:text-6xl font-black tracking-tighter tabular-nums text-transparent bg-clip-text bg-gradient-to-br from-indigo-600 via-violet-600 to-indigo-500 dark:from-indigo-400 dark:via-violet-400 dark:to-indigo-300 drop-shadow-sm transition-transform duration-300 hover:scale-105">
+          <div className="text-5xl sm:text-6xl font-black tracking-tighter tabular-nums text-transparent bg-clip-text bg-gradient-to-br from-primary via-violet-600 to-primary-dark drop-shadow-sm transition-transform duration-300 hover:scale-105">
             {formatCurrency(isFiltered ? displayedTotal : totalGroupSpending, currency)}
           </div>
           
-          {/* Indicador visual si està filtrat */}
           {isFiltered && (
-             <div className="absolute -right-4 -top-2 w-3 h-3 bg-indigo-500 rounded-full animate-pulse" title="Filtres actius" />
+             <div className="absolute -right-4 -top-2 w-3 h-3 bg-primary rounded-full animate-pulse" title="Filtres actius" />
           )}
         </div>
 
-        {/* Export Action (Contextual) */}
         {!isFiltered && (
             <button 
               onClick={onExportPDF} 
-              className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1 rounded-full hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+              // Refactoritzat: colors semàntics i mida xxs
+              className="mt-3 flex items-center gap-1.5 text-xxs font-bold text-primary bg-primary-light/50 px-3 py-1 rounded-full hover:bg-primary-light transition-colors"
             >
               <FileText size={12} />
               Exportar PDF
@@ -99,13 +97,11 @@ export default function TripHeader({
       </div>
 
       {/* --- QUICK ACTIONS ROW --- */}
-      {/* Botons compactes per a accions secundàries */}
       <div className="flex flex-wrap justify-center gap-3 w-full max-w-lg mb-2">
-        
         <Button 
           variant="secondary" 
           onClick={onOpenGroup} 
-          className="flex-1 min-w-[100px] h-10 text-xs shadow-sm bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm" 
+          className="flex-1 min-w-[100px] h-10 text-xs shadow-sm bg-surface-card/50 backdrop-blur-sm text-content-muted" 
           icon={Users}
         >
           {activeUserCount} <span className="hidden sm:inline">membres</span>
@@ -114,7 +110,7 @@ export default function TripHeader({
         <Button 
           variant="secondary" 
           onClick={onOpenActivity} 
-          className="flex-1 min-w-[100px] h-10 text-xs shadow-sm bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm" 
+          className="flex-1 min-w-[100px] h-10 text-xs shadow-sm bg-surface-card/50 backdrop-blur-sm text-content-muted" 
           icon={History}
         >
           Activitat
@@ -123,12 +119,11 @@ export default function TripHeader({
         <Button 
           variant="secondary" 
           onClick={onOpenShare} 
-          className="w-10 h-10 p-0 flex items-center justify-center rounded-xl shadow-sm bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm text-slate-600 dark:text-slate-300"
+          className="w-10 h-10 p-0 flex items-center justify-center rounded-xl shadow-sm bg-surface-card/50 backdrop-blur-sm text-content-muted"
           aria-label="Compartir viatge"
         >
           <Share2 size={18} />
         </Button>
-
       </div>
     </header>
   );
