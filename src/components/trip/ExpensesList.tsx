@@ -1,3 +1,4 @@
+// src/components/trip/ExpensesList.tsx
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Search, Receipt, ArrowRightLeft, Paperclip, Loader2, Filter } from 'lucide-react'; 
 import { CATEGORIES } from '../../utils/constants';
@@ -15,7 +16,6 @@ interface ExpensesListProps {
   isSearching: boolean;
 }
 
-// COLORS D'AVATAR: Mantinguts però suavitzats per al nou mode fosc
 const getAvatarColor = (name: string) => {
   const colors = [
     'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 border-red-200 dark:border-red-800', 
@@ -36,14 +36,13 @@ const getAvatarColor = (name: string) => {
 const PAGE_SIZE = 20;
 
 const ExpenseSkeleton = () => (
-  // Refactor: bg-white -> bg-surface-card
-  <div className="bg-surface-card p-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center gap-4 animate-pulse">
+  <div className="bg-surface-card p-5 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center gap-4 animate-pulse">
     <div className="w-12 h-12 rounded-2xl bg-surface-ground flex-shrink-0" />
-    <div className="flex-1 space-y-2">
-       <div className="h-4 bg-surface-ground rounded w-3/4" />
-       <div className="h-3 bg-surface-ground rounded w-1/2" />
+    <div className="flex-1 space-y-3">
+       <div className="h-4 bg-surface-ground rounded-full w-2/3" />
+       <div className="h-3 bg-surface-ground rounded-full w-1/3" />
     </div>
-    <div className="w-16 h-6 bg-surface-ground rounded" />
+    <div className="w-20 h-6 bg-surface-ground rounded-full" />
   </div>
 );
 
@@ -97,8 +96,8 @@ export default function ExpensesList({
     <div className="space-y-6 animate-fade-in pb-24">
       
       {/* --- SEARCH & FILTERS (Sticky) --- */}
-      {/* Refactor: backdrop i colors semàntics */}
       <div className="flex flex-col gap-4 sticky top-0 z-30 bg-surface-ground/95 backdrop-blur-md py-3 -mx-4 px-4 border-b border-transparent transition-all shadow-sm" role="search">
+        {/* Search Input */}
         <div className="relative group">
           <label htmlFor="search-expenses" className="sr-only">Cerca despeses</label>
           <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-content-subtle group-focus-within:text-primary transition-colors w-5 h-5 pointer-events-none" aria-hidden="true" />
@@ -108,7 +107,6 @@ export default function ExpensesList({
             placeholder="Cerca per concepte, persona..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            // Refactor: bg-white -> bg-surface-card, text colors
             className="w-full pl-12 pr-4 py-3.5 bg-surface-card border border-slate-200 dark:border-slate-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all shadow-sm text-content-body placeholder:text-content-subtle font-medium text-base"
           />
           {isSearching && (
@@ -118,20 +116,20 @@ export default function ExpensesList({
           )}
         </div>
         
-        {/* Category Pills */}
+        {/* Category Pills (Improved A11y & Design) */}
         <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar mask-gradient-right" role="tablist" aria-label="Filtre per categories">
             <button
                  onClick={() => setFilterCategory('all')}
                  role="tab"
                  aria-selected={filterCategory === 'all'}
                  className={`
-                    flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-all text-xs font-bold border select-none active:scale-95
+                    flex items-center gap-2 px-5 py-2.5 rounded-full whitespace-nowrap transition-all text-sm font-bold select-none active:scale-95
                     ${filterCategory === 'all'
-                        ? 'bg-content-body text-surface-card border-content-body shadow-md' 
-                        : 'bg-surface-card text-content-muted border-slate-200 hover:border-slate-300 dark:border-slate-800'}
+                        ? 'bg-content-body text-surface-card shadow-lg shadow-slate-200/50 dark:shadow-none' 
+                        : 'bg-slate-100 dark:bg-slate-800 text-content-muted hover:bg-slate-200 dark:hover:bg-slate-700'}
                  `}
             >
-                <Filter size={14} aria-hidden="true" /> Tots
+                <Filter size={16} aria-hidden="true" /> Tots
             </button>
             {CATEGORIES.filter(c => c.id !== 'all').map(cat => (
                 <button
@@ -140,10 +138,10 @@ export default function ExpensesList({
                     role="tab"
                     aria-selected={filterCategory === cat.id}
                     className={`
-                        flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-all text-xs font-bold border select-none active:scale-95
+                        flex items-center gap-2 px-5 py-2.5 rounded-full whitespace-nowrap transition-all text-sm font-bold select-none active:scale-95
                         ${filterCategory === cat.id 
-                            ? 'bg-primary text-white border-primary shadow-md shadow-indigo-200/50 dark:shadow-none' 
-                            : 'bg-surface-card text-content-muted border-slate-200 hover:border-slate-300 dark:border-slate-800'}
+                            ? 'bg-primary text-white shadow-lg shadow-indigo-200/50 dark:shadow-none' 
+                            : 'bg-slate-100 dark:bg-slate-800 text-content-muted hover:bg-slate-200 dark:hover:bg-slate-700'}
                     `}
                 >
                     <cat.icon className="w-4 h-4" aria-hidden="true" />
@@ -183,14 +181,13 @@ export default function ExpensesList({
                     <React.Fragment key={expense.id}>
                         {/* --- DATE HEADER --- */}
                         {showDateHeader && (
-                            // Refactor: top-32 (128px) és més estàndard que 135px. 
-                            // text-xxs per la data.
-                            <li className="sticky top-32 z-20 py-4 flex justify-center pointer-events-none">
+                            // Ajust de posició sticky per respectar la search bar
+                            <li className="sticky top-36 z-20 py-4 flex justify-center pointer-events-none">
                                 <div className={`
-                                    px-4 py-1.5 rounded-full text-xxs font-bold shadow-sm backdrop-blur-xl border select-none
+                                    px-4 py-1.5 rounded-full text-xs font-bold shadow-sm backdrop-blur-xl border select-none
                                     ${isToday 
                                         ? 'bg-primary text-white border-primary shadow-indigo-200/50 dark:shadow-none' 
-                                        : 'bg-surface-ground/90 text-content-muted border-slate-200 dark:border-slate-700'}
+                                        : 'bg-surface-ground/95 text-content-muted border-slate-200 dark:border-slate-700'}
                                 `}>
                                     {displayDate}
                                 </div>
@@ -202,54 +199,48 @@ export default function ExpensesList({
                             <button 
                             type="button"
                             onClick={() => onEdit(expense)}
-                            // Refactor: bg-surface-card, focus-visible ring
-                            className="w-full text-left bg-surface-card p-3.5 sm:p-4 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-all cursor-pointer relative overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:z-10 shadow-sm hover:shadow-md active:scale-[0.98] active:bg-surface-ground"
+                            className="w-full text-left bg-surface-card p-4 sm:p-5 rounded-3xl border border-slate-100 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-all cursor-pointer relative overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:z-10 shadow-sm hover:shadow-md active:scale-[0.98] active:bg-surface-ground"
                             >
-                            <div className="flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-4 flex-1 min-w-0">
                                     {/* ICON */}
                                     <div className={`
-                                        w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-colors border shadow-sm ring-1 ring-inset ring-black/5 dark:ring-white/5
+                                        w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-colors border shadow-sm ring-1 ring-inset ring-black/5 dark:ring-white/5
                                         ${isTransfer 
                                             ? 'bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900/50' 
                                             : `bg-${catColorBase}-50 text-${catColorBase}-600 border-${catColorBase}-100 dark:bg-${catColorBase}-900/20 dark:text-${catColorBase}-400 dark:border-${catColorBase}-900/50`
                                         }
                                     `}>
-                                        {isTransfer ? <ArrowRightLeft className="w-5 h-5 sm:w-6 sm:h-6" aria-hidden="true" /> : <category.icon className="w-5 h-5 sm:w-6 sm:h-6" aria-hidden="true" />}
+                                        {isTransfer ? <ArrowRightLeft className="w-6 h-6" aria-hidden="true" /> : <category.icon className="w-6 h-6" aria-hidden="true" />}
                                     </div>
                                     
                                     {/* INFO */}
-                                    <div className="flex flex-col min-w-0 flex-1 gap-1">
+                                    <div className="flex flex-col min-w-0 flex-1 gap-1.5">
                                         <div className="flex items-center gap-2">
-                                            {/* text-content-body */}
                                             <span className="font-bold text-content-body truncate text-base leading-tight group-hover:text-primary transition-colors">
                                                 {expense.title}
                                             </span>
                                             {expense.receiptUrl && <Paperclip className="w-3.5 h-3.5 text-content-subtle flex-shrink-0" aria-label="Amb rebut adjunt" />}
                                         </div>
                                         
-                                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-content-muted">
-                                            {/* Payer */}
-                                            <div className="flex items-center gap-1.5 min-w-0">
-                                                {/* text-xxs */}
-                                                <span className="text-xxs uppercase font-bold text-content-subtle tracking-wider hidden sm:inline-block">Pagat per</span>
-                                                <div className="flex items-center gap-1 bg-surface-ground px-1.5 py-0.5 rounded-md border border-slate-100 dark:border-slate-700">
-                                                    {/* Avatar colors es mantenen, només text size */}
-                                                    <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold ${getAvatarColor(payerName)}`}>
+                                        {/* Meta Row: Payer Badge + Split Info */}
+                                        <div className="flex flex-wrap items-center gap-3">
+                                            {/* Payer Badge (Cleaner UI) */}
+                                            <div className="flex items-center gap-2 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shrink-0">
+                                                 <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${getAvatarColor(payerName)}`}>
                                                         {payerPhoto ? (
                                                             <img src={payerPhoto} alt="" className="w-full h-full object-cover rounded-full" />
                                                         ) : payerName.charAt(0).toUpperCase()}
-                                                    </div>
-                                                    <span className="truncate max-w-[80px] font-semibold text-content-body">{payerName}</span>
-                                                </div>
+                                                 </div>
+                                                 <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 max-w-[80px] truncate">
+                                                    {payerName}
+                                                 </span>
                                             </div>
-                                            
-                                            <span className="text-content-subtle">•</span>
 
                                             {/* Split Info */}
-                                            <span className="truncate text-content-muted text-xs">
+                                            <span className="truncate text-content-subtle text-xs font-medium">
                                                 {isTransfer 
-                                                    ? <span className="flex items-center gap-1">enviat a <span className="font-bold text-content-body">{expense.involved[0] ? getUserName(expense.involved[0]) : 'Tothom'}</span></span>
+                                                    ? <span className="flex items-center gap-1">➜ <span className="text-content-body">{expense.involved[0] ? getUserName(expense.involved[0]) : 'Tothom'}</span></span>
                                                     : (expense.splitType === 'equal' ? `${expense.involved.length} persones` : (expense.splitType === 'exact' ? 'Import exacte' : 'Per parts'))
                                                 }
                                             </span>
@@ -259,11 +250,11 @@ export default function ExpensesList({
 
                                 {/* AMOUNT */}
                                 <div className="flex flex-col items-end pl-2">
-                                    <span className={`font-black text-lg tracking-tight whitespace-nowrap tabular-nums ${isTransfer ? 'text-status-success' : 'text-content-body'}`}>
+                                    <span className={`font-black text-xl tracking-tight whitespace-nowrap tabular-nums ${isTransfer ? 'text-status-success' : 'text-content-body'}`}>
                                         {formatCurrency(expense.amount, currency)}
                                     </span>
                                     {expense.originalCurrency && expense.originalCurrency !== currency.code && (
-                                        <span className="text-xxs font-bold text-content-muted bg-surface-ground border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 rounded-md whitespace-nowrap mt-1 tabular-nums">
+                                        <span className="text-xs font-bold text-content-muted bg-surface-ground border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 rounded-md whitespace-nowrap mt-1 tabular-nums">
                                             {expense.originalAmount?.toFixed(2)} {expense.originalCurrency}
                                         </span>
                                     )}
@@ -277,10 +268,11 @@ export default function ExpensesList({
             </ul>
         )}
         
-        {/* Infinite Scroll Loader */}
+        {/* Infinite Scroll Loader with Feedback */}
         {hasMore && !isSearching && (
-          <div ref={observerTarget} className="h-24 flex items-center justify-center w-full">
-            <Loader2 className="w-6 h-6 animate-spin text-content-subtle" />
+          <div ref={observerTarget} className="h-24 flex flex-col items-center justify-center w-full gap-2 text-content-subtle animate-fade-in">
+            <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            <span className="text-xs font-bold tracking-wide uppercase">Carregant més moviments...</span>
           </div>
         )}
       </div>

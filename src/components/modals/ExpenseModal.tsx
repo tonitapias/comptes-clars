@@ -1,6 +1,6 @@
 // src/components/modals/ExpenseModal.tsx
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, User as UserIcon, CheckSquare, Square, AlertCircle, Check } from 'lucide-react';
+import { Calendar, User as UserIcon, CheckSquare, Square, AlertCircle, Check, Trash2 } from 'lucide-react';
 import Modal from '../Modal';
 import Button from '../Button';
 import { CATEGORIES, UI_SPLIT_MODES, SPLIT_TYPES } from '../../utils/constants';
@@ -27,7 +27,6 @@ const SplitModeSelector: React.FC<SplitModeSelectorProps> = ({ currentMode, onMo
         key={mode.id}
         type="button"
         onClick={() => onModeChange(mode.id, mode.mappedType)}
-        // UX: Padding més generós i estats de focus clars
         className={`
           flex-1 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all duration-200
           focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500
@@ -51,7 +50,6 @@ interface EqualSplitSectionProps {
 }
 
 const EqualSplitSection: React.FC<EqualSplitSectionProps> = ({ users, involved, onToggle }) => (
-  // UX: Eliminat max-h-48. Ara la llista creix i usa l'scroll del modal principal.
   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
     {users.map(u => {
       const isSelected = involved.includes(u.id);
@@ -60,7 +58,6 @@ const EqualSplitSection: React.FC<EqualSplitSectionProps> = ({ users, involved, 
           key={u.id}
           type="button"
           onClick={() => onToggle(u.id)}
-          // UX: Augment de l'àrea tàctil (min-h-[3.5rem]) i millor feedback visual
           className={`
             flex items-center gap-3 p-3.5 rounded-xl border transition-all text-left outline-none
             focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1
@@ -97,6 +94,9 @@ interface ExpenseModalProps {
 export default function ExpenseModal({ isOpen, onClose, initialData, users, currency, onDelete, showToast }: ExpenseModalProps) {
   const { actions } = useTrip();
 
+  // UX State: Confirmació d'esborrat local
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const { formState, setters, logic, isSubmitting, exactSplitStats } = useExpenseForm({
     initialData: initialData || null,
     users,
@@ -128,6 +128,11 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
     }
   }, [formState.splitType]);
 
+  // Reset delete state when modal closes or data changes
+  useEffect(() => {
+    if (!isOpen) setIsDeleting(false);
+  }, [isOpen, initialData]);
+
   const handleModeChange = (modeId: string, mappedType?: SplitType) => {
     setUiMode(modeId);
     const targetType = mappedType || (modeId as SplitType);
@@ -144,7 +149,6 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={initialData ? 'Editar Despesa' : 'Nova Despesa'}>
       <form onSubmit={logic.handleSubmit} className="space-y-8"> 
-        {/* space-y-8 per donar més aire entre seccions */}
         
         {/* --- HEADER: AMOUNT & TITLE --- */}
         <div className="space-y-5">
@@ -156,7 +160,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                         inputMode="decimal" 
                         placeholder="0.00" 
                         required 
-                        autoFocus={!initialData} // UX: Focus automàtic en crear
+                        autoFocus={!initialData}
                         value={formState.amount} 
                         onChange={handleAmountChange} 
                         className={`
@@ -216,13 +220,14 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
             </div>
         </div>
 
-        {/* --- CATEGORIES --- */}
+        {/* --- CATEGORIES (IMPROVED A11Y) --- */}
         <div>
             <label className="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Categoria</label>
-            <div className="grid grid-cols-4 sm:grid-cols-4 gap-3">
+            {/* UX: Grid responsiva (3 cols mòbil -> 4 cols sm) */}
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                 {CATEGORIES.filter(c => c.id !== 'all').map(cat => {
                     const isSelected = formState.category === cat.id;
-                    const colorBase = cat.color.split('-')[1]; // ex: 'red' de 'text-red-500'
+                    const colorBase = cat.color.split('-')[1];
                     
                     return (
                         <button
@@ -238,7 +243,6 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                                 }
                             `}
                         >
-                            {/* Icona de check flotant per confirmar selecció (A11y High Contrast) */}
                             {isSelected && (
                                 <div className={`absolute -top-2 -right-2 bg-${colorBase}-500 text-white p-0.5 rounded-full shadow-sm`}>
                                     <Check size={12} strokeWidth={3} />
@@ -246,7 +250,8 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                             )}
                             
                             <cat.icon className={`w-6 h-6 mb-1.5 ${isSelected ? 'scale-110' : 'scale-100'}`} />
-                            <span className="text-[10px] font-bold leading-none">{cat.label}</span>
+                            {/* UX: Text size pujat a text-xs i font-medium per llegibilitat */}
+                            <span className="text-xs font-medium leading-none mt-1">{cat.label}</span>
                         </button>
                     );
                 })}
@@ -257,7 +262,6 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
         <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-3xl border border-slate-200 dark:border-slate-800">
             <SplitModeSelector currentMode={uiMode} onModeChange={handleModeChange} />
 
-            {/* FEEDBACK VISUAL MODE EXACTE */}
             {formState.splitType === SPLIT_TYPES.EXACT && exactSplitStats && (
                 <div className={`mb-4 p-4 rounded-2xl text-sm font-medium border flex items-center gap-3 animate-in slide-in-from-top-2
                     ${exactSplitStats.isOverAllocated 
@@ -276,7 +280,6 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                 </div>
             )}
 
-            {/* UX: Eliminat scroll intern (max-h-60) per evitar "scroll trap" en mòbil. */}
             {formState.splitType === SPLIT_TYPES.EQUAL ? (
                 <EqualSplitSection users={users} involved={formState.involved} onToggle={logic.toggleInvolved} />
             ) : (
@@ -290,7 +293,6 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                                 <span className="font-bold text-slate-700 dark:text-slate-200">{u.name}</span>
                              </div>
                              
-                             {/* Inputs de repartiment manual */}
                              {formState.splitType === SPLIT_TYPES.EXACT ? (
                                 <div className="relative w-32">
                                     <input 
@@ -333,18 +335,41 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
             )}
         </div>
 
-        {/* Footer Actions */}
-        <div className="flex gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+        {/* Footer Actions (SECURED DELETE) */}
+        <div className="flex items-center gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
             {initialData && onDelete && (
-                <button 
-                    type="button" 
-                    onClick={() => onDelete(initialData.id)} 
-                    className="p-4 rounded-xl bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors border border-transparent hover:border-rose-200"
-                    aria-label="Eliminar despesa"
-                >
-                    <X size={24} />
-                </button>
+                <div className="flex items-center">
+                    {isDeleting ? (
+                        <div className="flex gap-2 animate-scale-in">
+                            <button 
+                                type="button"
+                                onClick={() => setIsDeleting(false)}
+                                className="px-4 py-4 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                            >
+                                Cancel·la
+                            </button>
+                            <button 
+                                type="button"
+                                onClick={() => onDelete(initialData.id)}
+                                className="px-6 py-4 rounded-xl bg-rose-600 text-white font-bold text-sm shadow-md hover:bg-rose-700 active:scale-95 transition-all"
+                            >
+                                Confirma
+                            </button>
+                        </div>
+                    ) : (
+                        <button 
+                            type="button" 
+                            onClick={() => setIsDeleting(true)} 
+                            className="p-4 rounded-xl bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors border border-transparent hover:border-rose-200"
+                            aria-label="Eliminar despesa"
+                            title="Eliminar despesa"
+                        >
+                            <Trash2 size={24} />
+                        </button>
+                    )}
+                </div>
             )}
+            
             <Button 
                 type="submit" 
                 className="flex-1 text-lg py-4" 

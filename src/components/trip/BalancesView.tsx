@@ -1,3 +1,4 @@
+// src/components/trip/BalancesView.tsx
 import React, { useMemo } from 'react';
 import DonutChart from '../DonutChart';
 import { Balance, CategoryStat, TripUser, toCents } from '../../types';
@@ -25,34 +26,41 @@ export default function BalancesView({ balances, categoryStats }: BalancesViewPr
   const ZERO = toCents(0);
 
   return (
-    <div className="space-y-8 animate-fade-in pb-20">
+    <div className="space-y-6 animate-fade-in pb-24">
         
-        {/* GRÀFIC DE CATEGORIES */}
-        <section className="bg-surface-card p-6 sm:p-8 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-800">
-            <h3 className="text-xl font-black text-content-body mb-8">On van els diners?</h3>
+        {/* --- SECCIÓ 1: GRÀFIC DE DESPESES --- */}
+        <section className="bg-surface-card p-5 sm:p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800">
+            <h3 className="text-lg font-black text-content-body mb-6 flex items-center gap-2">
+                <span className="text-xl">📊</span> Distribució
+            </h3>
             
-            <div className="flex flex-col md:flex-row items-center gap-10">
-                <div className="relative w-56 h-56 flex-shrink-0">
+            <div className="flex flex-col md:flex-row items-center gap-8 md:gap-12">
+                {/* Chart Container */}
+                <div className="relative w-48 h-48 sm:w-56 sm:h-56 flex-shrink-0">
                     <DonutChart data={categoryStats} />
                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                        <span className="text-3xl font-black text-content-body">{categoryStats.length}</span>
-                        <span className="text-xxs font-bold text-content-subtle uppercase tracking-wide">Cats</span>
+                        <span className="text-3xl font-black text-content-body tracking-tighter">
+                            {categoryStats.length}
+                        </span>
+                        <span className="text-[10px] font-bold text-content-subtle uppercase tracking-widest">Cats</span>
                     </div>
                 </div>
                 
-                <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                {/* Legend List */}
+                <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
                     {categoryStats.map((stat) => (
-                        <div key={stat.id} className="flex items-center justify-between p-3 rounded-xl hover:bg-surface-ground transition-colors group cursor-default">
+                        <div key={stat.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-surface-ground transition-colors group cursor-default">
                             <div className="flex items-center gap-3">
-                                <div className={`w-3 h-3 rounded-full ring-2 ring-white dark:ring-slate-900 shadow-sm ${stat.barColor}`} />
-                                <span className="font-bold text-content-muted text-sm">{stat.label}</span>
+                                <div className={`w-3 h-3 rounded-full shadow-sm ring-2 ring-white dark:ring-slate-900 ${stat.barColor}`} />
+                                <span className="font-bold text-content-muted text-sm group-hover:text-content-body transition-colors">
+                                    {stat.label}
+                                </span>
                             </div>
                             <div className="text-right">
-                                <div className="font-bold text-content-body text-sm">
+                                <div className="font-bold text-content-body text-sm tabular-nums">
                                     {formatCurrency(stat.amount, currency)}
                                 </div>
-                                {/* Canvi: text-[10px] -> text-xxs + token subtle */}
-                                <div className="text-xxs font-bold text-content-subtle">
+                                <div className="text-[10px] font-bold text-content-subtle">
                                     {Math.round(stat.percentage)}%
                                 </div>
                             </div>
@@ -62,22 +70,25 @@ export default function BalancesView({ balances, categoryStats }: BalancesViewPr
             </div>
         </section>
 
-        {/* LLISTA DE BALANÇOS */}
+        {/* --- SECCIÓ 2: ESTAT DELS COMPTES (Balances) --- */}
         <section className="space-y-4">
-            <h3 className="text-xl font-black text-content-body px-2">Estat dels Comptes</h3>
-            <div className="grid gap-4">
+            <h3 className="text-lg font-black text-content-body px-2 flex items-center gap-2">
+                <span className="text-xl">⚖️</span> Balanços
+            </h3>
+            <div className="grid gap-3">
                 {balances.map((balance) => {
                     const isPositive = balance.amount > ZERO;
                     const isZero = balance.amount === ZERO;
                     const user = userMap[balance.userId];
 
                     return (
-                        <div key={balance.userId} className="bg-surface-card p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex items-center justify-between transition-transform hover:scale-[1.01]">
+                        <div key={balance.userId} className="group bg-surface-card p-4 sm:p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 flex items-center justify-between transition-all hover:shadow-md hover:border-slate-200 dark:hover:border-slate-700">
                             <div className="flex items-center gap-4">
+                                {/* Avatar Large */}
                                 <div className={`
-                                    w-12 h-12 rounded-full flex items-center justify-center overflow-hidden border-2
+                                    w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden border-2 transition-transform group-hover:scale-105
                                     ${isZero 
-                                        ? 'border-slate-100 dark:border-slate-800 bg-surface-ground' 
+                                        ? 'border-slate-100 dark:border-slate-800 bg-surface-ground grayscale' 
                                         : isPositive 
                                             ? 'border-emerald-100 dark:border-emerald-900/30 bg-emerald-50 dark:bg-emerald-900/10' 
                                             : 'border-rose-100 dark:border-rose-900/30 bg-rose-50 dark:bg-rose-900/10'}
@@ -85,28 +96,31 @@ export default function BalancesView({ balances, categoryStats }: BalancesViewPr
                                     {user?.photoUrl ? (
                                       <img src={user.photoUrl} alt={user.name} className="w-full h-full object-cover" />
                                     ) : (
-                                        <span className={`text-sm font-bold ${isZero ? 'text-content-subtle' : isPositive ? 'text-status-success' : 'text-status-error'}`}>
+                                        <span className={`text-xl font-black ${isZero ? 'text-content-subtle' : isPositive ? 'text-status-success' : 'text-status-error'}`}>
                                             {user?.name?.charAt(0).toUpperCase() || '?'}
                                         </span>
                                     )}
                                 </div>
                                 
-                                <div className="flex flex-col">
-                                    <span className="font-bold text-content-body text-base">
+                                <div className="flex flex-col gap-0.5">
+                                    <span className="font-bold text-content-body text-lg leading-tight">
                                         {user?.name || 'Usuari Desconegut'}
                                     </span>
-                                    {/* Canvi: text-[10px] -> text-xxs */}
-                                    <span className={`text-xxs uppercase font-bold tracking-wider
-                                        ${isZero ? 'text-content-subtle' : isPositive ? 'text-status-success' : 'text-status-error'}
+                                    <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md w-fit
+                                        ${isZero 
+                                            ? 'bg-slate-100 text-slate-400 dark:bg-slate-800' 
+                                            : isPositive 
+                                                ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' 
+                                                : 'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400'}
                                     `}>
-                                        {isZero ? 'Tot quadrat' : isPositive ? 'Ha de cobrar' : 'Ha de pagar'}
+                                        {isZero ? 'Està en pau' : isPositive ? 'Ha de cobrar' : 'Ha de pagar'}
                                     </span>
                                 </div>
                             </div>
                             
-                            <div className="text-right">
-                                <span className={`font-black text-xl tracking-tight
-                                    ${isZero ? 'text-content-subtle' : isPositive ? 'text-status-success' : 'text-status-error'}
+                            <div className="text-right pl-2">
+                                <span className={`font-black text-xl sm:text-2xl tracking-tight tabular-nums
+                                    ${isZero ? 'text-content-subtle opacity-50' : isPositive ? 'text-status-success' : 'text-status-error'}
                                 `}>
                                     {isPositive ? '+' : ''}{formatCurrency(balance.amount, currency)}
                                 </span>
