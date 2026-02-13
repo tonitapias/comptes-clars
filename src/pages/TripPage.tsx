@@ -84,45 +84,88 @@ function TripView() {
       )}
 
       <main className="max-w-3xl mx-auto px-4 relative z-20 mt-6">
-        {/* Navegació de Pestanyes (Podria ser un component <TripTabs /> en el futur) */}
-        <div className="flex p-1.5 bg-white dark:bg-slate-900 rounded-2xl mb-6 shadow-sm border border-slate-200 dark:border-slate-800">
-          {(['expenses', 'balances', 'settle'] as const).map(tab => (
-            <button key={tab} onClick={() => filters.setActiveTab(tab)} className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 ${filters.activeTab === tab ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
-                {tab === 'expenses' && <Receipt size={16} />}{tab === 'balances' && <Wallet size={16} />}{tab === 'settle' && <CheckCircle2 size={16} />}
-                <span className="hidden sm:inline">{tab === 'expenses' ? 'Despeses' : tab === 'balances' ? 'Balanç' : 'Liquidar'}</span>
-            </button>
-          ))}
+        
+        {/* Navegació de Pestanyes Accessible (ARIA Tabs) */}
+        <div 
+          className="flex p-1.5 bg-white dark:bg-slate-900 rounded-2xl mb-6 shadow-sm border border-slate-200 dark:border-slate-800"
+          role="tablist"
+          aria-label="Vistes del viatge"
+        >
+          {(['expenses', 'balances', 'settle'] as const).map(tab => {
+            const isActive = filters.activeTab === tab;
+            return (
+              <button 
+                key={tab} 
+                onClick={() => filters.setActiveTab(tab)} 
+                role="tab"
+                aria-selected={isActive}
+                aria-controls={`panel-${tab}`}
+                id={`tab-${tab}`}
+                tabIndex={isActive ? 0 : -1}
+                className={`
+                  flex-1 py-2.5 text-sm font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 relative z-10
+                  focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:focus-visible:ring-offset-slate-900
+                  ${isActive 
+                    ? 'bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 shadow-sm' 
+                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200'
+                  }
+                `}
+              >
+                  {tab === 'expenses' && <Receipt size={16} aria-hidden="true" />}
+                  {tab === 'balances' && <Wallet size={16} aria-hidden="true" />}
+                  {tab === 'settle' && <CheckCircle2 size={16} aria-hidden="true" />}
+                  <span className={isActive ? "inline" : "hidden sm:inline"}>
+                    {tab === 'expenses' ? 'Despeses' : tab === 'balances' ? 'Balanç' : 'Liquidar'}
+                  </span>
+              </button>
+            );
+          })}
         </div>
 
-        {/* Contingut de les Pestanyes */}
-        {filters.activeTab === 'expenses' && (
-            expenses.length === 0 && !filters.searchQuery && filters.filterCategory === 'all' ? (
-             <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in">
-                <Receipt size={48} className="text-indigo-400 dark:text-indigo-500 mb-4" />
-                <h3 className="text-xl font-bold text-slate-700 dark:text-slate-200 mb-2">No hi ha despeses</h3>
-                <p className="text-slate-500 dark:text-slate-400 max-w-xs mb-6">Afegeix la primera despesa per començar a dividir comptes.</p>
-                <Button onClick={() => modals.openExpenseModal(null)} icon={Plus}>Afegir Despesa</Button>
+        {/* Contingut de les Pestanyes (Tabpanels) */}
+        <div className="relative min-h-[400px]">
+          {filters.activeTab === 'expenses' && (
+              <div role="tabpanel" id="panel-expenses" aria-labelledby="tab-expenses" className="animate-fade-in focus:outline-none" tabIndex={0}>
+                {expenses.length === 0 && !filters.searchQuery && filters.filterCategory === 'all' ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in">
+                    <Receipt size={48} className="text-indigo-400 dark:text-indigo-500 mb-4" aria-hidden="true" />
+                    <h3 className="text-xl font-bold text-slate-700 dark:text-slate-200 mb-2">No hi ha despeses</h3>
+                    <p className="text-slate-500 dark:text-slate-400 max-w-xs mb-6">Afegeix la primera despesa per començar a dividir comptes.</p>
+                    <Button onClick={() => modals.openExpenseModal(null)} icon={Plus}>Afegir Despesa</Button>
+                </div>
+                ) : (
+                <ExpensesList 
+                    expenses={filteredExpenses} 
+                    searchQuery={filters.searchQuery} setSearchQuery={filters.setSearchQuery} 
+                    filterCategory={filters.filterCategory} setFilterCategory={filters.setFilterCategory} 
+                    onEdit={modals.openExpenseModal}
+                    isSearching={isSearching} 
+                />
+                )}
+              </div>
+          )}
+
+          {filters.activeTab === 'balances' && (
+             <div role="tabpanel" id="panel-balances" aria-labelledby="tab-balances" className="animate-fade-in focus:outline-none" tabIndex={0}>
+                <BalancesView balances={balances} categoryStats={categoryStats} />
              </div>
-            ) : (
-             <ExpensesList 
-                expenses={filteredExpenses} 
-                searchQuery={filters.searchQuery} setSearchQuery={filters.setSearchQuery} 
-                filterCategory={filters.filterCategory} setFilterCategory={filters.setFilterCategory} 
-                onEdit={modals.openExpenseModal}
-                isSearching={isSearching} 
-             />
-            )
-        )}
-        {filters.activeTab === 'balances' && <BalancesView balances={balances} categoryStats={categoryStats} />}
-        {filters.activeTab === 'settle' && <SettlementsView settlements={settlements} onSettle={modals.setSettleModalData} />}
+          )}
+
+          {filters.activeTab === 'settle' && (
+             <div role="tabpanel" id="panel-settle" aria-labelledby="tab-settle" className="animate-fade-in focus:outline-none" tabIndex={0}>
+                <SettlementsView settlements={settlements} onSettle={modals.setSettleModalData} />
+             </div>
+          )}
+        </div>
       </main>
       
       {/* Botó Flotant */}
       <button 
         onClick={() => modals.openExpenseModal(null)} 
-        className="fixed bottom-6 right-6 md:right-[calc(50%-350px)] bg-indigo-600 text-white p-4 rounded-2xl shadow-xl hover:bg-indigo-700 transition-all z-40 shadow-indigo-200 dark:shadow-none active:scale-95"
+        className="fixed bottom-6 right-6 md:right-[calc(50%-350px)] bg-indigo-600 text-white p-4 rounded-2xl shadow-xl hover:bg-indigo-700 transition-all z-40 shadow-indigo-200 dark:shadow-none active:scale-95 focus:outline-none focus:ring-4 focus:ring-indigo-500/30"
+        aria-label="Afegir nova despesa"
       >
-        <Plus size={28} />
+        <Plus size={28} aria-hidden="true" />
       </button>
       
       {/* 4. MODALS ORCHESTRATOR */}

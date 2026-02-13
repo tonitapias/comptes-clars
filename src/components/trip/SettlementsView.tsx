@@ -29,7 +29,7 @@ export default function SettlementsView({ settlements, onSettle }: SettlementsVi
       return (
           <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800">
               <div className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 p-4 rounded-full mb-4">
-                  <ThumbsUp size={32} />
+                  <ThumbsUp size={32} aria-hidden="true" />
               </div>
               <h3 className="text-xl font-bold text-slate-700 dark:text-slate-200 mb-1">Tot quadrat!</h3>
               <p className="text-slate-400 dark:text-slate-500">Ningú deu res a ningú.</p>
@@ -38,13 +38,14 @@ export default function SettlementsView({ settlements, onSettle }: SettlementsVi
   }
 
   return (
-    <div className="space-y-4 animate-fade-in pb-4"> {/* Padding bottom extra pel scroll */}
-        <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-2xl mb-6 flex gap-3 items-start">
+    <div className="space-y-6 animate-fade-in pb-4">
+        {/* Banner Informatiu */}
+        <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-2xl flex gap-3 items-start border border-indigo-100 dark:border-indigo-900/30">
             <div className="bg-indigo-100 dark:bg-indigo-800 p-1.5 rounded-full text-indigo-600 dark:text-indigo-300 mt-0.5 shrink-0">
-               <ArrowRight size={16} />
+               <ArrowRight size={16} aria-hidden="true" />
             </div>
-            <p className="text-sm text-indigo-800 dark:text-indigo-300 font-medium leading-relaxed">
-                Pla òptim per liquidar deutes amb el mínim de moviments.
+            <p className="text-sm text-indigo-900 dark:text-indigo-200 font-medium leading-relaxed">
+                Aquest és el pla òptim per liquidar tots els deutes del grup amb el mínim de moviments possibles.
             </p>
         </div>
 
@@ -56,62 +57,69 @@ export default function SettlementsView({ settlements, onSettle }: SettlementsVi
             return (
                 <div 
                     key={settleKey} 
-                    className="bg-white dark:bg-slate-900 p-5 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-6 transition-all hover:shadow-md"
+                    className="group bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden transition-all hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-900"
                 >
-                    {/* VISUALITZACIÓ DEL FLUX (Debtor -> Creditor) */}
-                    <div className="flex-1 w-full flex items-center justify-between gap-2">
-                        {/* Pagador */}
-                        <div className="flex flex-col items-center w-20 shrink-0">
-                            <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-2 overflow-hidden border-2 border-rose-100 dark:border-rose-900/30 shadow-sm">
-                                {debtor?.photoUrl ? (
-                                    <img src={debtor.photoUrl} alt="" className="w-full h-full object-cover" />
-                                ) : (
-                                    <span className="text-lg font-bold text-slate-500">{debtor?.name.charAt(0)}</span>
-                                )}
-                            </div>
-                            <span className="font-bold text-xs text-slate-700 dark:text-slate-300 truncate w-full text-center block leading-tight">
-                                {debtor?.name || 'Usuari'}
-                            </span>
-                        </div>
+                    <div className="flex flex-col sm:flex-row">
                         
-                        {/* Fletxa / Connectors */}
-                        <div className="flex-1 flex flex-col items-center px-2 relative top-[-8px]">
-                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Paga a</span>
-                            <div className="h-[2px] w-full bg-gradient-to-r from-rose-200 via-slate-200 to-emerald-200 dark:from-rose-900 dark:via-slate-700 dark:to-emerald-900 rounded-full" />
-                            <ArrowRight size={14} className="text-slate-400 absolute top-[19px]" />
+                        {/* ZONA 1: CONTEXT (QUI PAGA A QUI) - Fons neutre */}
+                        <div className="p-5 flex-1 flex items-center justify-between gap-4">
+                            {/* Pagador */}
+                            <div className="flex flex-col items-center w-20 shrink-0">
+                                <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-2 overflow-hidden border-2 border-rose-100 dark:border-rose-900/30 shadow-sm">
+                                    {debtor?.photoUrl ? (
+                                        <img src={debtor.photoUrl} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <span className="text-lg font-bold text-slate-500">{debtor?.name.charAt(0)}</span>
+                                    )}
+                                </div>
+                                <span className="font-bold text-xs text-slate-700 dark:text-slate-300 truncate w-full text-center block leading-tight">
+                                    {debtor?.name || 'Usuari'}
+                                </span>
+                            </div>
+
+                            {/* Fletxa animada en hover */}
+                            <div className="flex-1 flex flex-col items-center px-2">
+                                <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">PAGA A</span>
+                                <div className="h-1 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden relative">
+                                     <div className="absolute inset-0 bg-indigo-500/20 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out" />
+                                </div>
+                                <ArrowRight size={16} className="text-slate-300 dark:text-slate-600 mt-1" aria-hidden="true" />
+                            </div>
+
+                            {/* Receptor */}
+                            <div className="flex flex-col items-center w-20 shrink-0">
+                                <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-2 overflow-hidden border-2 border-emerald-100 dark:border-emerald-900/30 shadow-sm">
+                                    {creditor?.photoUrl ? (
+                                        <img src={creditor.photoUrl} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <span className="text-lg font-bold text-slate-500">{creditor?.name.charAt(0)}</span>
+                                    )}
+                                </div>
+                                <span className="font-bold text-xs text-slate-700 dark:text-slate-300 truncate w-full text-center block leading-tight">
+                                    {creditor?.name || 'Usuari'}
+                                </span>
+                            </div>
                         </div>
 
-                        {/* Receptor */}
-                        <div className="flex flex-col items-center w-20 shrink-0">
-                            <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-2 overflow-hidden border-2 border-emerald-100 dark:border-emerald-900/30 shadow-sm">
-                                {creditor?.photoUrl ? (
-                                    <img src={creditor.photoUrl} alt="" className="w-full h-full object-cover" />
-                                ) : (
-                                    <span className="text-lg font-bold text-slate-500">{creditor?.name.charAt(0)}</span>
-                                )}
+                        {/* ZONA 2: ACCIÓ (IMPORT I BOTÓ) - Fons diferenciat */}
+                        <div className="bg-slate-50 dark:bg-slate-800/50 p-5 sm:w-64 flex flex-col items-center justify-center gap-3 border-t sm:border-t-0 sm:border-l border-slate-100 dark:border-slate-800 border-dashed">
+                            <div className="text-center">
+                                <span className="block text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tighter">
+                                    {formatCurrency(settlement.amount, currency)}
+                                </span>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Pendent</span>
                             </div>
-                            <span className="font-bold text-xs text-slate-700 dark:text-slate-300 truncate w-full text-center block leading-tight">
-                                {creditor?.name || 'Usuari'}
-                            </span>
+                            
+                            <Button 
+                                variant="primary" // Acció principal = Primary
+                                onClick={() => onSettle(settlement)} 
+                                className="w-full text-sm shadow-indigo-200 dark:shadow-none"
+                                icon={CheckCircle2}
+                                aria-label={`Liquidar deute de ${formatCurrency(settlement.amount, currency)} de ${debtor?.name} a ${creditor?.name}`}
+                            >
+                                Liquidar
+                            </Button>
                         </div>
-                    </div>
-
-                    {/* BLOC D'ACCIÓ (Import + Botó) */}
-                    <div className="w-full sm:w-auto flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 sm:border-l border-slate-100 dark:border-slate-800 pt-4 sm:pt-0 sm:pl-6 gap-3">
-                        <span className="block text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                            {formatCurrency(settlement.amount, currency)}
-                        </span>
-                        
-                        {/* Botó UX Millorat: Àrea de toc gran i clara */}
-                        <Button 
-                            variant="secondary"
-                            onClick={() => onSettle(settlement)} 
-                            className="text-xs h-10 px-5 shadow-sm border-indigo-100 dark:border-indigo-900/50 hover:border-indigo-300 text-indigo-700 dark:text-indigo-300 bg-indigo-50/50 dark:bg-indigo-900/20"
-                            icon={CheckCircle2}
-                            aria-label={`Liquidar deute de ${formatCurrency(settlement.amount, currency)} de ${debtor?.name} a ${creditor?.name}`}
-                        >
-                            Liquidar
-                        </Button>
                     </div>
                 </div>
             );
