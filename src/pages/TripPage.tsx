@@ -21,6 +21,7 @@ import { useTripFilters } from '../hooks/useTripFilters';
 import { useTripMutations } from '../hooks/useTripMutations';
 import { generatePDF } from '../utils/exportPdf';
 import { CURRENCIES } from '../utils/constants';
+import { CategoryId } from '../types';
 
 interface TripPageProps { user: User | null; }
 
@@ -50,6 +51,15 @@ function TripView() {
     filters.searchQuery, 
     filters.filterCategory
   );
+
+  // 3. HANDLER PER A GRÀFICS INTERACTIUS (Opció C)
+  const handleCategorySelect = (categoryId: string) => {
+    // Canviem el filtre i la pestanya automàticament
+    filters.setFilterCategory(categoryId as CategoryId);
+    filters.setActiveTab('expenses');
+    // Scroll suau cap amunt per veure la llista
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   // --- RENDER LOADING/ERROR ---
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950"><Loader2 className="animate-spin text-indigo-600 dark:text-indigo-400"/></div>;
@@ -103,7 +113,6 @@ function TripView() {
                 aria-controls={`panel-${tab}`}
                 id={`tab-${tab}`}
                 tabIndex={isActive ? 0 : -1}
-                // FIX A11Y: Millorat feedback visual (ring, shadow, stroke) per no dependre només del color
                 className={`
                   flex-1 py-2.5 text-sm font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 relative z-10
                   focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:focus-visible:ring-offset-slate-900
@@ -113,7 +122,6 @@ function TripView() {
                   }
                 `}
               >
-                  {/* FIX VISUAL: strokeWidth augmentat (2.5 vs 2) quan està actiu per donar "pes" a la icona */}
                   {tab === 'expenses' && <Receipt size={16} strokeWidth={isActive ? 2.5 : 2} aria-hidden="true" />}
                   {tab === 'balances' && <Wallet size={16} strokeWidth={isActive ? 2.5 : 2} aria-hidden="true" />}
                   {tab === 'settle' && <CheckCircle2 size={16} strokeWidth={isActive ? 2.5 : 2} aria-hidden="true" />}
@@ -151,7 +159,11 @@ function TripView() {
 
           {filters.activeTab === 'balances' && (
              <div role="tabpanel" id="panel-balances" aria-labelledby="tab-balances" className="animate-fade-in focus:outline-none" tabIndex={0}>
-                <BalancesView balances={balances} categoryStats={categoryStats} />
+                <BalancesView 
+                  balances={balances} 
+                  categoryStats={categoryStats} 
+                  onFilterCategory={handleCategorySelect} 
+                />
              </div>
           )}
 
@@ -163,7 +175,7 @@ function TripView() {
         </div>
       </main>
       
-      {/* --- BOTÓ FLOTANT (FAB) OPTIMITZAT V2 --- */}
+      {/* FAB */}
       <button 
         onClick={() => modals.openExpenseModal(null)} 
         className="
@@ -183,7 +195,6 @@ function TripView() {
         <Plus size={28} strokeWidth={2.5} aria-hidden="true" />
       </button>
       
-      {/* 4. MODALS ORCHESTRATOR */}
       <TripModals 
         tripData={tripData}
         users={users}

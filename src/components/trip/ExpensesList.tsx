@@ -1,11 +1,9 @@
-// src/components/trip/ExpensesList.tsx
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Search, Receipt, ArrowRightLeft, Paperclip, Loader2, Filter } from 'lucide-react'; 
 import { CATEGORIES } from '../../utils/constants';
 import { Expense, CategoryId, TripUser } from '../../types';
 import { formatCurrency, formatDateDisplay } from '../../utils/formatters';
 import { useTrip } from '../../context/TripContext';
-// NEW IMPORT:
 import { getAvatarColor } from '../../utils/ui';
 
 interface ExpensesListProps {
@@ -21,13 +19,13 @@ interface ExpensesListProps {
 const PAGE_SIZE = 20;
 
 const ExpenseSkeleton = () => (
-  <div className="bg-surface-card p-5 rounded-3xl border border-slate-100 dark:border-slate-800 flex items-center gap-4 animate-pulse">
-    <div className="w-12 h-12 rounded-3xl bg-surface-ground flex-shrink-0" />
-    <div className="flex-1 space-y-3">
+  <div className="bg-surface-card p-4 rounded-3xl border border-slate-100 dark:border-slate-800 flex items-center gap-4 animate-pulse">
+    <div className="w-12 h-12 rounded-2xl bg-surface-ground flex-shrink-0" />
+    <div className="flex-1 space-y-2">
        <div className="h-4 bg-surface-ground rounded-full w-2/3" />
        <div className="h-3 bg-surface-ground rounded-full w-1/3" />
     </div>
-    <div className="w-20 h-6 bg-surface-ground rounded-full" />
+    <div className="w-16 h-6 bg-surface-ground rounded-full" />
   </div>
 );
 
@@ -78,10 +76,11 @@ export default function ExpensesList({
   const { currency } = tripData;
 
   return (
-    <div className="space-y-6 animate-fade-in pb-24">
+    <div className="space-y-4 animate-fade-in pb-32"> {/* Més padding bottom per al FAB */}
       
-      {/* --- SEARCH & FILTERS (Sticky) --- */}
-      <div className="flex flex-col gap-3 sticky top-0 z-30 bg-surface-ground/95 backdrop-blur-md py-2 -mx-4 px-4 border-b border-transparent transition-all shadow-sm" role="search">
+      {/* --- SEARCH & FILTERS (Sticky Millorat) --- */}
+      {/* Z-Index: sticky (40) definit al tailwind.config */}
+      <div className="flex flex-col gap-3 sticky top-0 z-sticky bg-surface-ground/90 backdrop-blur-xl py-3 -mx-4 px-4 transition-all" role="search">
         {/* Search Input */}
         <div className="relative group">
           <label htmlFor="search-expenses" className="sr-only">Cerca despeses</label>
@@ -89,10 +88,10 @@ export default function ExpensesList({
           <input 
             id="search-expenses"
             type="text"
-            placeholder="Cerca per concepte, persona..."
+            placeholder="Cerca per concepte..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-3.5 bg-surface-card border border-slate-200 dark:border-slate-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all shadow-sm text-content-body placeholder:text-content-subtle font-medium text-base"
+            className="w-full pl-12 pr-4 py-3 bg-surface-card border border-slate-200 dark:border-slate-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all shadow-financial-sm text-content-body placeholder:text-content-subtle font-medium text-base"
           />
           {isSearching && (
              <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
@@ -102,19 +101,19 @@ export default function ExpensesList({
         </div>
         
         {/* Category Pills */}
-        <div className="flex gap-2 overflow-x-auto pb-0.5 no-scrollbar mask-gradient-right" role="tablist" aria-label="Filtre per categories">
+        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar mask-gradient-right" role="tablist" aria-label="Filtre per categories">
             <button
                  onClick={() => setFilterCategory('all')}
                  role="tab"
                  aria-selected={filterCategory === 'all'}
                  className={`
-                    flex items-center gap-2 px-5 py-2.5 rounded-full whitespace-nowrap transition-all text-sm font-bold select-none active:scale-95
+                    flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-all text-sm font-bold select-none active:scale-95 border
                     ${filterCategory === 'all'
-                        ? 'bg-content-body text-surface-card shadow-lg shadow-slate-200/50 dark:shadow-none' 
-                        : 'bg-slate-100 dark:bg-slate-800 text-content-muted hover:bg-slate-200 dark:hover:bg-slate-700'}
+                        ? 'bg-content-body text-surface-card border-content-body shadow-md' 
+                        : 'bg-surface-card border-slate-200 dark:border-slate-800 text-content-muted hover:bg-slate-100 dark:hover:bg-slate-800'}
                  `}
             >
-                <Filter size={16} aria-hidden="true" /> Tots
+                <Filter size={14} aria-hidden="true" /> Tots
             </button>
             {CATEGORIES.filter(c => c.id !== 'all').map(cat => (
                 <button
@@ -123,10 +122,10 @@ export default function ExpensesList({
                     role="tab"
                     aria-selected={filterCategory === cat.id}
                     className={`
-                        flex items-center gap-2 px-5 py-2.5 rounded-full whitespace-nowrap transition-all text-sm font-bold select-none active:scale-95
+                        flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-all text-sm font-bold select-none active:scale-95 border
                         ${filterCategory === cat.id 
-                            ? 'bg-primary text-white shadow-lg shadow-indigo-200/50 dark:shadow-none' 
-                            : 'bg-slate-100 dark:bg-slate-800 text-content-muted hover:bg-slate-200 dark:hover:bg-slate-700'}
+                            ? 'bg-primary text-white border-primary shadow-md shadow-indigo-200/50 dark:shadow-none' 
+                            : 'bg-surface-card border-slate-200 dark:border-slate-800 text-content-muted hover:bg-slate-100 dark:hover:bg-slate-800'}
                     `}
                 >
                     <cat.icon className="w-4 h-4" aria-hidden="true" />
@@ -137,20 +136,21 @@ export default function ExpensesList({
       </div>
 
       {/* --- EXPENSES LIST --- */}
-      <div className="space-y-0" aria-busy={isSearching} aria-live="polite">
+      <div className="space-y-1" aria-busy={isSearching} aria-live="polite">
         {isSearching ? (
-           <div className="space-y-4">
+           <div className="space-y-4 pt-4">
              {Array.from({ length: 4 }).map((_, i) => <ExpenseSkeleton key={i} />)}
            </div>
         ) : expenses.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-content-subtle animate-fade-in">
-                <div className="bg-surface-elevated p-6 rounded-full mb-4">
-                    <Receipt className="w-10 h-10 opacity-50" aria-hidden="true" />
+            <div className="flex flex-col items-center justify-center py-20 text-content-subtle animate-fade-in text-center px-6">
+                <div className="bg-surface-elevated p-6 rounded-full mb-4 shadow-financial-sm">
+                    <Receipt className="w-10 h-10 opacity-30" aria-hidden="true" />
                 </div>
-                <p className="font-medium">No s'han trobat despeses</p>
+                <p className="font-bold text-lg text-content-muted">Cap despesa trobada</p>
+                <p className="text-sm opacity-70 mt-1">Prova amb altres filtres o crea'n una de nova.</p>
             </div>
         ) : (
-            <ul className="space-y-3 relative">
+            <ul className="relative space-y-3">
               {visibleExpenses.map((expense, index) => {
                   const category = CATEGORIES.find(c => c.id === expense.category) || CATEGORIES[0];
                   const isTransfer = expense.category === 'transfer';
@@ -164,14 +164,15 @@ export default function ExpensesList({
 
                   return (
                     <React.Fragment key={expense.id}>
-                        {/* --- DATE HEADER --- */}
+                        {/* --- DATE HEADER (Smart Sticky) --- */}
                         {showDateHeader && (
-                            <li className="sticky top-32 z-20 py-3 flex justify-center pointer-events-none">
+                            // Top-20 (80px) per quedar just sota la search bar
+                            <li className="sticky top-28 z-20 py-2 flex justify-center pointer-events-none">
                                 <div className={`
-                                    px-4 py-1.5 rounded-full text-xs font-bold shadow-sm backdrop-blur-xl border select-none
+                                    px-4 py-1 rounded-full text-[11px] uppercase tracking-wider font-black shadow-sm backdrop-blur-md border
                                     ${isToday 
-                                        ? 'bg-primary text-white border-primary shadow-indigo-200/50 dark:shadow-none' 
-                                        : 'bg-surface-ground/95 text-content-muted border-slate-200 dark:border-slate-700'}
+                                        ? 'bg-primary/90 text-white border-primary/20 shadow-indigo-500/20' 
+                                        : 'bg-surface-elevated/90 text-content-muted border-slate-200/60 dark:border-slate-700/60'}
                                 `}>
                                     {displayDate}
                                 </div>
@@ -179,71 +180,53 @@ export default function ExpensesList({
                         )}
 
                         {/* --- EXPENSE CARD --- */}
-                        <li className="group px-1">
+                        <li className="group">
                             <button 
                             type="button"
                             onClick={() => onEdit(expense)}
-                            className="w-full text-left bg-surface-card p-4 sm:p-5 rounded-3xl border border-slate-100 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-all cursor-pointer relative overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:z-10 shadow-sm hover:shadow-md active:scale-[0.98] active:bg-surface-ground"
+                            className="w-full text-left bg-surface-card p-4 rounded-3xl border border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 transition-all cursor-pointer relative overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:z-10 shadow-sm hover:shadow-financial-md active:scale-[0.98]"
                             >
-                            <div className="flex items-center justify-between gap-4">
-                                <div className="flex items-center gap-4 flex-1 min-w-0">
-                                    {/* ICON */}
+                            <div className="flex items-center justify-between gap-3 sm:gap-4">
+                                
+                                {/* 1. Icon & Main Info */}
+                                <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
                                     <div className={`
-                                        w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-colors border shadow-sm ring-1 ring-inset ring-black/5 dark:ring-white/5
+                                        w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-colors border shadow-sm
                                         ${isTransfer 
-                                            ? 'bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900/50' 
-                                            : `bg-${catColorBase}-50 text-${catColorBase}-600 border-${catColorBase}-100 dark:bg-${catColorBase}-900/20 dark:text-${catColorBase}-400 dark:border-${catColorBase}-900/50`
+                                            ? 'bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900/30' 
+                                            : `bg-${catColorBase}-50 text-${catColorBase}-600 border-${catColorBase}-100 dark:bg-${catColorBase}-900/20 dark:text-${catColorBase}-400 dark:border-${catColorBase}-900/30`
                                         }
                                     `}>
-                                        {isTransfer ? <ArrowRightLeft className="w-6 h-6" aria-hidden="true" /> : <category.icon className="w-6 h-6" aria-hidden="true" />}
+                                        {isTransfer ? <ArrowRightLeft size={20} aria-hidden="true" /> : <category.icon size={20} aria-hidden="true" />}
                                     </div>
                                     
-                                    {/* INFO */}
-                                    <div className="flex flex-col min-w-0 flex-1 gap-1.5">
+                                    <div className="flex flex-col min-w-0 flex-1 gap-0.5">
                                         <div className="flex items-center gap-2">
-                                            <span className="font-bold text-content-body truncate text-base leading-tight group-hover:text-primary transition-colors">
+                                            <span className="font-bold text-content-body truncate text-base leading-snug">
                                                 {expense.title}
                                             </span>
-                                            {expense.receiptUrl && <Paperclip className="w-3.5 h-3.5 text-content-subtle flex-shrink-0" aria-label="Amb rebut adjunt" />}
+                                            {expense.receiptUrl && <Paperclip size={12} className="text-content-subtle flex-shrink-0" />}
                                         </div>
                                         
-                                        {/* Meta Row: Payer Badge + Split Info */}
-                                        <div className="flex flex-wrap items-center gap-3">
-                                            {/* --- MILLORA UX: Payer Badge Accessible (v2) --- */}
-                                            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shrink-0">
-                                                 {/* Augmentem la mida a 20px (w-5) i text a 12px (text-xxs) */}
-                                                 <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xxs font-bold ${getAvatarColor(payerName)}`}>
-                                                        {payerPhoto ? (
-                                                            <img src={payerPhoto} alt="" className="w-full h-full object-cover rounded-full" />
-                                                        ) : payerName.charAt(0).toUpperCase()}
-                                                 </div>
-                                                 {/* Text accessible i truncament suau */}
-                                                 <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 max-w-[90px] truncate">
-                                                    {payerName}
-                                                 </span>
-                                            </div>
-
-                                            {/* Split Info */}
-                                            <span className="truncate text-content-subtle text-xs font-medium">
+                                        <div className="flex items-center gap-2 text-xs text-content-muted truncate">
+                                             {/* Payer Name Simple */}
+                                             <span className="font-semibold text-content-body">{payerName}</span>
+                                             <span className="text-content-subtle">•</span>
+                                             <span>
                                                 {isTransfer 
-                                                    ? <span className="flex items-center gap-1">➜ <span className="text-content-body">{expense.involved[0] ? getUserName(expense.involved[0]) : 'Tothom'}</span></span>
-                                                    : (expense.splitType === 'equal' ? `${expense.involved.length} persones` : (expense.splitType === 'exact' ? 'Import exacte' : 'Per parts'))
+                                                    ? <span className="flex items-center gap-1">➜ {expense.involved[0] ? getUserName(expense.involved[0]) : 'Tothom'}</span>
+                                                    : (expense.splitType === 'equal' ? `${expense.involved.length} pers` : 'Ajustat')
                                                 }
-                                            </span>
+                                             </span>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* AMOUNT */}
+                                {/* 2. Amount */}
                                 <div className="flex flex-col items-end pl-2">
-                                    <span className={`font-black text-xl tracking-tight whitespace-nowrap tabular-nums ${isTransfer ? 'text-status-success' : 'text-content-body'}`}>
+                                    <span className={`font-black text-lg tracking-tight tabular-nums ${isTransfer ? 'text-status-success' : 'text-content-body'}`}>
                                         {formatCurrency(expense.amount, currency)}
                                     </span>
-                                    {expense.originalCurrency && expense.originalCurrency !== currency.code && (
-                                        <span className="text-xs font-bold text-content-muted bg-surface-ground border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 rounded-md whitespace-nowrap mt-1 tabular-nums">
-                                            {expense.originalAmount?.toFixed(2)} {expense.originalCurrency}
-                                        </span>
-                                    )}
                                 </div>
                             </div>
                             </button>
@@ -254,11 +237,10 @@ export default function ExpensesList({
             </ul>
         )}
         
-        {/* Infinite Scroll Loader */}
+        {/* Loader Final */}
         {hasMore && !isSearching && (
-          <div ref={observerTarget} className="h-24 flex flex-col items-center justify-center w-full gap-2 text-content-subtle animate-fade-in">
-            <Loader2 className="w-6 h-6 animate-spin text-primary" />
-            <span className="text-xs font-bold tracking-wide uppercase">Carregant més moviments...</span>
+          <div ref={observerTarget} className="h-20 flex items-center justify-center w-full text-content-subtle opacity-50">
+            <Loader2 className="w-5 h-5 animate-spin" />
           </div>
         )}
       </div>

@@ -1,9 +1,17 @@
+/* NETEJA RADICAL: Eliminem les restriccions de layout del #root 
+   que entraven en conflicte amb Tailwind.
+*/
+
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  width: 100%;
+  min-height: 100vh;
+  /* 'isolation' crea un nou context d'apilament (stacking context) 
+     per evitar problemes amb z-index globals */
+  isolation: isolate; 
 }
+
+/* Conservem les animacions del logo per si s'utilitzen en components legacy,
+   però eliminem els marges i paddings globals. */
 
 .logo {
   height: 6em;
@@ -19,24 +27,12 @@
 }
 
 @keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 @media (prefers-reduced-motion: no-preference) {
   a:nth-of-type(2) .logo {
     animation: logo-spin infinite 20s linear;
   }
-}
-
-.card {
-  padding: 2em;
-}
-
-.read-the-docs {
-  color: #888;
 }

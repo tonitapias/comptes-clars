@@ -1,7 +1,8 @@
 import React from 'react';
-import { FolderGit2, Trash2, ChevronRight, CheckCircle } from 'lucide-react';
+import { FolderGit2, Trash2, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { TripData } from '../../types';
+import { getAvatarColor } from '../../utils/ui'; // Reutilitzem la utilitat de colors
 
 interface TripCardProps {
     trip: TripData;
@@ -11,68 +12,66 @@ interface TripCardProps {
 }
 
 export default function TripCard({ trip, currentUser, onNavigate, onLeave }: TripCardProps) {
-    // Seguretat: Cerquem l'usuari intern dins del viatge per poder sortir-ne
     const currentUserInfo = trip.users?.find(u => u.linkedUid === currentUser.uid);
+    const dateStr = trip.createdAt ? new Date(trip.createdAt).toLocaleDateString() : '---';
     
     return (
         <div 
             onClick={() => onNavigate(trip.id)} 
-            className="group relative bg-white dark:bg-slate-900 hover:bg-white/80 dark:hover:bg-slate-800 p-6 rounded-3xl border border-white/60 dark:border-slate-800 shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer hover:-translate-y-1 overflow-hidden"
+            className="group relative bg-surface-card hover:border-primary/30 p-5 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-financial-sm hover:shadow-financial-lg transition-all duration-300 cursor-pointer hover:-translate-y-0.5"
         >
-            <div className="absolute -right-6 -top-6 w-32 h-32 bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
-
-            <div className="relative z-10">
-                <div className="flex justify-between items-start mb-4">
-                    <div className="flex items-center gap-2">
-                        <div className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 p-2.5 rounded-xl">
-                            <FolderGit2 size={24} />
-                        </div>
+            <div className="relative z-10 flex flex-col h-full">
+                {/* Capçalera Card */}
+                <div className="flex justify-between items-start mb-3">
+                    <div className="bg-primary-light dark:bg-primary-dark/20 text-primary p-2.5 rounded-xl">
+                        <FolderGit2 size={20} strokeWidth={2.5} />
                     </div>
                     
+                    {/* Botó Esborrar (Només visible en hover desktop o sempre en mòbil) */}
                     <button 
                         onClick={(e) => onLeave(e, trip.id, currentUserInfo?.id, trip.name)}
-                        className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 z-20"
-                        title="Arxivar viatge (Soft Delete)"
+                        className="p-2 text-content-subtle hover:text-status-error hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-full transition-colors md:opacity-0 md:group-hover:opacity-100"
+                        title="Arxivar viatge"
                     >
-                        <Trash2 size={18} />
+                        <Trash2 size={16} />
                     </button>
                 </div>
                 
-                <h3 className="text-xl font-extrabold text-slate-800 dark:text-white mb-1 truncate pr-2">{trip.name}</h3>
-                <p className="text-sm text-slate-400 dark:text-slate-500 font-medium mb-4">
-                    Creat el {trip.createdAt ? new Date(trip.createdAt).toLocaleDateString() : '---'}
+                {/* Títol i Data */}
+                <h3 className="text-lg font-black text-content-body truncate mb-1 pr-2">{trip.name}</h3>
+                <p className="text-xs text-content-subtle font-bold uppercase tracking-wider mb-6">
+                    Creat el {dateStr}
                 </p>
                 
+                {/* Footer Card: Avatars i Status */}
                 <div className="flex items-center justify-between mt-auto">
-                    {/* ZONA AVATARS */}
-                    <div className="flex -space-x-2 mr-2">
+                    <div className="flex -space-x-2 pl-1">
                         {trip.users?.slice(0, 3).map((u, i) => (
-                            <div key={i} className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-500 dark:text-slate-400 overflow-hidden shadow-sm">
+                            <div key={i} className={`w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 flex items-center justify-center text-[10px] font-bold shadow-sm ${getAvatarColor(u.name)}`}>
                                 {u.photoUrl ? (
-                                    <img src={u.photoUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" alt={u.name} />
+                                    <img src={u.photoUrl} className="w-full h-full object-cover rounded-full" referrerPolicy="no-referrer" alt={u.name} />
                                 ) : (
-                                    u.name?.charAt(0) || '?'
+                                    u.name?.charAt(0).toUpperCase() || '?'
                                 )}
                             </div>
                         ))}
                         {(trip.users?.length || 0) > 3 && (
-                            <div className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-400 shadow-sm">
+                            <div className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-[10px] font-bold text-content-muted shadow-sm">
                                 +{trip.users.length - 3}
                             </div>
                         )}
                     </div>
 
                     <div className="flex items-center gap-2">
-                        {/* BADGE SALDAT - NO TAPA AVATARS */}
                         {trip.isSettled && (
-                            <div className="flex items-center gap-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 px-2 py-1 rounded-full border border-emerald-200 dark:border-emerald-800/50">
-                                <CheckCircle size={12} strokeWidth={3} />
+                            <div className="flex items-center gap-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-1 rounded-lg">
+                                <CheckCircle2 size={12} strokeWidth={3} />
                                 <span className="text-[10px] font-bold uppercase tracking-wider">Saldat</span>
                             </div>
                         )}
-
-                        <div className="w-8 h-8 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-300 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                            <ChevronRight size={18} />
+                        {/* Fletxa d'acció */}
+                        <div className="text-content-subtle group-hover:text-primary transition-colors">
+                           <ChevronRight size={20} />
                         </div>
                     </div>
                 </div>

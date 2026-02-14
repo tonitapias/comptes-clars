@@ -1,5 +1,7 @@
 import React, { ReactNode, ButtonHTMLAttributes } from 'react';
 import { Loader2, LucideIcon } from 'lucide-react';
+// Importem el hook
+import { useHapticFeedback } from '../hooks/useHapticFeedback';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children?: ReactNode;
@@ -7,6 +9,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
   icon?: LucideIcon;
   fullWidth?: boolean;
+  haptic?: 'light' | 'medium' | 'heavy' | 'success' | 'none'; // Nova prop
 }
 
 const Button: React.FC<ButtonProps> = ({ 
@@ -17,61 +20,61 @@ const Button: React.FC<ButtonProps> = ({
   className = "", 
   disabled, 
   fullWidth = false,
+  haptic, // Recuperem la prop
+  onClick,
   ...props 
 }) => {
   
-  // BASE:
-  // - ring-offset: crea espai entre el botó i l'anell de focus (millora accessibilitat)
-  // - focus-visible: només mostra l'anell en navegació per teclat
-  // - active:scale-[0.98]: feedback tàctil subtil
+  const { trigger } = useHapticFeedback();
+  
+  // Determinem el feedback per defecte segons la variant
+  const defaultHaptic = variant === 'primary' ? 'light' : 'none';
+  const hapticPattern = haptic || defaultHaptic;
+
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (!disabled && !loading && hapticPattern !== 'none') {
+        trigger(hapticPattern);
+    }
+    onClick?.(e);
+  };
+
+  // ... (La resta d'estils es mantenen igual que a la Fase 1) ...
   const baseStyles = `
     relative font-bold rounded-xl transition-all duration-200 
     flex items-center justify-center gap-2 select-none
     disabled:opacity-100 disabled:cursor-not-allowed disabled:shadow-none
-    focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-indigo-500 dark:focus-visible:ring-offset-slate-900
-    active:scale-[0.98] disabled:active:scale-100
+    focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary dark:focus-visible:ring-offset-slate-900
+    active:scale-[0.96] disabled:active:scale-100
   `;
   
   const widthStyles = fullWidth ? "w-full" : "";
 
   const variants = {
-    // Primary: Sòlid, amb ombra suau en hover
     primary: `
-      bg-indigo-600 text-white shadow-md shadow-indigo-200/50 
-      hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-200/60 
-      dark:bg-indigo-500 dark:hover:bg-indigo-400 dark:shadow-none
+      bg-primary text-white shadow-financial-md 
+      hover:bg-primary-hover hover:shadow-financial-lg
+      dark:bg-primary-dark dark:hover:bg-primary
       disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-800 dark:disabled:text-slate-600
     `,
-    
-    // Secondary: Vora subtil, fons net
     secondary: `
-      bg-white text-slate-700 border border-slate-200 shadow-sm
-      hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900
-      dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-750 dark:hover:border-slate-600
-      disabled:bg-slate-50 disabled:text-slate-400 disabled:border-slate-100 dark:disabled:bg-slate-800/50
+      bg-surface-card text-content-body border border-slate-200 shadow-sm
+      hover:bg-surface-ground hover:border-slate-300
+      dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-750
+      disabled:bg-slate-50 disabled:text-slate-400
     `,
-    
-    // Ghost: Ideal per accions terciàries
     ghost: `
-      bg-transparent text-slate-600 hover:bg-slate-100 hover:text-indigo-700
+      bg-transparent text-content-muted hover:bg-slate-100 hover:text-primary
       dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-indigo-400
-      disabled:text-slate-300 dark:disabled:text-slate-700 disabled:hover:bg-transparent
     `,
-    
-    // Danger: Ara amb millor contrast (fons blanc + vora vermella)
     danger: `
-      bg-white text-rose-700 border border-rose-200 shadow-sm
-      hover:bg-rose-50 hover:border-rose-300 hover:text-rose-800
-      dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/50 dark:hover:bg-rose-900/40
-      disabled:opacity-50
+      bg-surface-card text-status-error border border-rose-200 shadow-sm
+      hover:bg-rose-50 hover:border-rose-300
+      dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/50
     `,
-    
-    // Success: Verd positiu
     success: `
       bg-emerald-50 text-emerald-700 border border-emerald-100
-      hover:bg-emerald-100 hover:text-emerald-800
-      dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/50 dark:hover:bg-emerald-900/40
-      disabled:opacity-50
+      hover:bg-emerald-100
+      dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/50
     `
   };
 
@@ -79,6 +82,7 @@ const Button: React.FC<ButtonProps> = ({
     <button 
       className={`${baseStyles} ${variants[variant]} ${widthStyles} ${className}`} 
       disabled={disabled || loading}
+      onClick={handleClick} // Utilitzem el nostre handler
       aria-busy={loading}
       {...props}
     >
