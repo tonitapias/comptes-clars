@@ -4,31 +4,13 @@ import DonutChart from '../DonutChart';
 import { Balance, CategoryStat, TripUser, toCents } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
 import { useTrip } from '../../context/TripContext';
+// NEW IMPORT:
+import { getAvatarColor } from '../../utils/ui';
 
 interface BalancesViewProps {
   balances: Balance[];
   categoryStats: CategoryStat[];
 }
-
-// Helper per generar color consistent basat en el nom (Identitat)
-// NOTA: Mantenim la duplicació temporalment (Risc Zero). 
-// En una fase posterior de "Refactoring", mourem això a /utils/colors.ts
-const getAvatarColor = (name: string) => {
-  const colors = [
-    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 border-red-200 dark:border-red-800', 
-    'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-blue-200 dark:border-blue-800', 
-    'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800', 
-    'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800',
-    'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border-purple-200 dark:border-purple-800',
-    'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300 border-pink-200 dark:border-pink-800',
-    'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800',
-  ];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return colors[Math.abs(hash) % colors.length];
-};
 
 export default function BalancesView({ balances, categoryStats }: BalancesViewProps) {
   const { tripData } = useTrip();
@@ -126,14 +108,12 @@ export default function BalancesView({ balances, categoryStats }: BalancesViewPr
                                     )}
                                 </div>
                                 
-                                <div className="flex flex-col gap-1"> {/* Petit augment de gap: 0.5 -> 1 */}
+                                <div className="flex flex-col gap-1"> 
                                     <span className="font-bold text-content-body text-lg leading-tight">
                                         {userName}
                                     </span>
                                     
                                     {/* MILLORA UX: Badge Status Accessible */}
-                                    {/* 1. text-[10px] -> text-xxs (12px) */}
-                                    {/* 2. py-0.5 -> py-1 (Més aire) */}
                                     <span className={`text-xxs uppercase font-bold tracking-wider px-2.5 py-1 rounded-lg w-fit
                                         ${isZero 
                                             ? 'bg-slate-100 text-slate-400 dark:bg-slate-800' 

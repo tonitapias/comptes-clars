@@ -103,18 +103,21 @@ function TripView() {
                 aria-controls={`panel-${tab}`}
                 id={`tab-${tab}`}
                 tabIndex={isActive ? 0 : -1}
+                // FIX A11Y: Millorat feedback visual (ring, shadow, stroke) per no dependre només del color
                 className={`
                   flex-1 py-2.5 text-sm font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 relative z-10
                   focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:focus-visible:ring-offset-slate-900
                   ${isActive 
-                    ? 'bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 shadow-sm' 
-                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200'
+                    ? 'bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 shadow-md ring-1 ring-indigo-200 dark:ring-indigo-500/30' 
+                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 border border-transparent'
                   }
                 `}
               >
-                  {tab === 'expenses' && <Receipt size={16} aria-hidden="true" />}
-                  {tab === 'balances' && <Wallet size={16} aria-hidden="true" />}
-                  {tab === 'settle' && <CheckCircle2 size={16} aria-hidden="true" />}
+                  {/* FIX VISUAL: strokeWidth augmentat (2.5 vs 2) quan està actiu per donar "pes" a la icona */}
+                  {tab === 'expenses' && <Receipt size={16} strokeWidth={isActive ? 2.5 : 2} aria-hidden="true" />}
+                  {tab === 'balances' && <Wallet size={16} strokeWidth={isActive ? 2.5 : 2} aria-hidden="true" />}
+                  {tab === 'settle' && <CheckCircle2 size={16} strokeWidth={isActive ? 2.5 : 2} aria-hidden="true" />}
+                  
                   <span className={isActive ? "inline" : "hidden sm:inline"}>
                     {tab === 'expenses' ? 'Despeses' : tab === 'balances' ? 'Balanç' : 'Liquidar'}
                   </span>
@@ -160,10 +163,7 @@ function TripView() {
         </div>
       </main>
       
-      {/* --- BOTÓ FLOTANT (FAB) OPTIMITZAT V2 --- 
-          - Millora Dark Mode: afegit dark:border i dark:shadow amb color
-          - Animació: animate-scale-in per entrada suau
-      */}
+      {/* --- BOTÓ FLOTANT (FAB) OPTIMITZAT V2 --- */}
       <button 
         onClick={() => modals.openExpenseModal(null)} 
         className="

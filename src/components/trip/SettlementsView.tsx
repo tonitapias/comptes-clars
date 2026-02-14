@@ -1,9 +1,12 @@
+// src/components/trip/SettlementsView.tsx
 import React, { useMemo } from 'react';
 import { ArrowRight, CheckCircle2, ThumbsUp } from 'lucide-react';
 import { Settlement } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
 import { useTrip } from '../../context/TripContext';
-import Button from '../Button'; // Importem el component Button millorat
+import Button from '../Button';
+// IMPORT DRY:
+import { getAvatarColor } from '../../utils/ui';
 
 interface SettlementsViewProps {
   settlements: Settlement[];
@@ -38,14 +41,14 @@ export default function SettlementsView({ settlements, onSettle }: SettlementsVi
   }
 
   return (
-    <div className="space-y-6 animate-fade-in pb-4">
-        {/* Banner Informatiu */}
-        <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-2xl flex gap-3 items-start border border-indigo-100 dark:border-indigo-900/30">
-            <div className="bg-indigo-100 dark:bg-indigo-800 p-1.5 rounded-full text-indigo-600 dark:text-indigo-300 mt-0.5 shrink-0">
-               <ArrowRight size={16} aria-hidden="true" />
+    <div className="space-y-4 animate-fade-in pb-4">
+        {/* Banner Informatiu (Més compacte) */}
+        <div className="bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-2xl flex gap-3 items-center border border-indigo-100 dark:border-indigo-900/30">
+            <div className="bg-indigo-100 dark:bg-indigo-800 p-1.5 rounded-full text-indigo-600 dark:text-indigo-300 shrink-0">
+               <ArrowRight size={14} aria-hidden="true" />
             </div>
-            <p className="text-sm text-indigo-900 dark:text-indigo-200 font-medium leading-relaxed">
-                Aquest és el pla òptim per liquidar tots els deutes del grup amb el mínim de moviments possibles.
+            <p className="text-xs text-indigo-900 dark:text-indigo-200 font-medium leading-relaxed">
+                Pla òptim per liquidar deutes amb el mínim de moviments.
             </p>
         </div>
 
@@ -54,68 +57,68 @@ export default function SettlementsView({ settlements, onSettle }: SettlementsVi
             const creditor = getUser(settlement.to);
             const settleKey = `${settlement.from}-${settlement.to}-${settlement.amount}`;
 
+            // Utilitzem el helper DRY per als colors
+            const debtorColor = getAvatarColor(debtor?.name || '?');
+            const creditorColor = getAvatarColor(creditor?.name || '?');
+
             return (
                 <div 
                     key={settleKey} 
-                    className="group bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden transition-all hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-900"
+                    // FIX VISUAL: Eliminat 'hover:border-indigo-200' en dark mode per evitar "glow"
+                    className="group bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden transition-all hover:shadow-md dark:hover:shadow-none dark:hover:border-slate-700"
                 >
                     <div className="flex flex-col sm:flex-row">
                         
-                        {/* ZONA 1: CONTEXT (QUI PAGA A QUI) - Fons neutre */}
-                        <div className="p-5 flex-1 flex items-center justify-between gap-4">
+                        {/* ZONA 1: CONTEXT (Compactada) */}
+                        <div className="p-4 flex-1 flex items-center justify-between gap-2 sm:gap-4">
                             {/* Pagador */}
-                            <div className="flex flex-col items-center w-20 shrink-0">
-                                <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-2 overflow-hidden border-2 border-rose-100 dark:border-rose-900/30 shadow-sm">
+                            <div className="flex flex-col items-center w-16 shrink-0">
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-1.5 overflow-hidden shadow-sm ${debtorColor}`}>
                                     {debtor?.photoUrl ? (
                                         <img src={debtor.photoUrl} alt="" className="w-full h-full object-cover" />
                                     ) : (
-                                        <span className="text-lg font-bold text-slate-500">{debtor?.name.charAt(0)}</span>
+                                        <span className="text-sm font-black">{debtor?.name.charAt(0)}</span>
                                     )}
                                 </div>
-                                <span className="font-bold text-xs text-slate-700 dark:text-slate-300 truncate w-full text-center block leading-tight">
+                                <span className="font-bold text-[10px] text-slate-600 dark:text-slate-400 truncate w-full text-center">
                                     {debtor?.name || 'Usuari'}
                                 </span>
                             </div>
 
-                            {/* Fletxa animada en hover */}
-                            <div className="flex-1 flex flex-col items-center px-2">
-                                <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">PAGA A</span>
-                                <div className="h-1 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden relative">
-                                     <div className="absolute inset-0 bg-indigo-500/20 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out" />
-                                </div>
-                                <ArrowRight size={16} className="text-slate-300 dark:text-slate-600 mt-1" aria-hidden="true" />
+                            {/* Fletxa animada */}
+                            <div className="flex-1 flex flex-col items-center px-2 opacity-50 group-hover:opacity-100 transition-opacity">
+                                <span className="text-[9px] text-slate-400 font-black uppercase tracking-widest mb-1">PAGA A</span>
+                                <ArrowRight size={16} className="text-slate-300 dark:text-slate-600" aria-hidden="true" />
                             </div>
 
                             {/* Receptor */}
-                            <div className="flex flex-col items-center w-20 shrink-0">
-                                <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-2 overflow-hidden border-2 border-emerald-100 dark:border-emerald-900/30 shadow-sm">
+                            <div className="flex flex-col items-center w-16 shrink-0">
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-1.5 overflow-hidden shadow-sm ${creditorColor}`}>
                                     {creditor?.photoUrl ? (
                                         <img src={creditor.photoUrl} alt="" className="w-full h-full object-cover" />
                                     ) : (
-                                        <span className="text-lg font-bold text-slate-500">{creditor?.name.charAt(0)}</span>
+                                        <span className="text-sm font-black">{creditor?.name.charAt(0)}</span>
                                     )}
                                 </div>
-                                <span className="font-bold text-xs text-slate-700 dark:text-slate-300 truncate w-full text-center block leading-tight">
+                                <span className="font-bold text-[10px] text-slate-600 dark:text-slate-400 truncate w-full text-center">
                                     {creditor?.name || 'Usuari'}
                                 </span>
                             </div>
                         </div>
 
-                        {/* ZONA 2: ACCIÓ (IMPORT I BOTÓ) - Fons diferenciat */}
-                        <div className="bg-slate-50 dark:bg-slate-800/50 p-5 sm:w-64 flex flex-col items-center justify-center gap-3 border-t sm:border-t-0 sm:border-l border-slate-100 dark:border-slate-800 border-dashed">
-                            <div className="text-center">
-                                <span className="block text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tighter">
+                        {/* ZONA 2: ACCIÓ (Compactada) */}
+                        <div className="bg-slate-50 dark:bg-slate-800/30 p-3 sm:w-56 flex flex-row sm:flex-col items-center justify-between sm:justify-center gap-3 border-t sm:border-t-0 sm:border-l border-slate-100 dark:border-slate-800">
+                            <div className="text-left sm:text-center pl-2 sm:pl-0">
+                                <span className="block text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight tabular-nums">
                                     {formatCurrency(settlement.amount, currency)}
                                 </span>
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Pendent</span>
                             </div>
                             
                             <Button 
-                                variant="primary" // Acció principal = Primary
+                                variant="primary"
                                 onClick={() => onSettle(settlement)} 
-                                className="w-full text-sm shadow-indigo-200 dark:shadow-none"
+                                className="text-xs px-4 py-2 h-9 shadow-indigo-200 dark:shadow-none"
                                 icon={CheckCircle2}
-                                aria-label={`Liquidar deute de ${formatCurrency(settlement.amount, currency)} de ${debtor?.name} a ${creditor?.name}`}
                             >
                                 Liquidar
                             </Button>

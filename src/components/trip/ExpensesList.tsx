@@ -5,6 +5,8 @@ import { CATEGORIES } from '../../utils/constants';
 import { Expense, CategoryId, TripUser } from '../../types';
 import { formatCurrency, formatDateDisplay } from '../../utils/formatters';
 import { useTrip } from '../../context/TripContext';
+// NEW IMPORT:
+import { getAvatarColor } from '../../utils/ui';
 
 interface ExpensesListProps {
   expenses: Expense[];
@@ -16,28 +18,11 @@ interface ExpensesListProps {
   isSearching: boolean;
 }
 
-const getAvatarColor = (name: string) => {
-  const colors = [
-    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 border-red-200 dark:border-red-800', 
-    'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-blue-200 dark:border-blue-800', 
-    'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800', 
-    'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800',
-    'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border-purple-200 dark:border-purple-800',
-    'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300 border-pink-200 dark:border-pink-800',
-    'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800',
-  ];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return colors[Math.abs(hash) % colors.length];
-};
-
 const PAGE_SIZE = 20;
 
 const ExpenseSkeleton = () => (
-  <div className="bg-surface-card p-5 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center gap-4 animate-pulse">
-    <div className="w-12 h-12 rounded-2xl bg-surface-ground flex-shrink-0" />
+  <div className="bg-surface-card p-5 rounded-3xl border border-slate-100 dark:border-slate-800 flex items-center gap-4 animate-pulse">
+    <div className="w-12 h-12 rounded-3xl bg-surface-ground flex-shrink-0" />
     <div className="flex-1 space-y-3">
        <div className="h-4 bg-surface-ground rounded-full w-2/3" />
        <div className="h-3 bg-surface-ground rounded-full w-1/3" />

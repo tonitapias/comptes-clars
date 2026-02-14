@@ -10,6 +10,17 @@ import { useExpenseForm } from '../../hooks/useExpenseForm';
 import { useTrip } from '../../context/TripContext';
 import { formatMoney } from '../../utils/formatters';
 
+// --- HELPERS VISUALS ---
+
+// FIX UX: Escalat dinàmic de la font per evitar desbordaments en xifres grans
+const getAmountFontSize = (value: string) => {
+  const len = value.length;
+  if (len > 12) return 'text-xl';
+  if (len > 9) return 'text-2xl';
+  if (len > 6) return 'text-3xl';
+  return 'text-4xl';
+};
+
 // --- SUBCOMPONENTS ---
 
 interface SplitModeSelectorProps {
@@ -139,11 +150,6 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
   // 2. MILLORA UX: Validació estricta d'entrada (Només un punt/coma i màxim 2 decimals)
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    
-    // Regex: 
-    // ^\d* -> Comença amb dígits (pot ser buit)
-    // ([.,]\d{0,2})? -> Opcionalment un grup amb punt O coma seguit de 0 a 2 dígits
-    // $          -> Final de cadena
     const isValidFormat = /^\d*([.,]\d{0,2})?$/.test(val);
 
     if (isValidFormat) {
@@ -170,11 +176,12 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                         value={formState.amount} 
                         onChange={handleAmountChange} 
                         className={`
-                            w-full p-4 pl-12 text-4xl font-black rounded-2xl outline-none transition-all duration-200
+                            w-full p-4 pl-12 font-black rounded-2xl outline-none transition-all duration-200
                             bg-slate-50 dark:bg-slate-900 
                             border-2 border-slate-100 dark:border-slate-800
                             focus:border-indigo-500 focus:bg-white dark:focus:bg-black focus:shadow-xl focus:shadow-indigo-500/10
                             placeholder:text-slate-300 dark:placeholder:text-slate-700
+                            ${getAmountFontSize(formState.amount)}
                             ${exactSplitStats?.isOverAllocated ? 'border-rose-500 text-rose-600 focus:border-rose-500' : 'text-slate-900 dark:text-white'}
                         `}
                     />
@@ -307,7 +314,6 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                                         value={formState.splitDetails[u.id] ?? ''} 
                                         onChange={(e) => {
                                             const val = e.target.value;
-                                            // Apliquem la mateixa lògica de validació aquí també per consistència
                                             if (/^\d*([.,]\d{0,2})?$/.test(val)) {
                                                 logic.handleDetailChange(u.id, val);
                                             }
