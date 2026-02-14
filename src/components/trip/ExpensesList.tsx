@@ -17,6 +17,10 @@ interface ExpensesListProps {
 
 const PAGE_SIZE = 20;
 
+// Definició de l'alçada del header per sincronitzar l'sticky (aprox 140px)
+// Això evita el "magic number" dispers i centralitza la constant visual.
+const HEADER_HEIGHT_CLASS = "top-[8.5rem]"; 
+
 const ExpenseSkeleton = () => (
   <div className="bg-surface-card p-4 rounded-3xl border border-slate-100 dark:border-slate-800 flex items-center gap-4 animate-pulse">
     <div className="w-12 h-12 rounded-2xl bg-surface-ground flex-shrink-0" />
@@ -77,9 +81,14 @@ export default function ExpensesList({
   return (
     <div className="space-y-2 animate-fade-in pb-32"> 
       
-      {/* --- SEARCH & FILTERS (Sticky Millorat) --- */}
-      {/* Z-Index: sticky (40) definit al tailwind.config */}
-      <div className="flex flex-col gap-3 sticky top-0 z-sticky bg-surface-ground/95 backdrop-blur-xl py-4 -mx-4 px-4 transition-all border-b border-transparent shadow-sm shadow-slate-200/50 dark:shadow-none" role="search">
+      {/* --- SEARCH & FILTERS (Sticky) --- */}
+      {/* UX FIX: Afegim un fons sòlid amb lleuger blur per millorar la lectura quan es fa scroll.
+          Augmentem el z-index a 'sticky' (40) per assegurar que queda per sobre de la llista.
+      */}
+      <div 
+        className="flex flex-col gap-3 sticky top-0 z-sticky bg-surface-ground/95 backdrop-blur-xl py-4 -mx-4 px-4 transition-all border-b border-slate-200/50 dark:border-slate-800/50 shadow-sm" 
+        role="search"
+      >
         {/* Search Input */}
         <div className="relative group">
           <label htmlFor="search-expenses" className="sr-only">Cerca despeses</label>
@@ -90,7 +99,7 @@ export default function ExpensesList({
             placeholder="Cerca per concepte..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-3.5 bg-surface-card border border-slate-200 dark:border-slate-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all shadow-sm text-content-body placeholder:text-content-subtle font-medium text-base"
+            className="w-full pl-12 pr-4 py-3.5 bg-surface-card border border-slate-200 dark:border-slate-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all shadow-sm text-content-body placeholder:text-content-subtle font-medium text-base appearance-none"
           />
           {isSearching && (
              <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
@@ -100,13 +109,21 @@ export default function ExpensesList({
         </div>
         
         {/* Category Pills */}
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar mask-gradient-right" role="tablist" aria-label="Filtre per categories">
+        {/* A11y FIX: Canviat 'no-scrollbar' per 'custom-scrollbar' per permetre l'ús amb ratolí.
+            Afegit padding-bottom extra per evitar que la scrollbar talli el contingut.
+        */}
+        <div 
+            className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar mask-gradient-right" 
+            role="tablist" 
+            aria-label="Filtre per categories"
+        >
             <button
                  onClick={() => setFilterCategory('all')}
                  role="tab"
                  aria-selected={filterCategory === 'all'}
                  className={`
                     flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-all text-sm font-bold select-none active:scale-95 border
+                    focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-primary
                     ${filterCategory === 'all'
                         ? 'bg-content-body text-surface-card border-content-body shadow-md' 
                         : 'bg-surface-card border-slate-200 dark:border-slate-800 text-content-muted hover:bg-slate-100 dark:hover:bg-slate-800'}
@@ -122,6 +139,7 @@ export default function ExpensesList({
                     aria-selected={filterCategory === cat.id}
                     className={`
                         flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-all text-sm font-bold select-none active:scale-95 border
+                        focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-primary
                         ${filterCategory === cat.id 
                             ? 'bg-primary text-white border-primary shadow-md shadow-indigo-200/50 dark:shadow-none' 
                             : 'bg-surface-card border-slate-200 dark:border-slate-800 text-content-muted hover:bg-slate-100 dark:hover:bg-slate-800'}
@@ -141,15 +159,17 @@ export default function ExpensesList({
              {Array.from({ length: 4 }).map((_, i) => <ExpenseSkeleton key={i} />)}
            </div>
         ) : expenses.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-24 text-content-subtle animate-fade-in text-center px-6 opacity-80">
+            <div className="flex flex-col items-center justify-center py-24 text-content-subtle animate-fade-in text-center px-6">
                 <div className="bg-surface-elevated p-8 rounded-full mb-6 shadow-financial-sm border border-slate-100 dark:border-slate-800">
-                    <Receipt className="w-12 h-12 text-content-subtle" aria-hidden="true" />
+                    <Receipt className="w-12 h-12 text-content-subtle opacity-50" aria-hidden="true" />
                 </div>
-                <h3 className="font-bold text-xl text-content-body mb-2">No hi ha despeses</h3>
-                <p className="text-sm text-content-muted max-w-[200px]">
+                <h3 className="font-bold text-xl text-content-body mb-2">
+                    {searchQuery ? 'Cap resultat trobat' : 'No hi ha despeses'}
+                </h3>
+                <p className="text-sm text-content-muted max-w-[240px] leading-relaxed">
                     {searchQuery || filterCategory !== 'all' 
-                      ? "Prova de canviar els filtres de cerca." 
-                      : "Afegeix la primera despesa per començar a repartir."}
+                      ? "Prova de canviar els termes de cerca o netejar els filtres." 
+                      : "Afegeix la teva primera despesa amb el botó '+' per començar."}
                 </p>
             </div>
         ) : (
@@ -168,13 +188,16 @@ export default function ExpensesList({
                     <React.Fragment key={expense.id}>
                         {/* --- DATE HEADER (Smart Sticky) --- */}
                         {showDateHeader && (
-                            // ADJUSTED: Top-32 (128px) to clear the search bar + pills safely
-                            <li className="sticky top-32 z-20 py-3 flex justify-center pointer-events-none">
+                            /* UX FIX: Utilitzem HEADER_HEIGHT_CLASS per al posicionament sticky.
+                               Millora de contrast: bg-surface-ground amb opacitat total (o molt alta) 
+                               i vora subtil per separar-ho del contingut que passa per sota.
+                            */
+                            <li className={`sticky ${HEADER_HEIGHT_CLASS} z-30 py-3 flex justify-center pointer-events-none transition-[top]`}>
                                 <div className={`
-                                    px-4 py-1.5 rounded-full text-[11px] uppercase tracking-wider font-black shadow-sm backdrop-blur-md border
+                                    px-4 py-1.5 rounded-full text-[11px] uppercase tracking-wider font-black shadow-sm border backdrop-blur-md
                                     ${isToday 
-                                        ? 'bg-primary/90 text-white border-primary/20 shadow-indigo-500/20' 
-                                        : 'bg-surface-elevated/95 text-content-muted border-slate-200/60 dark:border-slate-700/60'}
+                                        ? 'bg-primary text-white border-primary shadow-indigo-500/20' 
+                                        : 'bg-surface-elevated text-content-body border-slate-200 dark:border-slate-700 shadow-sm'}
                                 `}>
                                     {displayDate}
                                 </div>
@@ -211,7 +234,6 @@ export default function ExpensesList({
                                         </div>
                                         
                                         <div className="flex items-center gap-2 text-xs text-content-muted truncate">
-                                             {/* Payer Name Simple */}
                                              <span className="font-semibold text-content-body">{payerName}</span>
                                              <span className="text-content-subtle">•</span>
                                              <span>

@@ -52,7 +52,8 @@ export default function BalancesView({ balances, categoryStats, onFilterCategory
                         <button 
                             key={stat.id} 
                             onClick={() => onFilterCategory?.(stat.id)}
-                            className="flex items-center justify-between p-3 rounded-2xl hover:bg-surface-ground transition-all group w-full text-left border border-transparent hover:border-slate-200 dark:hover:border-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.98]"
+                            // A11y FIX: min-h-[52px] per garantir una àrea de toc còmoda en mòbils.
+                            className="group flex items-center justify-between p-3 min-h-[52px] rounded-2xl hover:bg-surface-ground transition-all w-full text-left border border-transparent hover:border-slate-200 dark:hover:border-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.98]"
                             title={`Filtrar per ${stat.label}`}
                             aria-label={`Veure ${stat.label}: ${formatCurrency(stat.amount, currency)}`}
                         >
@@ -71,8 +72,7 @@ export default function BalancesView({ balances, categoryStats, onFilterCategory
                                         {Math.round(stat.percentage)}%
                                     </div>
                                 </div>
-                                {/* Fletxa indicadora d'acció */}
-                                <ChevronRight size={16} className="text-content-subtle opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
+                                <ChevronRight size={16} className="text-content-subtle opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" aria-hidden="true" />
                             </div>
                         </button>
                     ))}
@@ -80,7 +80,7 @@ export default function BalancesView({ balances, categoryStats, onFilterCategory
             </div>
         </section>
 
-        {/* --- SECCIÓ 2: ESTAT DELS COMPTES (A11y Optimized) --- */}
+        {/* --- SECCIÓ 2: ESTAT DELS COMPTES (A11y & Colors Semàntics) --- */}
         <section className="space-y-4">
             <h3 className="text-xl font-black text-content-body px-2 flex items-center gap-3">
                 <span className="text-2xl" role="img" aria-hidden="true">⚖️</span> 
@@ -92,8 +92,10 @@ export default function BalancesView({ balances, categoryStats, onFilterCategory
                     const isZero = balance.amount === ZERO;
                     const user = userMap[balance.userId];
                     const userName = user?.name || 'Usuari Desconegut';
+                    
+                    // Lògica de colors millorada (Semàntica)
                     const avatarClasses = isZero 
-                        ? 'bg-slate-100 text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700 grayscale'
+                        ? 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:border-slate-700 grayscale'
                         : getAvatarColor(userName);
 
                     return (
@@ -117,21 +119,22 @@ export default function BalancesView({ balances, categoryStats, onFilterCategory
                                 <div className="flex flex-col gap-1.5"> 
                                     <span className="font-black text-content-body text-lg leading-tight">{userName}</span>
                                     
-                                    {/* STATUS BADGE - A11y Friendly */}
+                                    {/* STATUS BADGE - Utilitzem tokens semàntics (status-success/error) */}
+                                    {/* A11y: El text ara utilitza la variant '600' definida al config per a millor contrast */}
                                     <div className={`
                                         inline-flex items-center gap-1.5 px-3 py-1 rounded-full w-fit border text-xs font-bold uppercase tracking-wide
                                         ${isZero 
-                                            ? 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700' 
+                                            ? 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700' 
                                             : isPositive 
-                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-900/50' 
-                                                : 'bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-900/50'}
+                                                ? 'bg-status-success/10 text-status-success border-status-success/20 dark:bg-status-success/20 dark:border-status-success/30' 
+                                                : 'bg-status-error/10 text-status-error border-status-error/20 dark:bg-status-error/20 dark:border-status-error/30'}
                                     `}>
                                         {isZero ? (
-                                            <><CheckCircle2 size={12} strokeWidth={3} /> Està en pau</>
+                                            <><CheckCircle2 size={12} strokeWidth={3} aria-hidden="true" /> Està en pau</>
                                         ) : isPositive ? (
-                                            <><TrendingUp size={12} strokeWidth={3} /> Ha de cobrar</>
+                                            <><TrendingUp size={12} strokeWidth={3} aria-hidden="true" /> Ha de cobrar</>
                                         ) : (
-                                            <><TrendingDown size={12} strokeWidth={3} /> Ha de pagar</>
+                                            <><TrendingDown size={12} strokeWidth={3} aria-hidden="true" /> Ha de pagar</>
                                         )}
                                     </div>
                                 </div>
@@ -143,8 +146,8 @@ export default function BalancesView({ balances, categoryStats, onFilterCategory
                                     ${isZero 
                                         ? 'text-slate-300 dark:text-slate-700' 
                                         : isPositive 
-                                            ? 'text-emerald-500 dark:text-emerald-400' 
-                                            : 'text-rose-500 dark:text-rose-400'}
+                                            ? 'text-status-success' 
+                                            : 'text-status-error'}
                                 `}>
                                     {isPositive ? '+' : ''}{formatCurrency(balance.amount, currency)}
                                 </span>
