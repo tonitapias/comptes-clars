@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Plus, ArrowRight, Wallet, Loader2, LogOut, ChevronRight, 
-  Sparkles, KeyRound, CreditCard, PieChart, ShieldCheck, FolderGit2 
+  Sparkles, KeyRound, CreditCard, PieChart, ShieldCheck, FolderGit2,
+  AlertTriangle 
 } from 'lucide-react';
 import { signOut, User } from 'firebase/auth';
 
@@ -12,6 +13,8 @@ import { TripService } from '../services/tripService';
 import { CURRENCIES } from '../utils/constants';
 import { TripData, TripUser } from '../types'; 
 import Modal from '../components/Modal';
+import Button from '../components/Button';
+import { useToast } from '../components/Toast'; // Importem el hook de Toast
 
 // Components nous refactoritzats
 import BentoCard from '../components/landing/BentoCard';
@@ -29,12 +32,22 @@ export default function LandingPage({ user }: LandingPageProps) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const inviteCode = searchParams.get('join');
+  const { toast, showToast } = useToast(); // Hook per a notificacions
   
   const [myTrips, setMyTrips] = useState<TripData[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(false);
   const [actionState, setActionState] = useState<ActionState>('idle');
   
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
+  // Estat per al Modal de Confirmació (Substitueix window.confirm)
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    tripId: string;
+    tripName: string;
+    internalUserId?: string;
+  }>({ isOpen: false, tripId: '', tripName: '' });
+  const [isLeaving, setIsLeaving] = useState(false);
 
   const [inputValue, setInputValue] = useState('');
   const [creatorName, setCreatorName] = useState('');
@@ -74,7 +87,8 @@ export default function LandingPage({ user }: LandingPageProps) {
         });
         setMyTrips(trips);
       } catch (e) { 
-          console.error("Error carregant viatges:", e); 
+          console.error("Error carregant viatges:", e);
+          showToast("Error carregant els teus projectes", "error");
       } finally { 
           setLoadingTrips(false); 
       }
@@ -91,9 +105,11 @@ export default function LandingPage({ user }: LandingPageProps) {
         try {
           await TripService.joinTripViaLink(inviteCode, user);
           setSearchParams({});
+          showToast("T'has unit al projecte correctament!", "success");
           navigate(`/trip/${inviteCode}`);
         } catch (error) {
           console.error("Error en auto-join:", error);
+          showToast("L'enllaç d'invitació no és vàlid o ha caducat", "error");
         } finally {
           setIsJoining(false);
         }
@@ -123,14 +139,16 @@ export default function LandingPage({ user }: LandingPageProps) {
         setIsSubmitting(true);
         try {
             await TripService.joinTripViaLink(inputValue.trim(), user);
+            showToast("T'has unit al grup!", "success");
             navigate(`/trip/${inputValue.trim()}`);
-        } catch (err) { alert("Codi invàlid"); } finally { setIsSubmitting(false); }
+        } catch (err) { 
+            showToast("Codi de projecte invàlid o no trobat", "error");
+        } finally { setIsSubmitting(false); }
     } else if (actionState === 'creating' && user) {
         setIsSubmitting(true);
         try {
             const newId = Math.random().toString(36).substring(2, 9);
             
-            // CONSTRUCCIÓ SEGURA DE L'USUARI
             const newTripUser: TripUser = {
                 id: crypto.randomUUID(),
                 name: creatorName.trim() || user.displayName?.split(' ')[0] || 'Admin',
@@ -152,26 +170,42 @@ export default function LandingPage({ user }: LandingPageProps) {
             };
             
             await TripService.createTrip(newTrip);
+            showToast("Projecte creat correctament!", "success");
             navigate(`/trip/${newId}`);
         } catch (err) { 
             console.error(err);
-            alert("Error creant el projecte"); 
+            showToast("No s'ha pogut crear el projecte", "error"); 
         } finally { setIsSubmitting(false); }
     }
   };
 
-  const handleLeaveTrip = async (e: React.MouseEvent, tripId: string, internalUserId: string | undefined, tripName: string) => {
+  // Obre el modal de confirmació en lloc d'usar window.confirm
+  const requestLeaveTrip = (e: React.MouseEvent, tripId: string, internalUserId: string | undefined, tripName: string) => {
     e.stopPropagation();
-    if (!window.confirm(`Vols eliminar "${tripName}" de la llista?`)) return;
-    
+    setConfirmModal({
+        isOpen: true,
+        tripId,
+        tripName,
+        internalUserId
+    });
+  };
+
+  // Executa l'acció real de sortir/eliminar
+  const confirmLeaveTrip = async () => {
+    if (!confirmModal.tripId) return;
+    setIsLeaving(true);
     try {
-        if (internalUserId) {
-            await TripService.leaveTrip(tripId, internalUserId);
+        if (confirmModal.internalUserId) {
+            await TripService.leaveTrip(confirmModal.tripId, confirmModal.internalUserId);
         }
-        setMyTrips(prev => prev.filter(t => t.id !== tripId));
+        setMyTrips(prev => prev.filter(t => t.id !== confirmModal.tripId));
+        showToast(`Has sortit de "${confirmModal.tripName}"`, "success");
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
     } catch (err) { 
         console.error("Error al sortir:", err);
-        alert("Error al sortir del grup"); 
+        showToast("Error al sortir del grup. Torna-ho a provar.", "error");
+    } finally {
+        setIsLeaving(false);
     }
   };
 
@@ -180,10 +214,12 @@ export default function LandingPage({ user }: LandingPageProps) {
   if (isJoining) return <div className="min-h-screen flex items-center justify-center bg-surface-ground"><Loader2 className="animate-spin text-primary w-10 h-10"/></div>;
 
   return (
-    // FONS: Nou gradient subtil i professional
     <div className="min-h-screen bg-surface-ground flex flex-col items-center p-4 md:p-8 font-sans transition-colors duration-300 relative overflow-x-hidden selection:bg-primary/20">
       
-      {/* Decorative Gradient Mesh (Molt més lleuger que els blobs anteriors) */}
+      {/* Toast Notification Container */}
+      {toast}
+
+      {/* Decorative Gradient Mesh */}
       <div className="fixed inset-0 pointer-events-none z-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-100/40 via-transparent to-transparent dark:from-indigo-900/10"></div>
 
       <div className="w-full max-w-6xl relative z-10 flex flex-col gap-8 h-full">
@@ -234,7 +270,6 @@ export default function LandingPage({ user }: LandingPageProps) {
 
                     {/* HERO CARD (Input & CTA) */}
                     <div className="w-full max-w-md relative group">
-                        {/* Glow effect sota la targeta */}
                         <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-[2rem] blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
                         
                         <div className="relative bg-surface-card rounded-[1.5rem] p-6 border border-slate-100 dark:border-slate-800 shadow-financial-lg">
@@ -266,7 +301,6 @@ export default function LandingPage({ user }: LandingPageProps) {
                     </div>
 
                     <div className="grid md:grid-cols-3 gap-5 w-full max-w-5xl mt-8">
-                        {/* Utilitzem els nous BentoCards amb colors semàntics */}
                         <BentoCard icon={CreditCard} title="Ràpid" desc="Afegeix despeses en segons. Reparteix automàticament." color="bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400"/>
                         <BentoCard icon={PieChart} title="Transparent" desc="Tothom veu el mateix. Sincronització instantània." color="bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400"/>
                         <BentoCard icon={ShieldCheck} title="Just" desc="Algoritme de deute mínim. Liquida amb pocs moviments." color="bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400"/>
@@ -342,7 +376,7 @@ export default function LandingPage({ user }: LandingPageProps) {
                                     trip={trip} 
                                     currentUser={user} 
                                     onNavigate={(id) => navigate(`/trip/${id}`)} 
-                                    onLeave={handleLeaveTrip} 
+                                    onLeave={requestLeaveTrip} 
                                 />
                             ))
                         ) : (
@@ -358,12 +392,51 @@ export default function LandingPage({ user }: LandingPageProps) {
         </main>
       </div>
 
+      {/* Auth Modal */}
       <Modal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} title="Accés">
         <AuthForm onClose={() => setIsAuthModalOpen(false)} />
       </Modal>
 
+      {/* NEW: Confirmation Modal for Leaving Trip */}
+      <Modal 
+        isOpen={confirmModal.isOpen} 
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))} 
+        title="Sortir del projecte"
+      >
+        <div className="p-4 space-y-6">
+            <div className="bg-rose-50 dark:bg-rose-900/20 p-4 rounded-2xl flex gap-4 border border-rose-100 dark:border-rose-900/30">
+                <div className="bg-white dark:bg-rose-950 p-2 rounded-xl h-fit shadow-sm">
+                    <AlertTriangle className="text-rose-500" size={24} />
+                </div>
+                <div className="space-y-1">
+                    <h4 className="font-bold text-rose-700 dark:text-rose-300">Estàs segur?</h4>
+                    <p className="text-sm text-rose-600/80 dark:text-rose-400 leading-relaxed">
+                        Estàs a punt de sortir de <strong>"{confirmModal.tripName}"</strong>. Si encara tens deutes pendents, hauràs de resoldre'ls abans o contactar amb l'administrador.
+                    </p>
+                </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+                <Button 
+                    variant="secondary" 
+                    fullWidth 
+                    onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                >
+                    Cancel·la
+                </Button>
+                <Button 
+                    variant="danger" 
+                    fullWidth 
+                    loading={isLeaving}
+                    onClick={confirmLeaveTrip}
+                >
+                    Sí, vull sortir
+                </Button>
+            </div>
+        </div>
+      </Modal>
+
       <style>{` 
-        /* Scrollbar personalitzada per a la llista del body si cal */
         .custom-scrollbar::-webkit-scrollbar { width: 4px; } 
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; } 
       `}</style>

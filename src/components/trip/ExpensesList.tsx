@@ -4,7 +4,6 @@ import { CATEGORIES } from '../../utils/constants';
 import { Expense, CategoryId, TripUser } from '../../types';
 import { formatCurrency, formatDateDisplay } from '../../utils/formatters';
 import { useTrip } from '../../context/TripContext';
-import { getAvatarColor } from '../../utils/ui';
 
 interface ExpensesListProps {
   expenses: Expense[];
@@ -76,11 +75,11 @@ export default function ExpensesList({
   const { currency } = tripData;
 
   return (
-    <div className="space-y-4 animate-fade-in pb-32"> {/* Més padding bottom per al FAB */}
+    <div className="space-y-2 animate-fade-in pb-32"> 
       
       {/* --- SEARCH & FILTERS (Sticky Millorat) --- */}
       {/* Z-Index: sticky (40) definit al tailwind.config */}
-      <div className="flex flex-col gap-3 sticky top-0 z-sticky bg-surface-ground/90 backdrop-blur-xl py-3 -mx-4 px-4 transition-all" role="search">
+      <div className="flex flex-col gap-3 sticky top-0 z-sticky bg-surface-ground/95 backdrop-blur-xl py-4 -mx-4 px-4 transition-all border-b border-transparent shadow-sm shadow-slate-200/50 dark:shadow-none" role="search">
         {/* Search Input */}
         <div className="relative group">
           <label htmlFor="search-expenses" className="sr-only">Cerca despeses</label>
@@ -91,7 +90,7 @@ export default function ExpensesList({
             placeholder="Cerca per concepte..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-surface-card border border-slate-200 dark:border-slate-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all shadow-financial-sm text-content-body placeholder:text-content-subtle font-medium text-base"
+            className="w-full pl-12 pr-4 py-3.5 bg-surface-card border border-slate-200 dark:border-slate-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all shadow-sm text-content-body placeholder:text-content-subtle font-medium text-base"
           />
           {isSearching && (
              <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
@@ -142,20 +141,23 @@ export default function ExpensesList({
              {Array.from({ length: 4 }).map((_, i) => <ExpenseSkeleton key={i} />)}
            </div>
         ) : expenses.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-content-subtle animate-fade-in text-center px-6">
-                <div className="bg-surface-elevated p-6 rounded-full mb-4 shadow-financial-sm">
-                    <Receipt className="w-10 h-10 opacity-30" aria-hidden="true" />
+            <div className="flex flex-col items-center justify-center py-24 text-content-subtle animate-fade-in text-center px-6 opacity-80">
+                <div className="bg-surface-elevated p-8 rounded-full mb-6 shadow-financial-sm border border-slate-100 dark:border-slate-800">
+                    <Receipt className="w-12 h-12 text-content-subtle" aria-hidden="true" />
                 </div>
-                <p className="font-bold text-lg text-content-muted">Cap despesa trobada</p>
-                <p className="text-sm opacity-70 mt-1">Prova amb altres filtres o crea'n una de nova.</p>
+                <h3 className="font-bold text-xl text-content-body mb-2">No hi ha despeses</h3>
+                <p className="text-sm text-content-muted max-w-[200px]">
+                    {searchQuery || filterCategory !== 'all' 
+                      ? "Prova de canviar els filtres de cerca." 
+                      : "Afegeix la primera despesa per començar a repartir."}
+                </p>
             </div>
         ) : (
-            <ul className="relative space-y-3">
+            <ul className="relative space-y-3 pt-2">
               {visibleExpenses.map((expense, index) => {
                   const category = CATEGORIES.find(c => c.id === expense.category) || CATEGORIES[0];
                   const isTransfer = expense.category === 'transfer';
                   const payerName = getUserName(expense.payer);
-                  const payerPhoto = userMap[expense.payer]?.photoUrl;
                   const catColorBase = category.color.split('-')[1];
 
                   const showDateHeader = index === 0 || expense.date !== visibleExpenses[index - 1].date;
@@ -166,13 +168,13 @@ export default function ExpensesList({
                     <React.Fragment key={expense.id}>
                         {/* --- DATE HEADER (Smart Sticky) --- */}
                         {showDateHeader && (
-                            // Top-20 (80px) per quedar just sota la search bar
-                            <li className="sticky top-28 z-20 py-2 flex justify-center pointer-events-none">
+                            // ADJUSTED: Top-32 (128px) to clear the search bar + pills safely
+                            <li className="sticky top-32 z-20 py-3 flex justify-center pointer-events-none">
                                 <div className={`
-                                    px-4 py-1 rounded-full text-[11px] uppercase tracking-wider font-black shadow-sm backdrop-blur-md border
+                                    px-4 py-1.5 rounded-full text-[11px] uppercase tracking-wider font-black shadow-sm backdrop-blur-md border
                                     ${isToday 
                                         ? 'bg-primary/90 text-white border-primary/20 shadow-indigo-500/20' 
-                                        : 'bg-surface-elevated/90 text-content-muted border-slate-200/60 dark:border-slate-700/60'}
+                                        : 'bg-surface-elevated/95 text-content-muted border-slate-200/60 dark:border-slate-700/60'}
                                 `}>
                                     {displayDate}
                                 </div>
@@ -239,7 +241,7 @@ export default function ExpensesList({
         
         {/* Loader Final */}
         {hasMore && !isSearching && (
-          <div ref={observerTarget} className="h-20 flex items-center justify-center w-full text-content-subtle opacity-50">
+          <div ref={observerTarget} className="h-24 flex items-center justify-center w-full text-content-subtle opacity-50">
             <Loader2 className="w-5 h-5 animate-spin" />
           </div>
         )}
