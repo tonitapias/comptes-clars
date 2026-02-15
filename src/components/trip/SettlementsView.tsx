@@ -4,7 +4,7 @@ import { Settlement } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
 import { useTrip } from '../../context/TripContext';
 import Button from '../Button';
-import { getAvatarColor } from '../../utils/ui';
+import Avatar from '../Avatar'; // Import arreglat
 
 interface SettlementsViewProps {
   settlements: Settlement[];
@@ -25,7 +25,6 @@ export default function SettlementsView({ settlements, onSettle }: SettlementsVi
 
   const getUser = (id: string) => userMap[id];
 
-  // ESTAT BUIT (Empty State)
   if (settlements.length === 0) {
       return (
           <div className="flex flex-col items-center justify-center py-24 text-center animate-fade-in px-6">
@@ -42,7 +41,6 @@ export default function SettlementsView({ settlements, onSettle }: SettlementsVi
 
   return (
     <div className="space-y-6 animate-fade-in pb-24">
-        {/* Banner Informatiu Millorat */}
         <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-3xl flex gap-4 items-start border border-indigo-100 dark:border-indigo-800 shadow-sm">
             <div className="bg-white dark:bg-indigo-800 p-2 rounded-xl text-primary shadow-sm shrink-0">
                <Wallet size={20} aria-hidden="true" />
@@ -68,22 +66,21 @@ export default function SettlementsView({ settlements, onSettle }: SettlementsVi
                 >
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
                         
-                        {/* 1. VISUALITZACIÓ DEL FLUX (Deutor -> Import -> Creditor) */}
                         <div className="flex-1 w-full flex items-center justify-between sm:justify-start sm:gap-8">
                             
-                            {/* Deutor (Esquerra) */}
+                            {/* Deutor */}
                             <div className="flex flex-col items-center gap-2 w-20">
-                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm text-lg font-bold ${getAvatarColor(debtor?.name)}`}>
-                                    {debtor?.photoUrl ? (
-                                        <img src={debtor.photoUrl} alt="" className="w-full h-full object-cover rounded-2xl" />
-                                    ) : debtor?.name.charAt(0)}
-                                </div>
+                                <Avatar 
+                                    name={debtor?.name || '?'} 
+                                    photoUrl={debtor?.photoUrl} 
+                                    size="lg"
+                                />
                                 <span className="text-xs font-bold text-content-muted truncate w-full text-center">
                                     {debtor?.name}
                                 </span>
                             </div>
 
-                            {/* CENTRE: Fletxa i Import */}
+                            {/* Fletxa i Import */}
                             <div className="flex-1 flex flex-col items-center px-2 relative top-[-4px]">
                                 <span className="text-[10px] uppercase font-black tracking-widest text-content-subtle mb-1">Paga a</span>
                                 <div className="flex items-center gap-2 text-content-subtle opacity-40 mb-1">
@@ -96,27 +93,27 @@ export default function SettlementsView({ settlements, onSettle }: SettlementsVi
                                 </span>
                             </div>
 
-                            {/* Creditor (Dreta) */}
+                            {/* Creditor */}
                             <div className="flex flex-col items-center gap-2 w-20">
-                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm text-lg font-bold ${getAvatarColor(creditor?.name)}`}>
-                                    {creditor?.photoUrl ? (
-                                        <img src={creditor.photoUrl} alt="" className="w-full h-full object-cover rounded-2xl" />
-                                    ) : creditor?.name.charAt(0)}
-                                </div>
+                                <Avatar 
+                                    name={creditor?.name || '?'} 
+                                    photoUrl={creditor?.photoUrl} 
+                                    size="lg"
+                                />
                                 <span className="text-xs font-bold text-content-muted truncate w-full text-center">
                                     {creditor?.name}
                                 </span>
                             </div>
                         </div>
 
-                        {/* 2. ACCIÓ (Botó Liquidar) */}
+                        {/* Botó */}
                         <div className="w-full sm:w-auto pt-4 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800 flex justify-center">
                             <Button 
-                                variant="primary" // Ara utilitza el primary definit al Design System
+                                variant="primary"
                                 onClick={() => onSettle(settlement)} 
                                 className="w-full sm:w-auto px-6 py-3 text-sm"
                                 icon={Check}
-                                haptic="success" // AQUESTA és la màgia ✨
+                                haptic="success"
                             >
                                 Liquidar
                             </Button>

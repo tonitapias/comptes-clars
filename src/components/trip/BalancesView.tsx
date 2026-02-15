@@ -3,8 +3,8 @@ import DonutChart from '../DonutChart';
 import { Balance, CategoryStat, TripUser, toCents } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
 import { useTrip } from '../../context/TripContext';
-import { getAvatarColor } from '../../utils/ui';
 import { ChevronRight, TrendingUp, TrendingDown, CheckCircle2 } from 'lucide-react';
+import Avatar from '../Avatar'; // Import arreglat
 
 interface BalancesViewProps {
   balances: Balance[];
@@ -41,21 +41,17 @@ export default function BalancesView({ balances, categoryStats, onFilterCategory
             </h3>
             
             <div className="flex flex-col md:flex-row items-center gap-10">
-                {/* Chart Container */}
                 <div className="flex-shrink-0 transform hover:scale-105 transition-transform duration-500">
                     <DonutChart data={categoryStats} onSegmentClick={onFilterCategory} />
                 </div>
                 
-                {/* Interactive Legend List */}
                 <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
                     {categoryStats.map((stat) => (
                         <button 
                             key={stat.id} 
                             onClick={() => onFilterCategory?.(stat.id)}
-                            // A11y FIX: min-h-[52px] per garantir una àrea de toc còmoda en mòbils.
                             className="group flex items-center justify-between p-3 min-h-[52px] rounded-2xl hover:bg-surface-ground transition-all w-full text-left border border-transparent hover:border-slate-200 dark:hover:border-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.98]"
                             title={`Filtrar per ${stat.label}`}
-                            aria-label={`Veure ${stat.label}: ${formatCurrency(stat.amount, currency)}`}
                         >
                             <div className="flex items-center gap-3 overflow-hidden">
                                 <div className={`w-4 h-4 rounded-full shadow-sm ring-2 ring-white dark:ring-slate-900 shrink-0 ${stat.barColor}`} />
@@ -80,7 +76,7 @@ export default function BalancesView({ balances, categoryStats, onFilterCategory
             </div>
         </section>
 
-        {/* --- SECCIÓ 2: ESTAT DELS COMPTES (A11y & Colors Semàntics) --- */}
+        {/* --- SECCIÓ 2: BALANÇOS --- */}
         <section className="space-y-4">
             <h3 className="text-xl font-black text-content-body px-2 flex items-center gap-3">
                 <span className="text-2xl" role="img" aria-hidden="true">⚖️</span> 
@@ -93,34 +89,22 @@ export default function BalancesView({ balances, categoryStats, onFilterCategory
                     const user = userMap[balance.userId];
                     const userName = user?.name || 'Usuari Desconegut';
                     
-                    // Lògica de colors millorada (Semàntica)
-                    const avatarClasses = isZero 
-                        ? 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:border-slate-700 grayscale'
-                        : getAvatarColor(userName);
-
                     return (
                         <div 
                             key={balance.userId} 
                             className="group bg-surface-card p-5 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-800 flex items-center justify-between transition-all hover:shadow-financial-md hover:border-slate-200 dark:hover:border-slate-700"
                         >
                             <div className="flex items-center gap-4 sm:gap-5">
-                                <div className={`
-                                    w-16 h-16 rounded-3xl flex items-center justify-center overflow-hidden border-2 transition-transform group-hover:scale-105 shadow-sm
-                                    ${avatarClasses}
-                                `}>
-                                    {user?.photoUrl ? (
-                                      <img src={user.photoUrl} alt="" className="w-full h-full object-cover" />
-                                    ) : (
-                                        <span className="text-2xl font-black select-none">
-                                            {user?.name?.charAt(0).toUpperCase() || '?'}
-                                        </span>
-                                    )}
-                                </div>
+                                <Avatar
+                                    name={userName}
+                                    photoUrl={user?.photoUrl}
+                                    size="xl"
+                                    className={`transition-transform group-hover:scale-105 border-2 ${isZero ? 'grayscale opacity-70' : ''}`}
+                                />
+                                
                                 <div className="flex flex-col gap-1.5"> 
                                     <span className="font-black text-content-body text-lg leading-tight">{userName}</span>
                                     
-                                    {/* STATUS BADGE - Utilitzem tokens semàntics (status-success/error) */}
-                                    {/* A11y: El text ara utilitza la variant '600' definida al config per a millor contrast */}
                                     <div className={`
                                         inline-flex items-center gap-1.5 px-3 py-1 rounded-full w-fit border text-xs font-bold uppercase tracking-wide
                                         ${isZero 

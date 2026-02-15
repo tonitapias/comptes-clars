@@ -1,9 +1,8 @@
-// FITXER: src/components/trip/modals/TripSettingsModal.tsx
-
-import React, { useState, useEffect } from 'react';
-import { Lock, Download, Pencil, Check, X, User as UserIcon, Trash2 } from 'lucide-react'; 
+import React, { useState, useEffect, useRef } from 'react';
+import { Lock, Download, Pencil, Check, X, Trash2 } from 'lucide-react'; 
 import Modal from '../../Modal';
 import Button from '../../Button';
+import Avatar from '../../Avatar'; // Import correcte del nou component
 import { CURRENCIES } from '../../../utils/constants';
 import { TripData, Currency } from '../../../types';
 import { downloadBackup } from '../../../utils/exportData';
@@ -16,7 +15,7 @@ interface TripSettingsModalProps {
   tripData: TripData;
   canChangeCurrency: boolean;
   onUpdateSettings: (name: string, date: string, currency?: Currency) => Promise<boolean>;
-  onDeleteTrip?: () => Promise<void>; // <--- NOVA PROPIETAT OPCIONAL
+  onDeleteTrip?: () => Promise<void>;
 }
 
 export default function TripSettingsModal({
@@ -28,6 +27,10 @@ export default function TripSettingsModal({
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editNameValue, setEditNameValue] = useState('');
   const [isUpdatingUser, setIsUpdatingUser] = useState(false);
+
+  // useRef per mantenir els canvis locals mentre Firebase es sincronitza
+  // Això evita que l'Avatar "salti" a l'estat anterior just després de guardar
+  const pendingUpdates = useRef<Record<string, string>>({});
 
   useEffect(() => {
     if (tripData) {
@@ -42,30 +45,40 @@ export default function TripSettingsModal({
   };
 
   const handleUpdateUserName = async (userId: string) => {
-    if (!editNameValue.trim()) return;
+    // Permetem espais al final (no fem trim aquí per UX) però si està buit no fem res
+    if (!editNameValue || !editNameValue.trim()) return;
+    
+    if (!tripData?.id) {
+        console.error("No s'ha trobat l'ID del viatge");
+        return;
+    }
+
     setIsUpdatingUser(true);
+    
+    // Guardem l'estat optimista
+    pendingUpdates.current[userId] = editNameValue;
+
     try {
         await TripService.updateTripUserName(tripData.id, userId, editNameValue);
         setEditingUserId(null);
     } catch (error) {
         console.error("Error canviant nom:", error);
-        alert("No s'ha pogut canviar el nom");
+        // Si falla, esborrem l'optimista
+        delete pendingUpdates.current[userId];
     } finally {
         setIsUpdatingUser(false);
     }
   };
 
-  // Funció pel botó d'eliminar
   const handleDeleteClick = async () => {
     if (!onDeleteTrip) return;
     
     if (confirm("Estàs segur que vols eliminar aquest projecte? Desapareixerà de la teva llista.")) {
       try {
         await onDeleteTrip();
-        onClose(); // Tanquem el modal
-        // La redirecció l'hauria de gestionar el hook o la pàgina principal en detectar l'esborrat
+        onClose(); 
       } catch (error) {
-        alert("Error eliminant el projecte");
+        console.error("Error eliminant el projecte:", error);
       }
     }
   };
@@ -101,62 +114,75 @@ export default function TripSettingsModal({
         <div>
             <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Participants</label>
             <div className="bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
-                {tripData.users.map(user => (
-                    <div key={user.id} className="p-3 border-b border-slate-100 dark:border-slate-700 last:border-0 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-500">
-                             {user.photoUrl ? (
-                                <img src={user.photoUrl} alt={user.name} className="w-full h-full rounded-full object-cover"/>
-                             ) : (
-                                <UserIcon size={16}/>
-                             )}
+                {tripData.users.map(user => {
+                    const isEditing = editingUserId === user.id;
+                    // Lògica de visualització prioritària: Edició > Pendent > Firebase
+                    const displayName = isEditing 
+                        ? editNameValue 
+                        : (pendingUpdates.current[user.id] || user.name);
+
+                    // Forcem feedback visual: Si editem o hi ha canvi pendent, ignorem la foto antiga
+                    const displayPhoto = (isEditing || pendingUpdates.current[user.id]) 
+                        ? null 
+                        : user.photoUrl;
+
+                    return (
+                        <div key={user.id} className="p-3 border-b border-slate-100 dark:border-slate-700 last:border-0 flex items-center gap-3">
+                            <Avatar 
+                                name={displayName} 
+                                photoUrl={displayPhoto} 
+                                size="sm"
+                                className="transition-all duration-300"
+                            />
+                            
+                            <div className="flex-1">
+                                {isEditing ? (
+                                    <div className="flex items-center gap-2 animate-fade-in">
+                                        <input 
+                                            type="text" 
+                                            value={editNameValue}
+                                            onChange={(e) => setEditNameValue(e.target.value)}
+                                            className="flex-1 px-2 py-1 text-sm rounded border border-indigo-300 focus:border-indigo-500 outline-none dark:bg-slate-900 dark:text-white"
+                                            autoFocus
+                                            disabled={isUpdatingUser}
+                                            placeholder="Nom"
+                                        />
+                                        <button 
+                                            onClick={() => handleUpdateUserName(user.id)}
+                                            disabled={isUpdatingUser}
+                                            className="p-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition"
+                                        >
+                                            <Check size={14} />
+                                        </button>
+                                        <button 
+                                            onClick={() => setEditingUserId(null)}
+                                            disabled={isUpdatingUser}
+                                            className="p-1.5 bg-slate-100 text-slate-500 rounded-lg hover:bg-slate-200 transition"
+                                        >
+                                            <X size={14} />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center justify-between group">
+                                        <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                                            {displayName} {user.linkedUid === auth.currentUser?.uid && <span className="text-slate-400 font-normal">(Tu)</span>}
+                                        </span>
+                                        <button 
+                                            onClick={() => {
+                                                setEditingUserId(user.id);
+                                                setEditNameValue(user.name); // Inicialitzem amb el nom actual
+                                            }}
+                                            className="opacity-100 md:opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-indigo-600 transition-all rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
+                                            title="Canviar nom"
+                                        >
+                                            <Pencil size={14} />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                        
-                        <div className="flex-1">
-                            {editingUserId === user.id ? (
-                                <div className="flex items-center gap-2 animate-fade-in">
-                                    <input 
-                                        type="text" 
-                                        value={editNameValue}
-                                        onChange={(e) => setEditNameValue(e.target.value)}
-                                        className="flex-1 px-2 py-1 text-sm rounded border border-indigo-300 focus:border-indigo-500 outline-none dark:bg-slate-900 dark:text-white"
-                                        autoFocus
-                                        disabled={isUpdatingUser}
-                                    />
-                                    <button 
-                                        onClick={() => handleUpdateUserName(user.id)}
-                                        disabled={isUpdatingUser}
-                                        className="p-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition"
-                                    >
-                                        <Check size={14} />
-                                    </button>
-                                    <button 
-                                        onClick={() => setEditingUserId(null)}
-                                        disabled={isUpdatingUser}
-                                        className="p-1.5 bg-slate-100 text-slate-500 rounded-lg hover:bg-slate-200 transition"
-                                    >
-                                        <X size={14} />
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="flex items-center justify-between group">
-                                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
-                                        {user.name} {user.linkedUid === auth.currentUser?.uid && <span className="text-slate-400 font-normal">(Tu)</span>}
-                                    </span>
-                                    <button 
-                                        onClick={() => {
-                                            setEditingUserId(user.id);
-                                            setEditNameValue(user.name);
-                                        }}
-                                        className="opacity-100 md:opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-indigo-600 transition-all rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
-                                        title="Canviar nom"
-                                    >
-                                        <Pencil size={14} />
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
 
@@ -180,11 +206,6 @@ export default function TripSettingsModal({
               </button>
             ))}
           </div>
-          {!canChangeCurrency && (
-            <p className="text-[10px] text-slate-400 mt-1.5">
-              * No es pot canviar la divisa perquè ja hi ha despeses registrades.
-            </p>
-          )}
         </div>
 
         {/* CÒPIA DE SEGURETAT */}
@@ -199,7 +220,7 @@ export default function TripSettingsModal({
            </button>
         </div>
 
-        {/* --- ZONA DE PERILL (ELIMINAR PROJECTE) --- */}
+        {/* ZONA DE PERILL */}
         {onDeleteTrip && (
             <div className="pt-6 border-t border-slate-100 dark:border-slate-700">
             <label className="block text-xs font-bold text-red-500 uppercase mb-2">Zona de Perill</label>

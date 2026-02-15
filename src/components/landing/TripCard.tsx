@@ -2,7 +2,7 @@ import React from 'react';
 import { FolderGit2, Trash2, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { TripData } from '../../types';
-import { getAvatarColor } from '../../utils/ui'; // Reutilitzem la utilitat de colors
+import Avatar from '../Avatar'; // Import arreglat
 
 interface TripCardProps {
     trip: TripData;
@@ -27,7 +27,7 @@ export default function TripCard({ trip, currentUser, onNavigate, onLeave }: Tri
                         <FolderGit2 size={20} strokeWidth={2.5} />
                     </div>
                     
-                    {/* Botó Esborrar (Només visible en hover desktop o sempre en mòbil) */}
+                    {/* Botó Esborrar */}
                     <button 
                         onClick={(e) => onLeave(e, trip.id, currentUserInfo?.id, trip.name)}
                         className="p-2 text-content-subtle hover:text-status-error hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-full transition-colors md:opacity-0 md:group-hover:opacity-100"
@@ -47,13 +47,13 @@ export default function TripCard({ trip, currentUser, onNavigate, onLeave }: Tri
                 <div className="flex items-center justify-between mt-auto">
                     <div className="flex -space-x-2 pl-1">
                         {trip.users?.slice(0, 3).map((u, i) => (
-                            <div key={i} className={`w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 flex items-center justify-center text-[10px] font-bold shadow-sm ${getAvatarColor(u.name)}`}>
-                                {u.photoUrl ? (
-                                    <img src={u.photoUrl} className="w-full h-full object-cover rounded-full" referrerPolicy="no-referrer" alt={u.name} />
-                                ) : (
-                                    u.name?.charAt(0).toUpperCase() || '?'
-                                )}
-                            </div>
+                            <Avatar 
+                                key={i}
+                                name={u.name}
+                                photoUrl={u.photoUrl}
+                                size="sm"
+                                className="border-2 border-white dark:border-slate-900"
+                            />
                         ))}
                         {(trip.users?.length || 0) > 3 && (
                             <div className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-[10px] font-bold text-content-muted shadow-sm">
@@ -69,7 +69,6 @@ export default function TripCard({ trip, currentUser, onNavigate, onLeave }: Tri
                                 <span className="text-[10px] font-bold uppercase tracking-wider">Saldat</span>
                             </div>
                         )}
-                        {/* Fletxa d'acció */}
                         <div className="text-content-subtle group-hover:text-primary transition-colors">
                            <ChevronRight size={20} />
                         </div>
