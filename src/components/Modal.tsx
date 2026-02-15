@@ -1,82 +1,80 @@
-import React, { ReactNode, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
-  title: string;
-  children: ReactNode;
+  title?: string;
+  children: React.ReactNode;
 }
 
-const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
+export default function Modal({ isOpen, onClose, title, children }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
 
-  // UX: Tancar amb la tecla ESC i Bloqueig d'Scroll
+  // Tanquem amb ESC i bloquegem scroll del body
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (isOpen && e.key === 'Escape') {
-        onClose();
-      }
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
     };
-    
+
     if (isOpen) {
-      window.addEventListener('keydown', handleKeyDown);
+      document.addEventListener('keydown', handleEscape);
       document.body.style.overflow = 'hidden';
-      // A11y: Portar el focus al modal quan s'obre
+      // Enfocament automàtic al muntar (opcional per millorar A11y)
       modalRef.current?.focus();
     }
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      // Restaurar scroll de forma segura
-      document.body.style.overflow = '';
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
     };
   }, [isOpen, onClose]);
 
+  // Tanquem si fem click fora (al backdrop)
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   if (!isOpen) return null;
 
-  return (
-    // Backdrop: z-modal (60) per assegurar que està per sobre de sticky headers (40)
+  return createPortal(
+    /* FIX A11Y: Eliminat aria-hidden="true" d'aquest contenidor.
+       El backdrop visual es manté, però ja no amaguem el contingut 
+       als lectors de pantalla mentre té el focus.
+    */
     <div 
       className="fixed inset-0 z-modal flex items-end md:items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in"
-      onClick={onClose}
-      aria-hidden="true" 
+      onClick={handleBackdropClick}
     >
-      
-      {/* Contenidor del Modal */}
       <div 
-        ref={modalRef}
-        // Colors semàntics: bg-surface-elevated
         className="bg-surface-elevated rounded-t-3xl md:rounded-3xl w-full max-w-lg shadow-financial-lg overflow-hidden animate-slide-up max-h-[90vh] flex flex-col transition-colors duration-300 outline-none"
-        onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="modal-title"
-        tabIndex={-1} // Permet fer focus programàticament
+        aria-labelledby={title ? "modal-title" : undefined}
+        tabIndex={-1}
+        ref={modalRef}
       >
+        {title && (
+           <div className="flex justify-between items-center p-5 border-b border-slate-100 dark:border-slate-800 bg-surface-elevated sticky top-0 z-10">
+              <h2 id="modal-title" className="text-lg font-black text-content-body">{title}</h2>
+              <button 
+                onClick={onClose} 
+                className="p-2 -mr-2 text-content-subtle hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+                aria-label="Tancar"
+              >
+                <X size={20} />
+              </button>
+           </div>
+        )}
         
-        {/* Capçalera Sticky */}
-        <div className="flex justify-between items-center p-5 border-b border-slate-100 dark:border-slate-800 bg-surface-elevated sticky top-0 z-10">
-          <h3 id="modal-title" className="text-xl font-bold text-content-body">
-            {title}
-          </h3>
-          
-          <button 
-            onClick={onClose} 
-            className="p-2 -mr-2 hover:bg-surface-ground rounded-full text-content-muted hover:text-content-body transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            aria-label="Tancar"
-          >
-            <X size={24} />
-          </button>
-        </div>
-        
-        {/* Contingut interior */}
         <div className="p-5 overflow-y-auto custom-scrollbar text-content-body">
-            {children}
+          {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
-};
-
-export default Modal;
+}

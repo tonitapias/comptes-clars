@@ -195,7 +195,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
             <div className="relative group w-full max-w-[80%] text-center">
                 <label className="sr-only">Import</label>
                 <div className="flex items-baseline justify-center gap-1">
-                    <span className="text-3xl font-bold text-slate-300 dark:text-slate-600 mb-1">
+                    <span className="text-3xl font-bold text-slate-400 dark:text-slate-500 mb-1 select-none">
                         {currency.symbol}
                     </span>
                     <input 
@@ -208,7 +208,9 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                         value={formState.amount} 
                         onChange={handleAmountChange} 
                         className={`
-                            w-full bg-transparent outline-none font-black text-center text-content-body placeholder:text-slate-200 dark:placeholder:text-slate-700
+                            w-full bg-transparent outline-none font-black text-center text-content-body 
+                            placeholder:text-slate-300 dark:placeholder:text-slate-600
+                            caret-primary tabular-nums
                             transition-all duration-200
                             ${getAmountFontSize(formState.amount)}
                             ${exactSplitStats?.isOverAllocated ? 'text-status-error' : ''}
@@ -227,7 +229,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                     required 
                     value={formState.title} 
                     onChange={(e) => setters.setTitle(e.target.value)} 
-                    className="w-full text-center bg-transparent border-none outline-none text-xl font-bold text-content-body placeholder:text-content-subtle focus:placeholder:text-primary/30 transition-colors"
+                    className="w-full text-center bg-transparent border-none outline-none text-xl font-bold text-content-body placeholder:text-content-subtle focus:placeholder:text-primary/50 transition-colors"
                 />
             </div>
         </div>
@@ -281,7 +283,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                                 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900
                                 ${isSelected 
                                     ? `bg-${colorBase}-50 border-${colorBase}-200 text-${colorBase}-700 dark:bg-${colorBase}-900/30 dark:border-${colorBase}-800 dark:text-${colorBase}-300 shadow-sm ring-1 ring-${colorBase}-200 dark:ring-${colorBase}-800` 
-                                    : 'bg-surface-card border-slate-100 dark:border-slate-800 text-slate-400 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                                    : 'bg-surface-card border-slate-200 dark:border-slate-800 text-slate-400 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50'
                                 }
                             `}
                         >
@@ -300,9 +302,9 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                 <SplitModeSelector currentMode={uiMode} onModeChange={handleModeChange} />
 
                 {formState.splitType === SPLIT_TYPES.EXACT && exactSplitStats && (
-                    <div className={`mb-4 p-4 rounded-2xl text-sm font-bold border flex items-center gap-3 animate-in slide-in-from-top-2
+                    <div className={`mb-4 p-4 rounded-2xl text-sm font-bold border flex items-center gap-3 animate-in slide-in-from-top-2 transition-colors duration-300
                         ${exactSplitStats.isOverAllocated 
-                            ? 'bg-status-error/10 border-status-error/20 text-status-error' 
+                            ? 'bg-status-error/15 border-status-error/30 text-status-error' 
                             : 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-900/20 dark:border-indigo-800 dark:text-indigo-300'}
                     `}>
                         <AlertCircle size={20} className={exactSplitStats.isOverAllocated ? 'animate-pulse' : ''} />
@@ -310,7 +312,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                             <span>
                                 {exactSplitStats.isOverAllocated ? 'Sobren:' : exactSplitStats.isFullyAllocated ? 'Repartit:' : 'Falten:'}
                             </span>
-                            <span className="font-black text-lg">
+                            <span className="font-black text-lg tabular-nums">
                                 {formatMoney(toCents(Math.abs(exactSplitStats.remainderCents)), currency)}
                             </span>
                         </div>
@@ -340,7 +342,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                                             onChange={(e) => {
                                                 if (/^\d*([.,]\d{0,2})?$/.test(e.target.value)) logic.handleDetailChange(u.id, e.target.value);
                                             }}
-                                            className={`w-full p-2.5 pl-8 text-right bg-surface-ground border rounded-xl text-lg font-bold outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all
+                                            className={`w-full p-2.5 pl-8 text-right bg-surface-ground border rounded-xl text-lg font-bold outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all tabular-nums
                                                 ${(exactSplitStats?.isOverAllocated && (formState.splitDetails[u.id] || 0) > 0) 
                                                     ? 'border-status-error text-status-error' 
                                                     : 'border-slate-200 dark:border-slate-700 text-content-body'}
@@ -360,7 +362,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                                             min="0" placeholder="0" 
                                             value={formState.splitDetails[u.id] ?? ''} 
                                             onChange={(e) => logic.handleDetailChange(u.id, e.target.value)} 
-                                            className="w-20 p-2 text-center bg-surface-ground border border-slate-200 dark:border-slate-700 rounded-xl text-lg font-bold outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all"
+                                            className="w-20 p-2 text-center bg-surface-ground border border-slate-200 dark:border-slate-700 rounded-xl text-lg font-bold outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all tabular-nums"
                                         />
                                     </div>
                                  )}
