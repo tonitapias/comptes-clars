@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, User as UserIcon, AlertCircle, Check, Trash2, X } from 'lucide-react';
+import { 
+  Calendar, User as UserIcon, AlertCircle, Check, Trash2, X, 
+  PieChart, Percent // AFEGIT: Importem icones específiques
+} from 'lucide-react';
 import Modal from '../Modal';
 import Button from '../Button';
 import { CATEGORIES, UI_SPLIT_MODES, SPLIT_TYPES } from '../../utils/constants';
@@ -8,7 +11,6 @@ import { ToastType } from '../Toast';
 import { useExpenseForm } from '../../hooks/useExpenseForm';
 import { useTrip } from '../../context/TripContext';
 import { formatMoney } from '../../utils/formatters';
-// UX ADDITION: Importem feedback hàptic
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
 
 // --- HELPERS VISUALS ---
@@ -27,18 +29,47 @@ interface SplitModeSelectorProps {
   onModeChange: (modeId: string, mappedType?: SplitType) => void;
 }
 
+// DEFINICIÓ D'ORDRE I MODES LOCALS
+const VISUAL_MODE_ORDER = ['equal', 'exact', 'shares', 'percent'];
+
 const SplitModeSelector: React.FC<SplitModeSelectorProps> = ({ currentMode, onModeChange }) => {
   const { trigger } = useHapticFeedback();
 
+  // FIX: Definim manualment el mode 'shares' i redefinim 'percent' amb millor icona
+  // Això evita tocar constants.ts i trencar altres parts de l'app.
+  const EXTENDED_MODES = [
+    ...UI_SPLIT_MODES.filter(m => m.id !== 'percent'), // Treiem el percent original per substituir-lo
+    { 
+      id: 'shares', 
+      label: 'Parts', 
+      icon: PieChart, // El pastís per a "Parts/Shares"
+      mappedType: SPLIT_TYPES.SHARES 
+    },
+    { 
+      id: 'percent', 
+      label: 'Percentatge', 
+      icon: Percent, // El símbol % per a "Percentatge"
+      mappedType: SPLIT_TYPES.SHARES 
+    }
+  ];
+
+  // Construim la llista ordenada final
+  const orderedModes = VISUAL_MODE_ORDER
+    .map(id => EXTENDED_MODES.find(m => m.id === id))
+    .filter((m): m is typeof EXTENDED_MODES[0] => !!m);
+
   const handlePress = (modeId: string, mappedType?: SplitType) => {
-      trigger('light'); // UX: Feedback al canviar mode
+      trigger('light');
       onModeChange(modeId, mappedType);
   };
 
   return (
     <div className="bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl mb-6 flex gap-1">
-      {UI_SPLIT_MODES.map((mode) => {
+      {orderedModes.map((mode) => {
         const isActive = currentMode === mode.id;
+        // Icon type safety assertion
+        const Icon = mode.icon as React.ElementType; 
+        
         return (
           <button
             key={mode.id}
@@ -53,7 +84,7 @@ const SplitModeSelector: React.FC<SplitModeSelectorProps> = ({ currentMode, onMo
               }
             `}
           >
-            <mode.icon size={18} strokeWidth={isActive ? 2.5 : 2} />
+            <Icon size={18} strokeWidth={isActive ? 2.5 : 2} />
             <span className={`${isActive ? 'opacity-100' : 'opacity-70'} text-xs sm:text-sm`}>{mode.label}</span>
           </button>
         );
@@ -122,7 +153,7 @@ interface ExpenseModalProps {
 
 export default function ExpenseModal({ isOpen, onClose, initialData, users, currency, onDelete, showToast }: ExpenseModalProps) {
   const { actions } = useTrip();
-  const { trigger } = useHapticFeedback(); // Hook per a la modal principal
+  const { trigger } = useHapticFeedback();
   const [isDeleting, setIsDeleting] = useState(false);
 
   const { formState, setters, logic, isSubmitting, exactSplitStats } = useExpenseForm({
@@ -133,17 +164,17 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
       try {
         if (initialData) {
           await actions.updateExpense(initialData.id, data);
-          trigger('success'); // Feedback d'èxit
+          trigger('success');
           showToast('Despesa actualitzada correctament', 'success');
         } else {
           await actions.addExpense(data);
-          trigger('success'); // Feedback d'èxit
+          trigger('success');
           showToast('Despesa creada correctament', 'success');
         }
         onClose();
       } catch (error) {
         console.error(error);
-        trigger('medium'); // Feedback d'error (vibració diferent)
+        trigger('medium');
         showToast('Error al guardar la despesa', 'error');
       }
     }
@@ -153,7 +184,10 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
 
   useEffect(() => {
     if (formState.splitType === SPLIT_TYPES.SHARES && uiMode !== 'percent' && uiMode !== 'shares') {
-       setUiMode('percent');
+       // Si venim de BD com a SHARES, per defecte posem 'parts' (shares) si no està definit,
+       // o 'percent' si l'usuari ho prefereix.
+       // UX Decision: 'Parts' és més comú que percentatge.
+       setUiMode('shares');
     } else if (formState.splitType !== SPLIT_TYPES.SHARES) {
        setUiMode(formState.splitType);
     }
@@ -181,7 +215,6 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
       setters.setCategory(catId);
   }
 
-  // Estil comú per inputs per garantir alçada idèntica (UX FIX #1)
   const inputBaseClasses = "w-full p-3.5 pl-4 bg-surface-card border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 font-bold text-content-body transition-all shadow-sm min-h-[3.5rem] appearance-none";
 
   return (
@@ -217,7 +250,6 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                         `}
                     />
                 </div>
-                {/* Underline effect - Millorat */}
                 <div className="h-1.5 w-16 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mt-2 group-focus-within:bg-primary group-focus-within:w-24 transition-all duration-300 ease-out" />
             </div>
 
@@ -258,7 +290,6 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                         onChange={(e) => setters.setDate(e.target.value)} 
                         className={inputBaseClasses}
                     />
-                    {/* Icona decorativa, l'input natiu mana sobre l'àrea */}
                     <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-content-subtle pointer-events-none" size={18} />
                 </div>
             </div>
@@ -353,6 +384,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                                  ) : (
                                     <div className="flex items-center gap-2">
                                         <span className="text-[10px] text-content-subtle font-black uppercase tracking-wider">
+                                            {/* UI Feedback dinàmic segons el mode seleccionat visualment */}
                                             {uiMode === 'percent' ? '%' : 'PARTS'}
                                         </span>
                                         <input 
@@ -411,7 +443,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                 fullWidth
                 className="h-14 text-lg shadow-financial-lg" 
                 loading={isSubmitting}
-                haptic="success" // UX: Feedback en el botó principal
+                haptic="success"
                 disabled={formState.splitType === SPLIT_TYPES.EXACT && exactSplitStats?.isOverAllocated}
             >
                 {initialData ? 'Guardar Canvis' : 'Afegir Despesa'}
