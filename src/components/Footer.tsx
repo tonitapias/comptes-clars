@@ -1,6 +1,6 @@
-import React from 'react';
-// Importem el package.json. 
-// Si TypeScript es queixa aquí, ho solucionem al Pas 3 (tsconfig.json), però Vite ho compilarà bé igualment.
+// CORRECCIÓ 1: Eliminem 'import React' no utilitzat.
+// Mantenim l'import del JSON. Si TS es queixa del mòdul, s'ha de resoldre a tsconfig.json (enabled resolveJsonModule), 
+// però a nivell de codi font aquesta és la sintaxi correcta.
 import pkg from '../../package.json'; 
 
 export function Footer() {

@@ -1,8 +1,8 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react'; // CORRECCIÓ 1: Eliminem 'React' no utilitzat
 import { Clock, PlusCircle, Edit, Trash, UserPlus, CheckCircle, Settings } from 'lucide-react';
 import Modal from '../Modal';
-import { LogEntry } from '../../types';
-import { useTrip } from '../../context/TripContext'; //
+import { LogEntry, TripUser } from '../../types'; // CORRECCIÓ 2: Importem TripUser per al tipat
+import { useTrip } from '../../context/TripContext';
 
 interface ActivityModalProps {
   isOpen: boolean;
@@ -10,23 +10,23 @@ interface ActivityModalProps {
 }
 
 export default function ActivityModal({ isOpen, onClose }: ActivityModalProps) {
-  const { tripData } = useTrip(); //
-  const logs = tripData?.logs || []; //
-  const users = tripData?.users || []; //
+  const { tripData } = useTrip();
+  const logs = tripData?.logs || [];
+  const users = tripData?.users || [];
 
   // Optimització 1: Mapa d'usuaris per recuperar fotos i dades en temps real
   const userMap = useMemo(() => {
     return users.reduce((acc, user) => {
       acc[user.id] = user;
       return acc;
-    }, {} as Record<string, typeof users[0]>);
+    }, {} as Record<string, TripUser>); // CORRECCIÓ 3: Tipat explícit i segur
   }, [users]);
 
   // Optimització 2: Ordenació memoritzada per evitar càlculs innecessaris
   const sortedLogs = useMemo(() => {
     return [...logs].sort((a, b) => 
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    ); //
+    );
   }, [logs]);
 
   // Helper per a les icones d'activitat
@@ -63,7 +63,7 @@ export default function ActivityModal({ isOpen, onClose }: ActivityModalProps) {
           </div>
         ) : (
           sortedLogs.map(log => {
-            const user = userMap[log.userId]; //
+            const user = userMap[log.userId];
             return (
               <div key={log.id} className="flex gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-700 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800">
                 {/* Avatar de l'usuari amb icona d'acció superposada */}

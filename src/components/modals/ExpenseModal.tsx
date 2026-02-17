@@ -137,12 +137,18 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
     currency,
     onSubmit: async (data) => {
       try {
+        // CORRECCIÓ: Cast explícit per satisfer el tipus 'MoneyCents' (branded number) que esperen les accions
+        // 'data.amount' ja són cèntims gràcies a la validació Zod, només cal el 'segell' de tipus.
+        const expensePayload = data as unknown as Omit<Expense, 'id'>;
+
         if (initialData && initialData.id) {
-          await actions.updateExpense(String(initialData.id), data);
+          // Per update, Partial<Expense> és suficient
+          await actions.updateExpense(String(initialData.id), expensePayload);
           trigger('success');
           showToast('Canvis guardats', 'success');
         } else {
-          await actions.addExpense(data);
+          // Per add, necessitem l'objecte complet (menys ID)
+          await actions.addExpense(expensePayload);
           trigger('success');
           showToast('Despesa creada', 'success');
         }

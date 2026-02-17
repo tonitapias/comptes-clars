@@ -6,7 +6,7 @@ import {
   calculateSettlements, 
   resolveUserId
   } from './billingService';
-import { TripUser, Expense, toCents, MoneyCents } from '../types';
+import { TripUser, Expense, toCents, MoneyCents, SplitType } from '../types';
 import { SPLIT_TYPES } from '../utils/constants';
 
 // --- MOCK DATA ---
@@ -20,18 +20,18 @@ const createExpense = (
   payerId: string, 
   amount: number, // Passem number per comoditat al test...
   involved: string[] = [], 
-  splitType: string = SPLIT_TYPES.EQUAL,
+  splitType: SplitType = SPLIT_TYPES.EQUAL as SplitType, // CORRECCIÓ 1: Tipat estricte
   splitDetails: Record<string, number> = {},
   customId: string = 'exp1'
 ): Expense => ({
   id: customId,
   title: 'Test Expense',
   category: 'food',
+  involved,
   date: new Date().toISOString(),
   payer: payerId,
   amount: toCents(amount), // ...i convertim aquí
-  involved,
-  splitType: splitType as any,
+  splitType: splitType,
   splitDetails: Object.entries(splitDetails).reduce((acc, [k, v]) => {
     acc[k] = toCents(v);
     return acc;
@@ -40,6 +40,7 @@ const createExpense = (
 
 describe('BillingService (Core Security Audit)', () => {
 
+  // ... (Tests 1 i 2a iguals) ...
   // -------------------------------------------------------------------------
   // 1. TEST DE SEGURETAT D'IDENTITAT
   // -------------------------------------------------------------------------
@@ -76,15 +77,19 @@ describe('BillingService (Core Security Audit)', () => {
     it('Justícia Distributiva: El residu rota segons l\'ID de despesa', () => {
       // 100 cèntims entre 3 persones = 33 + 33 + 34.
       // Amb l'ID 'exp1', el hash pot fer que li toqui a un usuari concret.
-      const expense1 = createExpense('u1', 100, ['u1', 'u2', 'u3'], SPLIT_TYPES.EQUAL, {}, 'exp1');
+      // CORRECCIÓ 2: Cast explícit per assegurar el tipus SplitType
+      const expense1 = createExpense('u1', 100, ['u1', 'u2', 'u3'], SPLIT_TYPES.EQUAL as SplitType, {}, 'exp1');
       const balances1 = calculateBalances([expense1], users);
       
       // Busquem qui ha pagat el cèntim extra (qui té deute -34 en lloc de -33)
       // Nota: El pagador u1 tindrà saldo positiu, mirem els altres.
       const payerOfExtra1 = balances1.find(b => b.userId !== 'u1' && b.amount === toCents(-34));
+      
+      // Assegurem que algú ha pagat el cèntim extra
+      expect(payerOfExtra1).toBeDefined();
 
       // Creem una altra despesa amb un ID diferent ('exp2')
-      const expense2 = createExpense('u1', 100, ['u1', 'u2', 'u3'], SPLIT_TYPES.EQUAL, {}, 'exp_random_seed_99');
+      const expense2 = createExpense('u1', 100, ['u1', 'u2', 'u3'], SPLIT_TYPES.EQUAL as SplitType, {}, 'exp_random_seed_99');
       const balances2 = calculateBalances([expense2], users);
       
       // La distribució del residu hauria de ser determinista però diferent (o almenys no fixa al primer)
@@ -113,7 +118,8 @@ describe('BillingService (Core Security Audit)', () => {
   describe('Exact Split (Flexible Mode)', () => {
     it('permet repartir MENYS del total (residu absorbit pel pagador)', () => {
       // Factura 50€, u2 paga 20€. u1 absorbeix els 30€ restants.
-      const expense = createExpense('u1', 5000, [], SPLIT_TYPES.EXACT, {
+      // CORRECCIÓ 3: Cast explícit per SplitType
+      const expense = createExpense('u1', 5000, [], SPLIT_TYPES.EXACT as SplitType, {
         'u2': 2000 
       });
 
@@ -127,6 +133,7 @@ describe('BillingService (Core Security Audit)', () => {
     });
   });
 
+  // ... (Tests de liquidació sense canvis necessaris si calculateSettlements està bé) ...
   // -------------------------------------------------------------------------
   // 4. TEST DE LIQUIDACIONS (SETTLEMENTS)
   // -------------------------------------------------------------------------

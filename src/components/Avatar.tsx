@@ -1,5 +1,4 @@
-import React from 'react';
-import { getAvatarColor } from '../utils/ui';
+import { getAvatarColor } from '../utils/ui'; // CORRECCIÓ 1: Eliminem 'import React' no utilitzat
 
 interface AvatarProps {
   name: string;
@@ -9,8 +8,8 @@ interface AvatarProps {
 }
 
 export default function Avatar({ name, photoUrl, className = '', size = 'md' }: AvatarProps) {
-  // Mapeig de mides estàndard
-  const sizeClasses = {
+  // CORRECCIÓ 2: Tipat explícit per assegurar que cobrim totes les mides definides a la interfície
+  const sizeClasses: Record<NonNullable<AvatarProps['size']>, string> = {
     sm: 'w-8 h-8 text-[10px]',
     md: 'w-10 h-10 text-xs',
     lg: 'w-12 h-12 text-sm',
@@ -34,8 +33,9 @@ export default function Avatar({ name, photoUrl, className = '', size = 'md' }: 
           className="w-full h-full object-cover"
           referrerPolicy="no-referrer"
           onError={(e) => {
-            // Si la imatge falla, amaguem l'element img per mostrar el fallback (lletra)
-            (e.target as HTMLImageElement).style.display = 'none';
+            // Si la imatge falla, amaguem l'element img
+            // CORRECCIÓ 3: Usem 'currentTarget' per evitar el cast manual 'as HTMLImageElement'
+            e.currentTarget.style.display = 'none';
           }}
         />
       ) : (

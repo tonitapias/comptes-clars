@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react'; // CORRECCIÓ 1: Eliminem 'React' (no es fa servir)
 import { Routes, Route } from 'react-router-dom';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
@@ -7,7 +7,7 @@ import LandingPage from './pages/LandingPage';
 import TripPage from './pages/TripPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useTheme } from './hooks/useTheme';
-import { Footer } from './components/Footer';
+import { Footer } from './components/Footer'; // CORRECCIÓ 2: Assegurem importació nominal { Footer }
 
 function App() {
   useTheme(); 
@@ -42,9 +42,9 @@ function App() {
           <Route 
             path="/trip/:tripId" 
             element={
-              /* AQUÍ ESTAVA L'ERROR: Faltava passar user={user} */
               <ProtectedRoute user={user}>
-                <TripPage />
+                {/* CORRECCIÓ 3: Afegim la prop 'user' obligatòria per satisfer la interfície TripPageProps */}
+                <TripPage user={user} />
               </ProtectedRoute>
             } 
           />

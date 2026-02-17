@@ -1,5 +1,4 @@
 // src/pages/TripPage.tsx
-import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Plus, Loader2, AlertTriangle, UserPlus, Wallet, Receipt, CheckCircle2 } from 'lucide-react'; 
 import { User } from 'firebase/auth';
@@ -23,11 +22,15 @@ import { generatePDF } from '../utils/exportPdf';
 import { CURRENCIES } from '../utils/constants';
 import { CategoryId } from '../types';
 
-interface TripPageProps { user: User | null; }
+interface TripPageProps {
+  user: User | null;
+}
 
 // --- WRAPPER ---
 export default function TripPageWrapper({ user }: TripPageProps) {
   const { tripId } = useParams<{ tripId: string }>();
+  if (!tripId) return null; 
+  
   return (
     <TripProvider tripId={tripId} currentUser={user}>
       <TripView />
@@ -45,25 +48,109 @@ function TripView() {
   const { toast, clearToast, showToast, mutations } = useTripMutations();
 
   // 2. Càlculs
-  const { filteredExpenses, balances, categoryStats, settlements, totalGroupSpending, displayedTotal, isSearching } = useTripCalculations(
+  const { 
+    filteredExpenses, 
+    balances, 
+    categoryStats, 
+    settlements, 
+    totalGroupSpending, 
+    displayedTotal, 
+    isSearching 
+  } = useTripCalculations(
     expenses, 
     tripData?.users || [], 
     filters.searchQuery, 
     filters.filterCategory
   );
 
-  // 3. HANDLER PER A GRÀFICS INTERACTIUS (Opció C)
+  // 3. HANDLERS DEFINITS
   const handleCategorySelect = (categoryId: string) => {
-    // Canviem el filtre i la pestanya automàticament
     filters.setFilterCategory(categoryId as CategoryId);
     filters.setActiveTab('expenses');
-    // Scroll suau cap amunt per veure la llista
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // --- RENDER LOADING/ERROR ---
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950"><Loader2 className="animate-spin text-indigo-600 dark:text-indigo-400"/></div>;
-  if (error || !tripData) return <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-slate-50 dark:bg-slate-950"><AlertTriangle className="text-red-500" size={40}/><p className="text-slate-600 dark:text-slate-300 font-bold">{error || "No s'ha trobat el viatge"}</p><Button variant="secondary" onClick={() => window.location.href='/'}>Tornar a l'inici</Button></div>;
+  const handleOpenSettings = () => modals.setSettingsOpen(true);
+  const handleOpenMembers = () => modals.openGroupModal('members');
+  const handleOpenShare = () => modals.openGroupModal('share');
+  const handleOpenActivity = () => modals.setActivityOpen(true);
+  const handleAddExpense = () => modals.openExpenseModal(null);
+  const handleReturnHome = () => { window.location.href = '/'; };
+  
+  const handleExportPDF = () => {
+    if (!tripData) return;
+    const { currency = CURRENCIES[0] } = tripData;
+    generatePDF(
+      tripData.name, 
+      expenses, 
+      balances, 
+      settlements, 
+      tripData.users, 
+      currency.symbol
+    );
+  };
+
+  // --- RENDERS AUXILIARS ---
+  const renderExpenses = () => {
+    const isEmptyState = expenses.length === 0 && !filters.searchQuery && filters.filterCategory === 'all';
+    
+    if (isEmptyState) {
+      return (
+        <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in">
+            <Receipt size={48} className="text-indigo-400 dark:text-indigo-500 mb-4" aria-hidden="true" />
+            <h3 className="text-xl font-bold text-slate-700 dark:text-slate-200 mb-2">No hi ha despeses</h3>
+            <p className="text-slate-500 dark:text-slate-400 max-w-xs mb-6">Afegeix la primera despesa per començar a dividir comptes.</p>
+            <Button onClick={handleAddExpense} icon={Plus}>Afegir Despesa</Button>
+        </div>
+      );
+    }
+
+    return (
+      <ExpensesList 
+        expenses={filteredExpenses} 
+        searchQuery={filters.searchQuery} 
+        setSearchQuery={filters.setSearchQuery} 
+        filterCategory={filters.filterCategory} 
+        setFilterCategory={filters.setFilterCategory} 
+        onEdit={modals.openExpenseModal}
+        isSearching={isSearching} 
+      />
+    );
+  };
+
+  const renderBalances = () => (
+    <BalancesView 
+      balances={balances} 
+      categoryStats={categoryStats} 
+      onFilterCategory={handleCategorySelect} 
+    />
+  );
+
+  const renderSettlements = () => (
+    <SettlementsView 
+      settlements={settlements} 
+      onSettle={modals.setSettleModalData} 
+    />
+  );
+
+  // --- ESTATS DE CÀRREGA I ERROR ---
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <Loader2 className="animate-spin text-indigo-600 dark:text-indigo-400"/>
+      </div>
+    );
+  }
+
+  if (error || !tripData) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-slate-50 dark:bg-slate-950">
+        <AlertTriangle className="text-red-500" size={40}/>
+        <p className="text-slate-600 dark:text-slate-300 font-bold">{error || "No s'ha trobat el viatge"}</p>
+        <Button variant="secondary" onClick={handleReturnHome}>Tornar a l'inici</Button>
+      </div>
+    );
+  }
 
   const { currency = CURRENCIES[0], users = [] } = tripData;
   const canChangeCurrency = expenses.length === 0;
@@ -76,18 +163,21 @@ function TripView() {
         displayedTotal={displayedTotal} 
         totalGroupSpending={totalGroupSpending}
         isFiltered={!!filters.searchQuery || filters.filterCategory !== 'all'}
-        onOpenSettings={() => modals.setSettingsOpen(true)}
-        onOpenGroup={() => modals.openGroupModal('members')}
-        onExportPDF={() => generatePDF(tripData.name, expenses, balances, settlements, users, currency.symbol)}
-        onOpenShare={() => modals.openGroupModal('share')}
-        onOpenActivity={() => modals.setActivityOpen(true)}
+        onOpenSettings={handleOpenSettings}
+        onOpenGroup={handleOpenMembers}
+        onExportPDF={handleExportPDF}
+        onOpenShare={handleOpenShare}
+        onOpenActivity={handleOpenActivity}
       />
 
       {!isMember && currentUser && (
           <div className="bg-indigo-600 dark:bg-indigo-700 text-white px-4 py-3 text-center shadow-md relative z-30 animate-fade-in">
               <div className="max-w-3xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2">
                   <p className="text-sm font-medium">Estàs veient aquest viatge com a convidat.</p>
-                  <button onClick={mutations.joinTrip} className="bg-white text-indigo-600 px-4 py-1.5 rounded-full text-xs font-bold shadow-sm hover:bg-indigo-50 flex items-center gap-1">
+                  <button 
+                    onClick={mutations.joinTrip} 
+                    className="bg-white text-indigo-600 px-4 py-1.5 rounded-full text-xs font-bold shadow-sm hover:bg-indigo-50 flex items-center gap-1"
+                  >
                     <UserPlus size={14}/> Unir-me al grup
                   </button>
               </div>
@@ -96,11 +186,10 @@ function TripView() {
 
       <main className="max-w-3xl mx-auto px-4 relative z-20 mt-6">
         
-        {/* Navegació de Pestanyes Accessible (ARIA Tabs) */}
+        {/* Navegació de Pestanyes Accessible */}
         <div 
           className="flex p-1.5 bg-white dark:bg-slate-900 rounded-2xl mb-6 shadow-sm border border-slate-200 dark:border-slate-800"
           role="tablist"
-          aria-label="Vistes del viatge"
         >
           {(['expenses', 'balances', 'settle'] as const).map(tab => {
             const isActive = filters.activeTab === tab;
@@ -127,49 +216,31 @@ function TripView() {
                   {tab === 'settle' && <CheckCircle2 size={16} strokeWidth={isActive ? 2.5 : 2} aria-hidden="true" />}
                   
                   <span className={isActive ? "inline" : "hidden sm:inline"}>
-                    {tab === 'expenses' ? 'Despeses' : tab === 'balances' ? 'Balanç' : 'Liquidar'}
+                    {/* CORRECCIÓ DE L'ERROR 1005: Ternari complet amb els 3 casos */}
+                    {tab === 'expenses' ? 'Despeses' : tab === 'balances' ? 'Balanç' : 'Saldar'}
                   </span>
               </button>
             );
           })}
         </div>
 
-        {/* Contingut de les Pestanyes (Tabpanels) */}
+        {/* Contingut de les Pestanyes */}
         <div className="relative min-h-[400px]">
           {filters.activeTab === 'expenses' && (
-              <div role="tabpanel" id="panel-expenses" aria-labelledby="tab-expenses" className="animate-fade-in focus:outline-none" tabIndex={0}>
-                {expenses.length === 0 && !filters.searchQuery && filters.filterCategory === 'all' ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in">
-                    <Receipt size={48} className="text-indigo-400 dark:text-indigo-500 mb-4" aria-hidden="true" />
-                    <h3 className="text-xl font-bold text-slate-700 dark:text-slate-200 mb-2">No hi ha despeses</h3>
-                    <p className="text-slate-500 dark:text-slate-400 max-w-xs mb-6">Afegeix la primera despesa per començar a dividir comptes.</p>
-                    <Button onClick={() => modals.openExpenseModal(null)} icon={Plus}>Afegir Despesa</Button>
-                </div>
-                ) : (
-                <ExpensesList 
-                    expenses={filteredExpenses} 
-                    searchQuery={filters.searchQuery} setSearchQuery={filters.setSearchQuery} 
-                    filterCategory={filters.filterCategory} setFilterCategory={filters.setFilterCategory} 
-                    onEdit={modals.openExpenseModal}
-                    isSearching={isSearching} 
-                />
-                )}
+              <div role="tabpanel" id="panel-expenses" className="animate-fade-in focus:outline-none">
+                {renderExpenses()}
               </div>
           )}
 
           {filters.activeTab === 'balances' && (
-             <div role="tabpanel" id="panel-balances" aria-labelledby="tab-balances" className="animate-fade-in focus:outline-none" tabIndex={0}>
-                <BalancesView 
-                  balances={balances} 
-                  categoryStats={categoryStats} 
-                  onFilterCategory={handleCategorySelect} 
-                />
+             <div role="tabpanel" id="panel-balances" className="animate-fade-in focus:outline-none">
+                {renderBalances()}
              </div>
           )}
 
           {filters.activeTab === 'settle' && (
-             <div role="tabpanel" id="panel-settle" aria-labelledby="tab-settle" className="animate-fade-in focus:outline-none" tabIndex={0}>
-                <SettlementsView settlements={settlements} onSettle={modals.setSettleModalData} />
+             <div role="tabpanel" id="panel-settle" className="animate-fade-in focus:outline-none">
+                {renderSettlements()}
              </div>
           )}
         </div>
@@ -177,7 +248,7 @@ function TripView() {
       
       {/* FAB */}
       <button 
-        onClick={() => modals.openExpenseModal(null)} 
+        onClick={handleAddExpense} 
         className="
             fixed bottom-8 right-6 md:right-[calc(50%-350px)] 
             bg-gradient-to-r from-indigo-600 to-indigo-500 

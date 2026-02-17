@@ -1,15 +1,22 @@
 // src/utils/exportPdf.ts
 import jsPDF from 'jspdf';
-import autoTable, { UserOptions } from 'jspdf-autotable';
+import autoTable from 'jspdf-autotable'; // CORRECCIÓ: Eliminat UserOptions
 import { Expense, Settlement, Balance, TripUser } from '../types';
 import { CATEGORIES } from './constants';
+
+// Extensió de tipus per evitar 'as any'
+interface jsPDFWithPlugin extends jsPDF {
+  lastAutoTable?: {
+    finalY: number;
+  };
+}
 
 // --- HELPERS INTERNS ---
 
 const formatMoney = (cents: number, symbol: string) => {
   return new Intl.NumberFormat('ca-ES', {
     style: 'currency',
-    currency: 'EUR', // Per defecte usem format EUR per l'informe, però adaptem el símbol visualment
+    currency: 'EUR', 
     minimumFractionDigits: 2
   }).format(cents / 100).replace('€', symbol);
 };
@@ -29,20 +36,21 @@ export const generatePDF = (
   users: TripUser[], 
   currencySymbol: string
 ) => {
-  const doc = new jsPDF();
+  // Cast inicial per fer servir les propietats del plugin
+  const doc = new jsPDF() as jsPDFWithPlugin;
   
   // Colors Corporatius (Indigo / Slate / Emerald / Rose)
   const COLORS = {
-    primary: [79, 70, 229] as [number, number, number], // Indigo 600
-    secondary: [100, 116, 139] as [number, number, number], // Slate 500
-    success: [16, 185, 129] as [number, number, number], // Emerald 500
-    danger: [239, 68, 68] as [number, number, number], // Red 500
-    text: [30, 41, 59] as [number, number, number], // Slate 800
+    primary: [79, 70, 229] as [number, number, number],
+    secondary: [100, 116, 139] as [number, number, number],
+    success: [16, 185, 129] as [number, number, number],
+    danger: [239, 68, 68] as [number, number, number],
+    text: [30, 41, 59] as [number, number, number],
   };
 
   // 1. CAPÇALERA PROFESSIONAL
   doc.setFillColor(...COLORS.primary);
-  doc.rect(0, 0, 210, 45, 'F'); // Fons Blau
+  doc.rect(0, 0, 210, 45, 'F'); 
 
   // Títol
   doc.setFontSize(24);
@@ -53,7 +61,7 @@ export const generatePDF = (
   // Subtítol i Data
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(226, 232, 240); // Slate 200
+  doc.setTextColor(226, 232, 240);
   doc.text(`Informe de Comptes Clars • Generat el ${new Date().toLocaleDateString('ca-ES')}`, 14, 35);
 
   let finalY = 60;
@@ -68,7 +76,6 @@ export const generatePDF = (
   doc.setFont('helvetica', 'bold');
   doc.text("Resum General", 14, finalY);
   
-  // Dades clau en format text
   doc.setFontSize(11);
   doc.setTextColor(...COLORS.text);
   doc.setFont('helvetica', 'normal');
@@ -81,8 +88,7 @@ export const generatePDF = (
   doc.text(formatMoney(avgPerPerson, currencySymbol), 60, finalY + 14);
   doc.text(`${users.filter(u => !u.isDeleted).length}`, 60, finalY + 20);
 
-  // 3. DESGLOSSAMENT PER CATEGORIA (Nou valor afegit)
-  // Calculem estadístiques ràpides aquí per no dependre de billingService extern
+  // 3. DESGLOSSAMENT PER CATEGORIA
   const stats: Record<string, number> = {};
   validExpenses.forEach(e => {
     const cat = e.category || 'other';
@@ -98,10 +104,9 @@ export const generatePDF = (
       return [label, formatMoney(amount, currencySymbol), pct];
     });
 
-  // Renderitzem taula de categories al costat del resum (layout a 2 columnes virtual)
   autoTable(doc, {
     startY: finalY - 6,
-    margin: { left: 110 }, // Marge esquerre per posar-ho a la dreta
+    margin: { left: 110 },
     head: [['Categoria', 'Import', '%']],
     body: categoryData,
     theme: 'grid',
@@ -114,10 +119,9 @@ export const generatePDF = (
     tableWidth: 85
   });
 
-  // Actualitzem Y al final de la taula de categories o del text (el que sigui més baix)
-  finalY = Math.max((doc as any).lastAutoTable.finalY, finalY + 30) + 15;
+  finalY = Math.max(doc.lastAutoTable?.finalY || 0, finalY + 30) + 15;
 
-  // 4. ESTAT DE COMPTES (Amb colors condicional)
+  // 4. ESTAT DE COMPTES
   doc.setFontSize(14);
   doc.setTextColor(...COLORS.primary);
   doc.text("Balanç Final", 14, finalY);
@@ -140,28 +144,26 @@ export const generatePDF = (
       1: { halign: 'right', fontStyle: 'bold' }, 
       2: { halign: 'center', fontStyle: 'bold' } 
     },
-    // HOOK MÀGIC: Pintem els números de colors
     didParseCell: (data) => {
       if (data.section === 'body' && data.column.index === 1) {
         const rawValue = balances[data.row.index].amount;
         if (rawValue > 0) {
-          data.cell.styles.textColor = COLORS.success; // Verd
+          data.cell.styles.textColor = COLORS.success;
         } else if (rawValue < 0) {
-          data.cell.styles.textColor = COLORS.danger; // Vermell
+          data.cell.styles.textColor = COLORS.danger;
         }
       }
     }
   });
 
-  finalY = (doc as any).lastAutoTable.finalY + 15;
+  finalY = (doc.lastAutoTable?.finalY || finalY) + 15;
 
-  // 5. PLA DE LIQUIDACIÓ (Clar i Directe)
+  // 5. PLA DE LIQUIDACIÓ
   if (settlements.length > 0) {
     doc.setFontSize(14);
     doc.setTextColor(...COLORS.primary);
     doc.text("Com saldar els deutes?", 14, finalY);
     
-    // Check si hi ha espai, sinó nova pàgina
     if (finalY > 250) { doc.addPage(); finalY = 20; }
 
     const settlementData = settlements.map(s => [
@@ -176,7 +178,7 @@ export const generatePDF = (
       body: settlementData,
       theme: 'grid',
       styles: { fontSize: 11, valign: 'middle' },
-      headStyles: { fillColor: [241, 245, 249], textColor: COLORS.text }, // Gris molt clar
+      headStyles: { fillColor: [241, 245, 249], textColor: COLORS.text },
       head: [['Deutor', 'Acció', 'Creditor', 'Import a Transferir']],
       columnStyles: { 
         1: { halign: 'center', textColor: COLORS.secondary, fontSize: 8 }, 
@@ -184,10 +186,10 @@ export const generatePDF = (
       }
     });
     
-    finalY = (doc as any).lastAutoTable.finalY + 15;
+    finalY = (doc.lastAutoTable?.finalY || finalY) + 15;
   }
 
-  // 6. DETALL DE DESPESES (Taula completa)
+  // 6. DETALL DE DESPESES
   if (finalY > 240) { doc.addPage(); finalY = 20; }
   
   doc.setFontSize(14);
@@ -195,7 +197,6 @@ export const generatePDF = (
   doc.text("Registre Detallat de Moviments", 14, finalY);
 
   const expenseData = expenses
-    // Ordenem per data descendent
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .map(e => [
       new Date(e.date).toLocaleDateString('ca-ES', { day: '2-digit', month: '2-digit' }),
@@ -219,20 +220,17 @@ export const generatePDF = (
     styles: { 
         fontSize: 9, 
         cellPadding: 3,
-        lineColor: [241, 245, 249], // Gris molt clar
-        lineWidth: { bottom: 0.1 } // Línia només a sota
+        lineColor: [241, 245, 249],
+        lineWidth: { bottom: 0.1 }
     },
     columnStyles: { 
         0: { textColor: COLORS.secondary },
         3: { halign: 'right', fontStyle: 'bold' } 
     },
     didParseCell: (data) => {
-        // Pintem pagaments (transfers) en gris/cursiva per diferenciar de despesa real
         if (data.section === 'body') {
-           const rowExp = expenses[data.row.index]; // Ull: expenses està ordenat igual? No necessàriament.
-           // Per seguretat, com que hem ordenat expenseData abans, l'índex no coincideix directe amb 'expenses' raw.
-           // Confiem en el contingut de la columna 'Categoria'.
-           if (data.row.raw[4] === 'PAGAMENT') {
+           const rawRow = data.row.raw as string[]; 
+           if (rawRow[4] === 'PAGAMENT') {
                data.cell.styles.textColor = COLORS.secondary;
                data.cell.styles.fontStyle = 'italic';
            }
@@ -240,8 +238,8 @@ export const generatePDF = (
     }
   });
 
-  // 7. PEU DE PÀGINA (Page Numbers)
-  const pageCount = (doc as any).internal.getNumberOfPages();
+  // 7. PEU DE PÀGINA
+  const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
     doc.setFontSize(8);
@@ -254,7 +252,6 @@ export const generatePDF = (
     );
   }
 
-  // Guardar
   const safeName = tripName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
   doc.save(`informe_comptes_clars_${safeName}.pdf`);
 };

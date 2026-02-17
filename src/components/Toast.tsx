@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState, ReactNode } from 'react'; // CORRECCIÓ 1: Eliminem 'React', importem 'ReactNode' per al tipat
 import { CheckCircle2, AlertCircle, X, Info } from 'lucide-react';
 
 export type ToastType = 'success' | 'error' | 'info';
@@ -17,13 +17,14 @@ export default function Toast({ message, type, onClose, duration = 3000 }: Toast
   }, [duration, onClose]);
 
   // AFEGIT: Variants 'dark:' per a cada tipus
-  const styles = {
+  // CORRECCIÓ 2: Tipat explícit Record per garantir cobertura de tots els tipus
+  const styles: Record<ToastType, string> = {
     success: 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800',
     error: 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-200 dark:border-rose-800',
     info: 'bg-indigo-50 text-indigo-800 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-200 dark:border-indigo-800'
   };
 
-  const icons = {
+  const icons: Record<ToastType, ReactNode> = {
     success: <CheckCircle2 size={20} className="text-emerald-500" />,
     error: <AlertCircle size={20} className="text-rose-500" />,
     info: <Info size={20} className="text-indigo-500" />

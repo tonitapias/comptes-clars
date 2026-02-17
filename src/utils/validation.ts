@@ -10,55 +10,37 @@ const CURRENCY_CODES = CURRENCIES.map(c => c.code) as [string, ...string[]];
 
 // --- HELPERS DE TRANSFORMACIÓ (SANITIZERS) ---
 
-/**
- * Normalitza un string de moneda a un format numèric estàndard (1234.56).
- * Gestiona intel·ligentment formats EU (1.000,50) i US (1,000.50).
- */
 const normalizeCurrencyString = (val: string): string => {
   let clean = val.trim();
   
-  // Cas 1: Format mixt (conté punts i comes) -> Ex: 1.000,50 o 1,000.50
   if (clean.includes(',') && clean.includes('.')) {
     const lastComma = clean.lastIndexOf(',');
     const lastDot = clean.lastIndexOf('.');
     
     if (lastComma > lastDot) {
-      // Format EU: 1.000,50 -> Eliminem punts, canviem coma per punt
       clean = clean.replace(/\./g, '').replace(',', '.');
     } else {
-      // Format US: 1,000.50 -> Eliminem comes
       clean = clean.replace(/,/g, '');
     }
   } 
-  // Cas 2: Només comes -> Ex: 10,50 -> Canviem a punt
   else if (clean.includes(',')) {
     clean = clean.replace(',', '.');
   } 
-  // Cas 3: Només punts
   else if (clean.includes('.')) {
-    // Si hi ha més d'un punt, són milers -> Ex: 1.000.000 -> Eliminem tots
     if ((clean.match(/\./g) || []).length > 1) {
       clean = clean.replace(/\./g, '');
     }
-    // Si només hi ha un punt (10.50 o 1.000), assumim estàndard JS (Decimal)
-    // NOTA: Això implica que 1.000 serà 1, no 1000. És el comportament segur estàndard.
   }
 
   return clean;
 };
 
-/**
- * Parser de moneda de precisió entera ("Integer-based").
- * Converteix strings d'entrada a cèntims (1050).
- */
 const parseMoneyString = (val: string): number => {
-  // Pas 1: Normalització robusta (FIX CRÍTIC)
   const cleanVal = normalizeCurrencyString(val);
   
   if (cleanVal === '' || isNaN(Number(cleanVal))) return 0;
 
   const [integerPart, decimalPart = ''] = cleanVal.split('.');
-  // Assegurem sempre 2 decimals
   const paddedDecimal = (decimalPart + '00').slice(0, 2);
   const centsString = `${integerPart}${paddedDecimal}`;
   const cents = parseInt(centsString, 10);
@@ -66,28 +48,18 @@ const parseMoneyString = (val: string): number => {
   return isNaN(cents) ? 0 : cents;
 };
 
-/**
- * Transforma l'input a CÈNTIMS (Enter).
- * MILLORA CRÍTICA (Fix Double Conversion):
- * - Si és String: S'entén com a Unitats (User Input) -> Converteix a Cèntims.
- * - Si és Number: S'entén com a Cèntims (Internal Data) -> Passa directament (Pass-through).
- * La validació posterior .int() s'encarregarà de rebutjar floats (ex: 10.5).
- */
 const currencyInputToCents = (val: unknown): unknown => {
   if (typeof val === 'string') {
     return parseMoneyString(val);
   }
-  // Si ja és un número, assumim que ve del sistema (cèntims) i no el toquem.
   return val; 
 };
 
-/**
- * Validador de moneda robust.
- * Accepta Strings (que converteix) o Enters. Rebutja Floats.
- */
+// Validació de Moneda (Cèntims)
 const MoneyAmountSchema = z.preprocess(
   currencyInputToCents,
-  z.number({ invalid_type_error: "L'import ha de ser numèric" })
+  // CORRECCIÓ: Usem 'message' en lloc de 'invalid_type_error' per compatibilitat de tipus
+  z.number({ message: "L'import ha de ser numèric" }) 
     .int("L'import intern ha de ser un enter (cèntims). S'han detectat decimals.")
     .positive("L'import ha de ser major que 0")
     .max(Number.MAX_SAFE_INTEGER, "L'import excedeix el límit segur")
@@ -109,7 +81,6 @@ export const TripUserSchema = z.object({
 export const ExpenseSchema = z.object({
   title: z.string().trim().min(1, "El títol és obligatori").max(50, "Títol massa llarg (màx 50)"),
   
-  // APLICACIÓ: Parser segur híbrid (String/Int)
   amount: MoneyAmountSchema,
   
   payer: z.string().trim().min(1, "El pagador és obligatori"),
@@ -127,8 +98,6 @@ export const ExpenseSchema = z.object({
   
   splitType: z.enum(SPLIT_TYPE_VALUES).optional(),
   
-  // Els detalls també han de ser tractats amb cura (MoneyAmountSchema o similar)
-  // Aquí fem servir preprocess individual per a cada valor del mapa
   splitDetails: z.record(
     z.string(), 
     z.preprocess(
@@ -143,14 +112,12 @@ export const ExpenseSchema = z.object({
   originalCurrency: z.enum(CURRENCY_CODES).optional(),
   exchangeRate: z.number().positive().optional()
 })
-// --- REGLES DE NEGOCI (Integrity Checks) ---
+// REGLES DE NEGOCI
 
-// REGLA 1: Mode EXACT (Suma <= Total)
-// Permetem que la suma sigui menor (el pagador assumeix la resta), però mai major.
+// Mode EXACT
 .refine((data) => {
   if (data.splitType === SPLIT_TYPES.EXACT && data.splitDetails) {
-    const sumDetails = Object.values(data.splitDetails).reduce((a, b) => a + b, 0);
-    // Utilitzem una tolerància 0 estricta ja que treballem amb enters
+    const sumDetails = Object.values(data.splitDetails).reduce((a, b) => a + (b || 0), 0);
     return sumDetails <= data.amount;
   }
   return true;
@@ -159,10 +126,10 @@ export const ExpenseSchema = z.object({
   path: ["splitDetails"] 
 })
 
-// REGLA 2: Mode SHARES (Participacions > 0)
+// Mode SHARES
 .refine((data) => {
   if (data.splitType === SPLIT_TYPES.SHARES && data.splitDetails) {
-    const totalShares = Object.values(data.splitDetails).reduce((a, b) => a + b, 0);
+    const totalShares = Object.values(data.splitDetails).reduce((a, b) => a + (b || 0), 0);
     return totalShares > 0;
   }
   return true;
@@ -171,12 +138,11 @@ export const ExpenseSchema = z.object({
   path: ["splitDetails"]
 })
 
-// REGLA 3: Integritat Referencial
+// Integritat Referencial
 .refine((data) => {
   if ((data.splitType === SPLIT_TYPES.EXACT || data.splitType === SPLIT_TYPES.SHARES) && data.splitDetails) {
     const involvedSet = new Set(data.involved);
     const detailUids = Object.keys(data.splitDetails);
-    // Verifiquem que cada ID al mapa de detalls existeixi a la llista d'involucrats
     return detailUids.every(uid => involvedSet.has(uid));
   }
   return true;
