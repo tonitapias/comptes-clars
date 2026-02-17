@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext';
 import { ToastType } from '../components/Toast';
+import { calculateBalances } from '../services/billingService'; // <--- Import necessari
 
-// Fixa't que NO hi ha "default". És una exportació nomenada.
 export function useTripMutations() {
   const navigate = useNavigate();
-  const { actions, tripData, currentUser, balances } = useTrip();
+  // CORRECCIÓ: Traiem 'balances' del context (no existeix) i agafem 'expenses'
+  const { actions, tripData, currentUser, expenses } = useTrip(); 
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
 
   const showToast = (msg: string, type: ToastType = 'success') => setToast({ msg, type });
@@ -60,8 +61,11 @@ export function useTripMutations() {
   const leaveTrip = async () => {
     if (!currentUser || !tripData) return;
     
-    // Lògica de negoci prèvia (validació local)
+    // CORRECCIÓ: Calculem els balanços al moment per verificar deutes
+    const balances = calculateBalances(expenses, tripData.users);
+
     const myUser = tripData.users.find(u => u.linkedUid === currentUser.uid);
+    // Ara TypeScript ja sap que 'b' és de tipus Balance
     const myBalance = balances.find(b => b.userId === myUser?.id)?.amount || 0;
 
     const res = await actions.leaveTrip(
@@ -73,7 +77,7 @@ export function useTripMutations() {
 
     if (res.success) {
       localStorage.removeItem('cc-last-trip-id');
-      window.location.href = '/'; // Redirecció forçada per netejar estat
+      navigate('/'); // CORRECCIÓ: Usem navigate en lloc de window.location
     } else {
       showToast(res.error || "Error al sortir del grup", 'error');
     }
@@ -89,6 +93,18 @@ export function useTripMutations() {
      }
   };
 
+  const deleteTrip = async () => {
+    try {
+      await actions.deleteTrip(); 
+      showToast("Viatge eliminat correctament");
+      localStorage.removeItem('cc-last-trip-id');
+      navigate('/'); // CORRECCIÓ: Usem navigate aquí també
+    } catch (e: any) {
+      console.error(e);
+      showToast(e.message || "Error eliminant el viatge", 'error');
+    }
+  };
+
   return {
     toast,
     showToast,
@@ -98,7 +114,8 @@ export function useTripMutations() {
       settleDebt,
       deleteExpense,
       leaveTrip,
-      joinTrip
+      joinTrip,
+      deleteTrip
     }
   };
 }

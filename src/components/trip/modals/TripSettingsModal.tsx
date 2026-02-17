@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Lock, Download, Pencil, Check, X, Trash2, 
-  Calendar, Users, ShieldAlert, Save, AlertTriangle 
+  Calendar, Users, ShieldAlert, Save, AlertTriangle, LogOut 
 } from 'lucide-react'; 
 import Modal from '../../Modal';
 import Button from '../../Button';
@@ -19,22 +19,19 @@ interface TripSettingsModalProps {
   canChangeCurrency: boolean;
   onUpdateSettings: (name: string, date: string, currency?: Currency) => Promise<boolean>;
   onDeleteTrip?: () => Promise<void>;
+  onLeaveTrip?: () => Promise<void>;
 }
 
 export default function TripSettingsModal({
-  isOpen, onClose, tripData, canChangeCurrency, onUpdateSettings, onDeleteTrip
+  isOpen, onClose, tripData, canChangeCurrency, onUpdateSettings, onDeleteTrip, onLeaveTrip
 }: TripSettingsModalProps) {
   
-  // Estats del formulari principal
   const [name, setName] = useState(tripData?.name || '');
   const [date, setDate] = useState(tripData?.createdAt ? tripData.createdAt.split('T')[0] : ''); 
   const [currency, setCurrency] = useState<Currency>(tripData?.currency || CURRENCIES[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // ESTAT LOCAL per als usuaris (Feedback instantani)
   const [localUsers, setLocalUsers] = useState<TripUser[]>(tripData.users || []);
 
-  // Sincronitzar si les props canvien
   useEffect(() => {
     if (tripData) {
         setLocalUsers(tripData.users);
@@ -44,12 +41,9 @@ export default function TripSettingsModal({
     }
   }, [tripData, isOpen]);
 
-  // Gestió edició usuaris
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editNameValue, setEditNameValue] = useState('');
   const [isUpdatingUser, setIsUpdatingUser] = useState(false);
-
-  // --- GESTIÓ USUARIS ---
 
   const startEditUser = (user: TripUser) => {
     setEditingUserId(user.id);
@@ -59,21 +53,18 @@ export default function TripSettingsModal({
   const saveUserEdit = async (userId: string) => {
     if (!editNameValue.trim()) return;
     
-    // 1. UI Optimista: Actualitzem la llista localment a l'instant
     const previousUsers = [...localUsers];
     const updatedUsers = localUsers.map(u => 
-        u.id === userId ? { ...u, name: editNameValue.trim(), photoUrl: null } : u // Esborrem foto per forçar inicials
+        u.id === userId ? { ...u, name: editNameValue.trim(), photoUrl: null } : u 
     );
     setLocalUsers(updatedUsers);
-    setEditingUserId(null); // Sortim del mode edició
+    setEditingUserId(null); 
     setIsUpdatingUser(true);
 
     try {
-      // 2. Cridem al servei existent (NOM CORRECTE: updateTripUserName)
       await TripService.updateTripUserName(tripData.id, userId, editNameValue.trim());
     } catch (error) {
       console.error("Error updating user:", error);
-      // Revertim si falla
       setLocalUsers(previousUsers); 
       alert("Error al guardar el nom. Comprova la connexió.");
     } finally {
@@ -84,25 +75,21 @@ export default function TripSettingsModal({
   const deleteUser = async (userId: string) => {
     if (!confirm("Segur que vols eliminar aquest participant del grup?")) return;
     
-    // 1. UI Optimista
     const previousUsers = [...localUsers];
     setLocalUsers(localUsers.filter(u => u.id !== userId));
     setIsUpdatingUser(true);
 
     try {
-      // 2. Cridem al servei existent (MÈTODE CORRECTE: leaveTrip)
-      // leaveTrip elimina l'usuari passat per ID de l'array d'usuaris
       await TripService.leaveTrip(tripData.id, userId);
     } catch (error) {
       console.error("Error removing user:", error);
-      setLocalUsers(previousUsers); // Revertim
-      alert("No es pot eliminar l'usuari (potser té deutes pendents o és l'admin).");
+      setLocalUsers(previousUsers); 
+      alert("No es pot eliminar l'usuari.");
     } finally {
       setIsUpdatingUser(false);
     }
   };
 
-  // --- GUARDAR CONFIG GENERAL ---
   const handleSave = async () => {
     setIsSubmitting(true);
     try {
@@ -115,19 +102,25 @@ export default function TripSettingsModal({
     }
   };
 
-  // --- DELETE TRIP HANDLER ---
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDangerConfirm, setShowDangerConfirm] = useState(false);
+  const isOwner = auth.currentUser?.uid === tripData.ownerId;
+  const hasDeletePermission = isOwner && !!onDeleteTrip;
+  const hasLeaveOption = !!onLeaveTrip;
+  const showDangerZone = hasDeletePermission || hasLeaveOption;
 
-  const handleDeleteTrip = async () => {
-      if (!onDeleteTrip) return;
-      await onDeleteTrip();
+  const handleDangerAction = async () => {
+      if (hasDeletePermission && onDeleteTrip) {
+          await onDeleteTrip();
+      } else if (hasLeaveOption && onLeaveTrip) {
+          await onLeaveTrip();
+      }
   };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Configuració del Viatge">
       <div className="space-y-8 pb-4">
         
-        {/* HERO SECTION: NAME */}
+        {/* HERO SECTION */}
         <div className="bg-slate-50 dark:bg-slate-900/50 -mx-6 -mt-2 px-6 py-8 border-b border-slate-100 dark:border-slate-800 flex flex-col items-center gap-4">
             <div className="w-full relative group">
                 <label className="sr-only">Nom del viatge</label>
@@ -238,7 +231,6 @@ export default function TripSettingsModal({
                                         onClick={() => saveUserEdit(user.id)} 
                                         disabled={isUpdatingUser} 
                                         className="h-8 w-8 flex items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-100 transition-colors"
-                                        title="Guardar"
                                     >
                                         <Check size={16} strokeWidth={3} />
                                     </button>
@@ -246,7 +238,6 @@ export default function TripSettingsModal({
                                         onClick={() => setEditingUserId(null)} 
                                         disabled={isUpdatingUser} 
                                         className="h-8 w-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 border border-slate-200 transition-colors"
-                                        title="Cancel·lar"
                                     >
                                         <X size={16} strokeWidth={3} />
                                     </button>
@@ -256,24 +247,12 @@ export default function TripSettingsModal({
                                     <button 
                                         onClick={() => startEditUser(user)} 
                                         className="h-8 w-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all opacity-100 sm:opacity-0 group-hover:opacity-100 focus:opacity-100"
-                                        title="Editar nom"
                                     >
                                         <Pencil size={16} />
                                     </button>
                                     
-                                    {/* Botó d'eliminar usuari */}
-                                    {auth.currentUser?.uid === tripData.ownerId && user.id !== tripData.ownerId && (
+                                    {isOwner && user.id !== tripData.ownerId && (
                                         <button 
-                                            onClick={() => deleteUser(user.id)}
-                                            className="h-8 w-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all opacity-100 sm:opacity-0 group-hover:opacity-100 focus:opacity-100"
-                                            title="Eliminar del viatge"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                    )}
-                                    {/* Fallback visual per si no ets l'amo però vols veure el botó (o treu la condició ownerId si tothom pot esborrar) */}
-                                    {(!auth.currentUser?.uid || auth.currentUser.uid !== tripData.ownerId) && user.id !== tripData.ownerId && (
-                                         <button 
                                             onClick={() => deleteUser(user.id)}
                                             className="h-8 w-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all opacity-100 sm:opacity-0 group-hover:opacity-100 focus:opacity-100"
                                         >
@@ -288,7 +267,7 @@ export default function TripSettingsModal({
              </div>
         </div>
 
-        {/* EXTRA ACTIONS (Còpia de Seguretat i Zona de Perill) */}
+        {/* EXTRA ACTIONS */}
         <div className="space-y-6 pt-4">
              <button 
                 onClick={() => downloadBackup(tripData)}
@@ -306,19 +285,20 @@ export default function TripSettingsModal({
                 <div className="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
              </button>
 
-            {onDeleteTrip && (
+            {showDangerZone && (
                 <div className={`
                     rounded-3xl border transition-all duration-300 overflow-hidden
-                    ${showDeleteConfirm 
+                    ${showDangerConfirm 
                         ? 'bg-rose-50 border-rose-200 dark:bg-rose-900/10 dark:border-rose-900/30' 
                         : 'bg-transparent border-transparent'}
                 `}>
-                    {!showDeleteConfirm ? (
+                    {!showDangerConfirm ? (
                         <button 
-                            onClick={() => setShowDeleteConfirm(true)}
+                            onClick={() => setShowDangerConfirm(true)}
                             className="w-full flex items-center justify-center gap-2 p-4 text-rose-500 hover:text-rose-700 font-bold text-sm opacity-60 hover:opacity-100 transition-all hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-2xl"
                         >
-                            <Trash2 size={16} /> Eliminar Viatge
+                            {hasDeletePermission ? <Trash2 size={16} /> : <LogOut size={16} />} 
+                            {hasDeletePermission ? 'Eliminar Viatge' : 'Deixar de veure el grup'}
                         </button>
                     ) : (
                         <div className="p-5 animate-in slide-in-from-bottom-2 fade-in">
@@ -328,21 +308,23 @@ export default function TripSettingsModal({
                                 </div>
                                 <h4 className="text-rose-700 dark:text-rose-400 font-black text-lg">Estàs segur?</h4>
                                 <p className="text-xs text-rose-600/70 max-w-[200px] leading-relaxed">
-                                    Aquesta acció és irreversible. S'esborraran totes les despeses i dades.
+                                    {hasDeletePermission 
+                                        ? "Aquesta acció és irreversible. S'esborraran totes les dades." 
+                                        : "Deixaràs de tenir accés a aquest viatge."}
                                 </p>
                             </div>
                             <div className="flex gap-3">
                                 <button 
-                                    onClick={() => setShowDeleteConfirm(false)}
+                                    onClick={() => setShowDangerConfirm(false)}
                                     className="flex-1 py-3 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-sm rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 transition-colors"
                                 >
                                     Cancel·lar
                                 </button>
                                 <button 
-                                    onClick={handleDeleteTrip}
+                                    onClick={handleDangerAction}
                                     className="flex-1 py-3 bg-rose-600 text-white font-bold text-sm rounded-xl shadow-lg shadow-rose-200 dark:shadow-none hover:bg-rose-700 active:scale-95 transition-all"
                                 >
-                                    Sí, eliminar
+                                    {hasDeletePermission ? 'Sí, eliminar' : 'Sí, marxar'}
                                 </button>
                             </div>
                         </div>

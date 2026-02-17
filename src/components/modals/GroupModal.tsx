@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import QRCode from 'react-qr-code';
-import { Share2, Copy, Check, Crown, Trash2, Link as LinkIcon, Users, Edit2, X } from 'lucide-react';
+import { Share2, Copy, Check, Crown, Trash2, Link as LinkIcon, Users, Edit2 } from 'lucide-react';
 import Modal from '../Modal';
 import { TripUser } from '../../types';
 import { ToastType } from '../Toast';
@@ -48,7 +48,7 @@ export default function GroupModal({ isOpen, onClose, showToast, initialTab = 'm
   useEffect(() => {
     if (isOpen) {
         setActiveTab(initialTab);
-        setEditingUserId(null); // Resetejem edicions en obrir
+        setEditingUserId(null); 
     }
   }, [isOpen, initialTab]);
 
@@ -94,7 +94,8 @@ export default function GroupModal({ isOpen, onClose, showToast, initialTab = 'm
     if (!editingUserId || !tempName.trim()) return;
     setLoadingAction(editingUserId);
     try {
-        await TripService.renameUser(tripData.id, editingUserId, tempName.trim());
+        // CORRECCIÓ: Fem servir el nom correcte del mètode del servei
+        await TripService.updateTripUserName(tripData.id, editingUserId, tempName.trim());
         showToast("Nom actualitzat", 'success');
         setEditingUserId(null);
     } catch (error) {

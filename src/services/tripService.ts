@@ -23,7 +23,8 @@ const tripConverter: FirestoreDataConverter<TripData> = {
     return {
       ...sanitized,
       logs: sanitized.logs || [],
-      memberUids: sanitized.memberUids || []
+      memberUids: sanitized.memberUids || [],
+      ownerId: sanitized.ownerId || null
     };
   },
   fromFirestore: (snapshot: QueryDocumentSnapshot, options: SnapshotOptions): TripData => {
@@ -33,9 +34,10 @@ const tripConverter: FirestoreDataConverter<TripData> = {
       name: data.name || 'Viatge sense nom',
       users: data.users || [],
       expenses: data.expenses || [],
-      currency: data.currency || { code: 'EUR', symbol: '€', locale: 'ca-ES' } as Currency,
+      currency: data.currency || { code: 'EUR', symbol: '€', locale: 'ca-ES', name: 'Euro' } as Currency,
       createdAt: data.createdAt || new Date().toISOString(),
       memberUids: data.memberUids || [],
+      ownerId: data.ownerId,
       logs: data.logs || [],
       isDeleted: data.isDeleted || false,
       isSettled: data.isSettled || false
@@ -71,7 +73,6 @@ const recalculateTripSettledStatus = async (tripId: string) => {
 
     if (tripData.isSettled !== isSettled) {
       await updateDoc(getTripRef(tripId), { isSettled });
-      console.log(`[TripService] Estat 'isSettled' actualitzat a: ${isSettled}`);
     }
   } catch (error) {
     console.error("Error recalculant l'estat saldat:", error);
@@ -112,6 +113,7 @@ export const TripService = {
     const tripWithMembers = {
       ...trip,
       memberUids: initialMemberUids,
+      ownerId: auth.currentUser?.uid, 
       logs: [],
       isDeleted: false,
       isSettled: true 
@@ -212,12 +214,10 @@ export const TripService = {
 
     const updatedUsers = tripData.users.map(u => {
       if (u.id === userId) {
-        // CORRECCIÓ CLAU: A part de canviar el nom, eliminem la foto
-        // Així l'Avatar passarà a mostrar les inicials automàticament
         return { 
           ...u, 
           name: newName, 
-          photoUrl: null // <--- FORCE DELETE PHOTO
+          photoUrl: null 
         };
       }
       return u;
@@ -245,5 +245,31 @@ export const TripService = {
     await updateDoc(tripRef, updatePayload);
     await logAction(tripId, `ha sortit del grup`, 'settings');
     await recalculateTripSettledStatus(tripId);
+  },
+
+  // --- NOU: LINK USER (Reclamar perfil) ---
+  linkUserToAccount: async (tripId: string, tripUserId: string, user: User) => {
+    const tripRef = getTripRef(tripId);
+    const tripSnap = await getDoc(tripRef);
+    if (!tripSnap.exists()) throw new Error("Viatge no trobat");
+
+    const data = tripSnap.data();
+    const updatedUsers = data.users.map(u => {
+      if (u.id === tripUserId) {
+        return {
+          ...u,
+          linkedUid: user.uid,
+          photoUrl: user.photoURL || null,
+          isAuth: true
+        };
+      }
+      return u;
+    });
+
+    await updateDoc(tripRef, {
+      users: updatedUsers,
+      memberUids: arrayUnion(user.uid)
+    });
+    await logAction(tripId, `ha reclamat un perfil`, 'join');
   }
 };

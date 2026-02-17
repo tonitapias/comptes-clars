@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { Category, Currency } from '../types';
 
-// --- CONSTANTS DE DOMINI (Single Source of Truth) ---
+// --- CONSTANTS DE DOMINI ---
 
 export const SPLIT_TYPES = {
   EQUAL: 'equal',
@@ -15,8 +15,6 @@ export const SPLIT_TYPES = {
 
 // --- CONFIGURACIÓ UI ---
 
-// Definim els modes de repartiment disponibles a la interfície.
-// Nota: El mode 'percent' és visual i es tradueix a 'shares' (SPLIT_TYPES.SHARES) internament.
 export const UI_SPLIT_MODES = [
   { 
     id: SPLIT_TYPES.EQUAL, 
@@ -29,10 +27,10 @@ export const UI_SPLIT_MODES = [
     icon: Calculator 
   },
   { 
-    id: 'percent', // ID visual, no existeix a la BD
+    id: 'percent', 
     label: 'Percentatge', 
     icon: PieChart,
-    mappedType: SPLIT_TYPES.SHARES // El tipus real que farem servir
+    mappedType: SPLIT_TYPES.SHARES 
   },
 ] as const;
 
@@ -53,9 +51,9 @@ export const CATEGORIES: Category[] = [
 ];
 
 export const CURRENCIES: Currency[] = [
-  { code: 'EUR', symbol: '€', locale: 'ca-ES' },
-  { code: 'USD', symbol: '$', locale: 'en-US' },
-  { code: 'GBP', symbol: '£', locale: 'en-GB' },
-  { code: 'JPY', symbol: '¥', locale: 'ja-JP' },
-  { code: 'MXN', symbol: '$', locale: 'es-MX' },
+  { code: 'EUR', symbol: '€', locale: 'ca-ES', name: 'Euro' },
+  { code: 'USD', symbol: '$', locale: 'en-US', name: 'Dòlar EUA' },
+  { code: 'GBP', symbol: '£', locale: 'en-GB', name: 'Lliura Esterlina' },
+  { code: 'JPY', symbol: '¥', locale: 'ja-JP', name: 'Ien Japonès' },
+  { code: 'MXN', symbol: '$', locale: 'es-MX', name: 'Peso Mexicà' },
 ];
