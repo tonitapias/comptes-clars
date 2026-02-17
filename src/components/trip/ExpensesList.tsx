@@ -4,7 +4,6 @@ import { CATEGORIES } from '../../utils/constants';
 import { Expense, CategoryId, TripUser } from '../../types';
 import { formatCurrency, formatDateDisplay } from '../../utils/formatters';
 import { useTrip } from '../../context/TripContext';
-// UX ADDITION: Feedback hàptic
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
 
 interface ExpensesListProps {
@@ -19,17 +18,18 @@ interface ExpensesListProps {
 
 const PAGE_SIZE = 20;
 
-// CONSTANT VISUAL: Ajustada per evitar solapaments amb el header de filtres
-const STICKY_TOP_OFFSET = "top-[8.5rem]"; 
+// Ajustem l'offset perquè els encapçalaments de data es quedin enganxats 
+// just sota la barra de cerca (aprox 140px/9rem depenent del dispositiu)
+const DATE_HEADER_OFFSET = "top-[8.5rem]";
 
 const ExpenseSkeleton = () => (
-  <div className="bg-surface-card p-4 rounded-[1.25rem] border border-slate-100 dark:border-slate-800 flex items-center gap-4 animate-pulse">
-    <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 flex-shrink-0" />
+  <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 flex items-center gap-4 animate-pulse shadow-sm">
+    <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-700 flex-shrink-0" />
     <div className="flex-1 space-y-2.5">
-       <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded-full w-2/3" />
-       <div className="h-3 bg-slate-50 dark:bg-slate-800/50 rounded-full w-1/3" />
+       <div className="h-4 bg-slate-100 dark:bg-slate-700 rounded-full w-2/3" />
+       <div className="h-3 bg-slate-50 dark:bg-slate-700/50 rounded-full w-1/3" />
     </div>
-    <div className="w-16 h-6 bg-slate-100 dark:bg-slate-800 rounded-full" />
+    <div className="w-16 h-6 bg-slate-100 dark:bg-slate-700 rounded-full" />
   </div>
 );
 
@@ -47,6 +47,7 @@ export default function ExpensesList({
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const observerTarget = useRef<HTMLDivElement>(null);
 
+  // Optimització: Creem el mapa d'usuaris una sola vegada
   const userMap = useMemo(() => {
     if (!tripData?.users) return {};
     return tripData.users.reduce((acc, user) => {
@@ -59,6 +60,7 @@ export default function ExpensesList({
     setVisibleCount(PAGE_SIZE);
   }, [searchQuery, filterCategory, expenses]);
 
+  // Scroll Infinit
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -96,86 +98,71 @@ export default function ExpensesList({
   };
 
   return (
-    <div className="space-y-2 animate-fade-in pb-32 min-h-[60vh]"> 
+    <div className="space-y-4 animate-fade-in pb-32 min-h-[60vh]"> 
       
-      {/* --- HEADER: SEARCH & FILTERS (Sticky Glassmorphism) --- */}
+      {/* --- STICKY HEADER: SEARCH & FILTERS --- */}
       <header 
-        className="sticky top-0 z-40 -mx-4 px-4 pt-4 pb-2 transition-all duration-300"
-        role="search"
+        className="sticky top-0 z-40 -mx-4 px-4 pt-2 pb-4 transition-all duration-300"
       >
-        {/* Fons Glassmorphism millorat amb degradat inferior per suavitzar el tall */}
-        <div className="absolute inset-0 bg-surface-ground/90 dark:bg-surface-ground/95 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 shadow-sm transition-all z-0" />
+        {/* Fons Glassmorphism millorat per a llegibilitat */}
+        <div className="absolute inset-0 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm z-0" />
         
-        {/* Gradient fade out al bottom del header */}
-        <div className="absolute bottom-[-20px] left-0 right-0 h-[20px] bg-gradient-to-b from-surface-ground/90 to-transparent pointer-events-none z-0" />
-
         <div className="relative z-10 flex flex-col gap-3">
-            {/* Search Input */}
+            
+            {/* 1. Search Bar */}
             <div className="relative group">
-                <label htmlFor="search-expenses" className="sr-only">Cerca despeses</label>
                 <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors pointer-events-none">
-                    <Search className="w-5 h-5" aria-hidden="true" strokeWidth={2.5} />
+                    <Search className="w-5 h-5" strokeWidth={2.5} />
                 </div>
                 <input 
-                    id="search-expenses"
                     type="text"
-                    placeholder="Buscar per títol..."
+                    placeholder="Buscar despesa..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-12 pr-12 py-3.5 bg-surface-card/80 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700/60 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all shadow-sm text-content-body placeholder:text-slate-400 font-bold text-base appearance-none backdrop-blur-md"
+                    className="w-full pl-12 pr-12 h-12 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all shadow-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 font-medium text-base appearance-none"
                 />
                 
                 {isSearching ? (
                     <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
-                        <Loader2 className="w-5 h-5 animate-spin text-primary" aria-hidden="true" />
+                        <Loader2 className="w-5 h-5 animate-spin text-primary" />
                     </div>
                 ) : searchQuery && (
                     <button 
                         onClick={handleClearSearch}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 p-2 rounded-full text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-600 dark:hover:text-slate-200 transition-colors active:scale-90"
-                        aria-label="Esborrar cerca"
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1.5 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-600 transition-colors"
                     >
-                        <X size={16} strokeWidth={3} />
+                        <X size={18} strokeWidth={3} />
                     </button>
                 )}
             </div>
             
-            {/* Category Pills (Scrollable) */}
-            <div className="relative -mx-1 px-1">
-                <div 
-                    className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar mask-gradient-right pr-8 snap-x" 
-                    role="tablist" 
-                    aria-label="Filtre per categories"
-                >
+            {/* 2. Category Filters (Scrollable) */}
+            <div className="relative -mx-4 px-4">
+                <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar snap-x px-4">
                     <button
                         onClick={() => handleCategoryClick('all')}
-                        role="tab"
-                        aria-selected={filterCategory === 'all'}
                         className={`
-                            snap-start flex items-center gap-1.5 px-4 py-2 rounded-full whitespace-nowrap transition-all text-sm font-bold select-none active:scale-95 border
-                            focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-primary
+                            snap-start flex items-center gap-1.5 px-4 py-2 rounded-full whitespace-nowrap transition-all text-xs font-bold border select-none
                             ${filterCategory === 'all'
-                                ? 'bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 border-transparent shadow-md transform scale-105' 
-                                : 'bg-surface-card border-slate-200 dark:border-slate-800 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}
+                                ? 'bg-slate-800 text-white border-slate-800 dark:bg-white dark:text-slate-900 shadow-md transform scale-105' 
+                                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50'}
                         `}
                     >
-                        <Filter size={14} aria-hidden="true" strokeWidth={2.5} /> Tots
+                        <Filter size={14} strokeWidth={2.5} /> Tots
                     </button>
+                    
                     {CATEGORIES.filter(c => c.id !== 'all').map(cat => (
                         <button
                             key={cat.id}
                             onClick={() => handleCategoryClick(cat.id)}
-                            role="tab"
-                            aria-selected={filterCategory === cat.id}
                             className={`
-                                snap-start flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-all text-sm font-bold select-none active:scale-95 border
-                                focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-primary
+                                snap-start flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-all text-xs font-bold border select-none
                                 ${filterCategory === cat.id 
-                                    ? 'bg-primary text-white border-primary shadow-md shadow-indigo-500/20 transform scale-105' 
-                                    : 'bg-surface-card border-slate-200 dark:border-slate-800 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}
+                                    ? 'bg-primary text-white border-primary shadow-md shadow-primary/20 transform scale-105' 
+                                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50'}
                             `}
                         >
-                            <cat.icon className="w-4 h-4" aria-hidden="true" strokeWidth={2.5} />
+                            <cat.icon className="w-3.5 h-3.5" strokeWidth={2.5} />
                             {cat.label}
                         </button>
                     ))}
@@ -184,100 +171,100 @@ export default function ExpensesList({
         </div>
       </header>
 
-      {/* --- EXPENSES LIST --- */}
-      <main className="space-y-3" aria-busy={isSearching} aria-live="polite">
+      {/* --- LISTA DE DESPESES --- */}
+      <main className="space-y-3 px-1">
         {isSearching ? (
-           <div className="space-y-4 pt-4 px-1">
-             {Array.from({ length: 5 }).map((_, i) => <ExpenseSkeleton key={i} />)}
+           <div className="space-y-4 pt-2">
+             {Array.from({ length: 4 }).map((_, i) => <ExpenseSkeleton key={i} />)}
            </div>
         ) : expenses.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-24 text-content-subtle animate-fade-in text-center px-6 opacity-80">
-                <div className="bg-slate-100 dark:bg-slate-800/50 p-8 rounded-full mb-6 shadow-inner">
-                    <Receipt className="w-12 h-12 text-slate-300 dark:text-slate-600" aria-hidden="true" />
+            <div className="flex flex-col items-center justify-center py-20 text-center opacity-70">
+                <div className="bg-slate-100 dark:bg-slate-800 p-6 rounded-full mb-4">
+                    <Receipt className="w-10 h-10 text-slate-300 dark:text-slate-600" />
                 </div>
-                <h3 className="font-bold text-xl text-slate-700 dark:text-slate-200 mb-2">
-                    {searchQuery ? 'Cap resultat' : 'Llista buida'}
+                <h3 className="font-bold text-lg text-slate-700 dark:text-slate-300">
+                    {searchQuery ? 'Cap resultat' : 'Encara no hi ha despeses'}
                 </h3>
-                <p className="text-sm text-slate-500 max-w-[200px] leading-relaxed mx-auto">
-                    {searchQuery || filterCategory !== 'all' 
-                      ? "Prova de canviar els filtres de cerca." 
-                      : "Afegeix la primera despesa del viatge."}
+                <p className="text-sm text-slate-500 mt-1 max-w-[250px] mx-auto">
+                    {searchQuery 
+                      ? "Prova amb un altre terme o categoria." 
+                      : "Prem el botó '+' per afegir la primera despesa del viatge."}
                 </p>
             </div>
         ) : (
-            <ul className="relative space-y-4 pt-2 pb-6">
+            <ul className="relative space-y-3">
               {visibleExpenses.map((expense, index) => {
                   const category = CATEGORIES.find(c => c.id === expense.category) || CATEGORIES[0];
                   const isTransfer = expense.category === 'transfer';
                   const payerName = getUserName(expense.payer);
                   const catColorBase = category.color.split('-')[1];
 
+                  // Lògica per agrupar per dates
                   const showDateHeader = index === 0 || expense.date !== visibleExpenses[index - 1].date;
                   const displayDate = formatDateDisplay(expense.date); 
                   const isToday = displayDate.toLowerCase().includes('avui') || displayDate.toLowerCase().includes('today');
 
                   return (
                     <React.Fragment key={expense.id}>
-                        {/* --- DATE HEADER (Improved Sticky) --- */}
+                        {/* --- DATE HEADER STICKY --- */}
                         {showDateHeader && (
-                            <li className={`sticky ${STICKY_TOP_OFFSET} z-30 flex justify-center pointer-events-none py-2`}>
+                            <li className={`sticky ${DATE_HEADER_OFFSET} z-30 flex justify-center pointer-events-none py-3`}>
                                 <div className={`
-                                    flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] uppercase tracking-widest font-black shadow-sm border backdrop-blur-md transition-all
+                                    flex items-center gap-2 px-3 py-1 rounded-lg text-[10px] uppercase tracking-widest font-black shadow-sm border backdrop-blur-xl
                                     ${isToday 
-                                        ? 'bg-indigo-600/90 text-white border-indigo-500/50 shadow-indigo-500/20' 
-                                        : 'bg-white/80 dark:bg-slate-800/80 text-slate-500 border-slate-200/50 dark:border-slate-700/50 shadow-sm'}
+                                        ? 'bg-primary text-white border-primary/50 shadow-primary/20' 
+                                        : 'bg-white/90 dark:bg-slate-800/90 text-slate-500 border-slate-200/50 dark:border-slate-700'}
                                 `}>
-                                    <CalendarDays size={11} className={isToday ? 'text-white' : 'text-slate-400'} strokeWidth={2.5} />
+                                    <CalendarDays size={12} strokeWidth={2.5} />
                                     {displayDate}
                                 </div>
                             </li>
                         )}
 
-                        {/* --- EXPENSE CARD --- */}
-                        <li className="group px-1">
+                        {/* --- TARGETA DESPESA --- */}
+                        <li>
                             <button 
                                 type="button"
                                 onClick={() => handleExpenseClick(expense)}
-                                className="w-full text-left bg-surface-card p-4 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 hover:border-indigo-200 dark:hover:border-indigo-900 transition-all cursor-pointer relative overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:z-10 shadow-sm hover:shadow-financial-md active:scale-[0.98] group"
+                                className="group w-full text-left bg-white dark:bg-slate-800 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-700 hover:border-primary/50 transition-all shadow-sm hover:shadow-md active:scale-[0.99] relative overflow-hidden"
                             >
-                                <div className="flex items-center justify-between gap-3 sm:gap-4">
+                                <div className="flex items-center justify-between gap-3">
                                     
-                                    {/* Left: Icon & Main Info */}
-                                    <div className="flex items-center gap-4 flex-1 min-w-0">
-                                        <div className={`
-                                            w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-colors border shadow-sm group-hover:scale-105 duration-300
-                                            ${isTransfer 
-                                                ? 'bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900/30' 
-                                                : `bg-${catColorBase}-50 text-${catColorBase}-600 border-${catColorBase}-100 dark:bg-${catColorBase}-900/20 dark:text-${catColorBase}-400 dark:border-${catColorBase}-900/30`
-                                            }
-                                        `}>
-                                            {isTransfer ? <ArrowRightLeft size={20} aria-hidden="true" strokeWidth={2} /> : <category.icon size={20} aria-hidden="true" strokeWidth={2} />}
+                                    {/* Icona Categoria */}
+                                    <div className={`
+                                        w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 border transition-transform group-hover:scale-105 duration-300
+                                        ${isTransfer 
+                                            ? 'bg-emerald-50 border-emerald-100 text-emerald-600 dark:bg-emerald-900/20 dark:border-emerald-900/50' 
+                                            : `bg-${catColorBase}-50 border-${catColorBase}-100 text-${catColorBase}-600 dark:bg-${catColorBase}-900/20 dark:border-${catColorBase}-900/50`
+                                        }
+                                    `}>
+                                        {isTransfer ? <ArrowRightLeft size={20} strokeWidth={2} /> : <category.icon size={20} strokeWidth={2} />}
+                                    </div>
+                                    
+                                    {/* Informació Central */}
+                                    <div className="flex flex-col min-w-0 flex-1">
+                                        <div className="flex items-center gap-2 mb-0.5">
+                                            <span className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">
+                                                {expense.title}
+                                            </span>
+                                            {expense.receiptUrl && <Paperclip size={12} className="text-primary flex-shrink-0" />}
                                         </div>
                                         
-                                        <div className="flex flex-col min-w-0 flex-1 gap-1">
-                                            <div className="flex items-center gap-2">
-                                                <span className={`font-bold text-base leading-tight truncate ${isTransfer ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-100'}`}>
-                                                    {expense.title}
-                                                </span>
-                                                {expense.receiptUrl && <Paperclip size={14} className="text-indigo-400 flex-shrink-0" />}
-                                            </div>
-                                            
-                                            <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 truncate">
-                                                <span className="text-slate-600 dark:text-slate-300 font-bold">{payerName}</span>
-                                                <span className="text-slate-300 dark:text-slate-600">•</span>
-                                                <span className="truncate">
-                                                    {isTransfer 
-                                                        ? <span className="flex items-center gap-1">➜ {expense.involved[0] ? getUserName(expense.involved[0]) : 'Tothom'}</span>
-                                                        : (expense.splitType === 'equal' ? `${expense.involved.length} persones` : 'Repartiment manual')
-                                                    }
-                                                </span>
-                                            </div>
+                                        <div className="flex items-center gap-1.5 text-xs text-slate-500 truncate">
+                                            <span className="font-semibold text-slate-600 dark:text-slate-400">{payerName}</span>
+                                            <span className="text-slate-300">•</span>
+                                            <span className="truncate opacity-80">
+                                                {isTransfer 
+                                                    ? `➜ ${expense.involved[0] ? getUserName(expense.involved[0]) : '...'}`
+                                                    : (expense.splitType === 'equal' ? `${expense.involved.length} pers.` : 'Manual')
+                                                }
+                                            </span>
                                         </div>
                                     </div>
 
-                                    {/* Right: Amount */}
-                                    <div className="flex flex-col items-end pl-2">
-                                        <span className={`font-black text-lg sm:text-xl tracking-tight tabular-nums ${isTransfer ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-slate-100'}`}>
+                                    {/* Import */}
+                                    <div className="text-right pl-2">
+                                        <span className={`block font-black text-lg tracking-tight tabular-nums ${isTransfer ? 'text-emerald-600' : 'text-slate-900 dark:text-white'}`}>
                                             {formatCurrency(expense.amount, currency)}
                                         </span>
                                     </div>
@@ -290,10 +277,10 @@ export default function ExpensesList({
             </ul>
         )}
         
-        {/* Loader Final */}
+        {/* Loader Final de Scroll Infinit */}
         {hasMore && !isSearching && (
-          <div ref={observerTarget} className="h-24 flex items-center justify-center w-full text-slate-400 opacity-50">
-            <Loader2 className="w-6 h-6 animate-spin" />
+          <div ref={observerTarget} className="h-20 flex items-center justify-center w-full text-slate-300">
+            <Loader2 className="w-5 h-5 animate-spin" />
           </div>
         )}
       </main>
