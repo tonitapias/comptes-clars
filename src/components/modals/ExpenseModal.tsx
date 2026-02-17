@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   User as UserIcon, Check, Trash2, X, 
-  PieChart, Percent, Calendar
+  PieChart, Percent, Calendar, AlignCenter
 } from 'lucide-react';
 import Modal from '../Modal';
 import Button from '../Button';
@@ -47,7 +47,7 @@ const getAmountFontSize = (value: string) => {
   return 'text-5xl';
 };
 
-// --- SUBCOMPONENTS ---
+// --- SUBCOMPONENT: SELECTOR DE MODE NET ---
 
 interface SplitModeSelectorProps {
   currentMode: string;
@@ -67,7 +67,7 @@ const SplitModeSelector: React.FC<SplitModeSelectorProps> = ({ currentMode, onMo
   };
 
   return (
-    <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4 flex gap-1 border border-slate-200 dark:border-slate-700">
+    <div className="bg-slate-100/80 dark:bg-slate-800/80 p-1 rounded-xl mb-6 flex gap-1">
       {orderedModes.map((mode) => {
         const isActive = currentMode === mode.id;
         const Icon = mode.icon; 
@@ -78,15 +78,15 @@ const SplitModeSelector: React.FC<SplitModeSelectorProps> = ({ currentMode, onMo
             type="button"
             onClick={() => handlePress(mode)}
             className={`
-              flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all duration-200
-              focus:outline-none focus-visible:ring-2 focus-visible:ring-primary
+              relative flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all duration-200 z-0
+              focus:outline-none
               ${isActive 
-                ? 'bg-white dark:bg-slate-700 text-primary dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/10' 
+                ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm scale-[1.02]' 
                 : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
               }
             `}
           >
-            <Icon size={16} strokeWidth={isActive ? 2.5 : 2} />
+            <Icon size={16} strokeWidth={isActive ? 2.5 : 2} className={isActive ? 'text-primary' : ''} />
             <span className={isActive ? 'opacity-100' : 'hidden sm:inline opacity-80'}>{mode.label}</span>
           </button>
         );
@@ -119,17 +119,13 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
     currency,
     onSubmit: async (data) => {
       try {
-        // ESTRATÈGIA BLINDADA: Comprovem i capturem l'ID abans de l'acció
         if (initialData && initialData.id) {
-          // Convertim a String per seguretat (per si l'ID fos numèric)
           const safeId = String(initialData.id);
           await actions.updateExpense(safeId, data);
-          
           trigger('success');
           showToast('Despesa actualitzada', 'success');
         } else {
           await actions.addExpense(data);
-          
           trigger('success');
           showToast('Despesa creada', 'success');
         }
@@ -163,8 +159,9 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
     }
   };
 
-  const inputBaseClasses = "w-full h-11 px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 font-bold text-slate-800 dark:text-slate-100 transition-all text-sm appearance-none shadow-sm";
-  const labelBaseClasses = "text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1 mb-1 block";
+  // Styles Helpers
+  const inputBaseClasses = "w-full h-12 px-4 bg-slate-50 dark:bg-slate-900 border-0 rounded-xl outline-none focus:ring-2 focus:ring-primary/20 font-bold text-slate-800 dark:text-slate-100 transition-all text-sm appearance-none";
+  const labelBaseClasses = "text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1 mb-1.5 block";
   
   const remainingFormatted = exactSplitStats 
     ? formatMoney(toCents(Math.abs(exactSplitStats.remainderCents)), currency) 
@@ -172,106 +169,106 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={initialData ? 'Editar Despesa' : 'Nova Despesa'}>
-      <form onSubmit={logic.handleSubmit} className="flex flex-col h-full bg-slate-50 dark:bg-slate-900/50 -m-5"> 
+      <form onSubmit={logic.handleSubmit} className="flex flex-col h-full bg-white dark:bg-slate-950 -m-5 sm:-m-6 relative overflow-hidden"> 
         
-        {/* --- SECTION 1: HEADER CARD (Amount & Title) --- */}
-        <div className="bg-white dark:bg-slate-800 p-6 pt-8 pb-8 shadow-sm border-b border-slate-100 dark:border-slate-700 z-10 rounded-b-3xl mb-4">
-            <div className="flex flex-col items-center gap-4">
-                {/* AMOUNT */}
-                <div className="relative w-full text-center">
-                    <div className={`flex items-baseline justify-center gap-1.5 ${!formState.amount ? 'text-slate-300' : 'text-slate-800 dark:text-white'}`}>
-                        <span className="text-3xl font-bold opacity-40 translate-y-[-2px]">{currency.symbol}</span>
-                        <input 
-                            type="text" 
-                            inputMode="decimal"
-                            placeholder="0" 
-                            required 
-                            autoFocus={!initialData}
-                            value={formState.amount} 
-                            onChange={handleAmountChange} 
-                            className={`
-                                bg-transparent outline-none font-black text-center 
-                                placeholder:text-slate-200 dark:placeholder:text-slate-700
-                                caret-primary tabular-nums tracking-tight w-full max-w-[70%]
-                                ${getAmountFontSize(formState.amount)}
-                                ${exactSplitStats?.isOverAllocated ? 'text-status-error' : ''}
-                            `}
-                        />
-                    </div>
-                </div>
-
-                {/* TITLE */}
-                <div className="w-full max-w-sm px-4">
+        {/* --- SECTION 1: COMPACT HERO HEADER --- */}
+        <div className="bg-white dark:bg-slate-900 pt-2 pb-6 px-6 z-10 shrink-0 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex flex-col items-center gap-1">
+                {/* AMOUNT INPUT */}
+                <div className="relative w-full text-center flex justify-center items-baseline gap-1">
+                    <span className="text-3xl font-bold text-slate-300 dark:text-slate-600 translate-y-[-2px]">{currency.symbol}</span>
                     <input 
                         type="text" 
-                        placeholder="Concepte (Ex: Sopar...)" 
+                        inputMode="decimal"
+                        placeholder="0" 
+                        required 
+                        autoFocus={!initialData}
+                        value={formState.amount} 
+                        onChange={handleAmountChange} 
+                        className={`
+                            bg-transparent outline-none font-black text-center 
+                            placeholder:text-slate-200 dark:placeholder:text-slate-700
+                            caret-primary tabular-nums tracking-tighter max-w-[70%]
+                            text-slate-800 dark:text-white
+                            ${getAmountFontSize(formState.amount)}
+                            ${exactSplitStats?.isOverAllocated ? 'text-rose-500' : ''}
+                        `}
+                    />
+                </div>
+
+                {/* TITLE INPUT */}
+                <div className="w-full max-w-sm">
+                    <input 
+                        type="text" 
+                        placeholder="Què heu pagat?" 
                         required 
                         value={formState.title} 
                         onChange={(e) => setters.setTitle(e.target.value)} 
-                        className="w-full text-center bg-slate-50 dark:bg-slate-900 border-none outline-none text-lg font-bold text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-primary/20 rounded-xl py-2.5 transition-all"
+                        className="w-full text-center bg-transparent border-none outline-none text-base font-semibold text-slate-500 dark:text-slate-400 placeholder:text-slate-300 focus:text-slate-800 dark:focus:text-slate-200 transition-colors py-2"
                     />
                 </div>
             </div>
         </div>
 
-        {/* --- SECTION 2: SCROLL CONTENT --- */}
-        <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-4">
+        {/* --- SECTION 2: SCROLLABLE CONTENT --- */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-5 space-y-8 bg-slate-50/50 dark:bg-slate-950">
             
-            {/* CARD: DETAILS */}
-            <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700/50">
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div>
-                        <label className={labelBaseClasses}>Pagador</label>
+            {/* GRUP 1: DETAILS */}
+            <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                    {/* PAYER */}
+                    <div className="bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-800 focus-within:ring-2 focus-within:ring-primary/10 transition-all">
+                        <label className={labelBaseClasses + " ml-2 mt-1"}>Qui ha pagat?</label>
                         <div className="relative">
                             <select 
                                 value={formState.payer} 
                                 onChange={(e) => setters.setPayer(e.target.value)} 
-                                className={`${inputBaseClasses} pr-9`}
+                                className="w-full h-10 pl-3 pr-8 bg-transparent outline-none text-sm font-bold text-slate-700 dark:text-slate-200 appearance-none"
                             >
                                 {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                             </select>
-                            <UserIcon className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                            <UserIcon className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none" size={14} />
                         </div>
                     </div>
-                    <div>
-                        <label className={labelBaseClasses}>Data</label>
+
+                    {/* DATE */}
+                    <div className="bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-800 focus-within:ring-2 focus-within:ring-primary/10 transition-all">
+                        <label className={labelBaseClasses + " ml-2 mt-1"}>Quan?</label>
                         <div className="relative">
                             <input 
                                 type="date" 
                                 value={formState.date} 
                                 onChange={(e) => setters.setDate(e.target.value)} 
-                                className={`${inputBaseClasses} text-center`} 
+                                className="w-full h-10 pl-3 pr-2 bg-transparent outline-none text-sm font-bold text-slate-700 dark:text-slate-200 text-center" 
                             />
-                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none sm:hidden">
-                                <Calendar size={16} className="text-slate-400" />
-                            </div>
                         </div>
                     </div>
                 </div>
 
-                {/* CATEGORIES */}
+                {/* CATEGORIES GRID */}
                 <div>
-                    <label className={labelBaseClasses}>Categoria</label>
+                    <label className={labelBaseClasses + " mb-2 ml-1"}>Categoria</label>
                     <div className="grid grid-cols-4 gap-2">
                         {CATEGORIES.filter(c => c.id !== 'all').map(cat => {
                             const isSelected = formState.category === cat.id;
-                            const colorBase = cat.color.split('-')[1];
+                            const colorBase = cat.color.split('-')[1]; // e.g., 'emerald' from 'text-emerald-500'
+                            
                             return (
                                 <button
                                     key={cat.id}
                                     type="button"
                                     onClick={() => { trigger('light'); setters.setCategory(cat.id); }}
                                     className={`
-                                        flex flex-col items-center justify-center py-2.5 rounded-xl transition-all duration-200 outline-none
-                                        active:scale-95 border
+                                        flex flex-col items-center justify-center py-3 rounded-2xl transition-all duration-200 outline-none
+                                        active:scale-95
                                         ${isSelected 
-                                            ? `bg-${colorBase}-50 border-${colorBase}-200 text-${colorBase}-600 ring-1 ring-${colorBase}-200 dark:bg-${colorBase}-900/30 dark:border-${colorBase}-800 dark:text-${colorBase}-300` 
-                                            : 'bg-slate-50 border-transparent text-slate-400 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-500'
+                                            ? `bg-${colorBase}-100 text-${colorBase}-700 ring-2 ring-${colorBase}-500/20 dark:bg-${colorBase}-900/40 dark:text-${colorBase}-300` 
+                                            : 'bg-white dark:bg-slate-900 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-100 dark:border-slate-800'
                                         }
                                     `}
                                 >
-                                    <cat.icon className={`w-6 h-6 mb-1 ${isSelected ? 'scale-110' : 'opacity-70'}`} strokeWidth={2} />
-                                    <span className="text-[9px] font-bold leading-none uppercase">{cat.label}</span>
+                                    <cat.icon className={`w-5 h-5 mb-1.5 ${isSelected ? 'scale-110' : 'opacity-60'}`} strokeWidth={2.5} />
+                                    <span className="text-[9px] font-black uppercase tracking-tight">{cat.label}</span>
                                 </button>
                             );
                         })}
@@ -279,15 +276,15 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                 </div>
             </div>
 
-            {/* CARD: SPLIT */}
-            <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700/50">
+            {/* GRUP 2: SPLIT */}
+            <div>
                 <div className="flex items-center justify-between mb-2">
-                    <label className={labelBaseClasses + " mb-0"}>Repartiment</label>
+                    <label className={labelBaseClasses}>Com es reparteix?</label>
                     
-                    {/* Feedback Exact Split */}
+                    {/* Feedback visual per a errors de repartiment */}
                     {formState.splitType === SPLIT_TYPES.EXACT && exactSplitStats && !exactSplitStats.isFullyAllocated && (
-                        <div className={`text-xs font-bold px-2 py-0.5 rounded-md flex items-center gap-1
-                            ${exactSplitStats.isOverAllocated ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}
+                        <div className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse
+                            ${exactSplitStats.isOverAllocated ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-600'}
                         `}>
                             <span>{exactSplitStats.isOverAllocated ? 'Sobren' : 'Falten'}</span>
                             <span className="tabular-nums">{remainingFormatted}</span>
@@ -295,86 +292,99 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                     )}
                 </div>
 
-                <SplitModeSelector currentMode={uiMode} onModeChange={(id, map) => {
-                     setUiMode(id);
-                     setters.setSplitType(map || (id as SplitType));
-                }} />
+                <div className="bg-white dark:bg-slate-900 p-4 rounded-[1.5rem] shadow-sm border border-slate-100 dark:border-slate-800">
+                    <SplitModeSelector currentMode={uiMode} onModeChange={(id, map) => {
+                         setUiMode(id);
+                         setters.setSplitType(map || (id as SplitType));
+                    }} />
 
-                {/* Users List */}
-                <div className="space-y-1">
-                    {users.map(u => (
-                         <div key={u.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                             
-                             {/* User Name & Toggle (for Equal) */}
-                             <div className="flex items-center gap-3 overflow-hidden">
-                                {formState.splitType === SPLIT_TYPES.EQUAL ? (
+                    {/* USER LIST */}
+                    <div className="space-y-1">
+                        {users.map(u => (
+                             <div key={u.id} className="flex items-center justify-between py-2 px-1">
+                                 
+                                 {/* User Toggle */}
+                                 <div className="flex items-center gap-3 overflow-hidden flex-1">
                                     <button
                                         type="button"
-                                        onClick={() => { trigger('light'); logic.toggleInvolved(u.id); }}
-                                        className={`w-8 h-8 rounded-full flex items-center justify-center border transition-all ${
-                                            formState.involved.includes(u.id) 
-                                            ? 'bg-primary border-primary text-white' 
-                                            : 'bg-white border-slate-300 text-transparent'
-                                        }`}
+                                        onClick={() => { 
+                                            if(formState.splitType === SPLIT_TYPES.EQUAL) {
+                                                trigger('light'); 
+                                                logic.toggleInvolved(u.id); 
+                                            }
+                                        }}
+                                        disabled={formState.splitType !== SPLIT_TYPES.EQUAL}
+                                        className={`
+                                            w-10 h-10 rounded-full flex items-center justify-center transition-all flex-shrink-0
+                                            ${formState.splitType === SPLIT_TYPES.EQUAL 
+                                                ? (formState.involved.includes(u.id) 
+                                                    ? 'bg-primary text-white shadow-md shadow-primary/30 scale-100' 
+                                                    : 'bg-slate-100 text-transparent border border-slate-200 dark:bg-slate-800 dark:border-slate-700 scale-95')
+                                                : 'bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold text-xs'
+                                            }
+                                        `}
                                     >
-                                        <Check size={14} strokeWidth={4} />
+                                        {formState.splitType === SPLIT_TYPES.EQUAL ? <Check size={16} strokeWidth={4} /> : u.name.charAt(0)}
                                     </button>
-                                ) : (
-                                    <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-500">
-                                        {u.name.charAt(0)}
+                                    
+                                    <span 
+                                        onClick={() => formState.splitType === SPLIT_TYPES.EQUAL && logic.toggleInvolved(u.id)}
+                                        className={`font-bold text-sm truncate cursor-pointer select-none transition-colors ${
+                                        (formState.splitType === SPLIT_TYPES.EQUAL && !formState.involved.includes(u.id)) 
+                                        ? 'text-slate-300 dark:text-slate-600' 
+                                        : 'text-slate-700 dark:text-slate-200'
+                                    }`}>
+                                        {u.name}
+                                    </span>
+                                 </div>
+                                 
+                                 {/* Inputs for Advanced Modes */}
+                                 {formState.splitType !== SPLIT_TYPES.EQUAL && (
+                                    <div className="flex items-center w-28 pl-2">
+                                        {formState.splitType === SPLIT_TYPES.EXACT ? (
+                                            <div className="relative w-full">
+                                                <input 
+                                                    type="text" 
+                                                    inputMode="decimal"
+                                                    placeholder="0" 
+                                                    value={formState.splitDetails[u.id] ?? ''} 
+                                                    onChange={(e) => logic.handleDetailChange(u.id, e.target.value)}
+                                                    className={`
+                                                        w-full h-11 px-3 text-right bg-slate-50 dark:bg-slate-800 border rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-primary/20 tabular-nums transition-colors
+                                                        ${(exactSplitStats?.isOverAllocated && parseFloat(formState.splitDetails[u.id] || '0') > 0) 
+                                                            ? 'border-rose-300 text-rose-600 bg-rose-50' 
+                                                            : 'border-transparent focus:bg-white dark:focus:bg-slate-900'}
+                                                    `}
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div className="relative w-full flex items-center">
+                                                <input 
+                                                    type="number" 
+                                                    inputMode="decimal"
+                                                    min="0" placeholder="0"
+                                                    step={uiMode === 'percent' ? "0.1" : "1"} 
+                                                    value={formState.splitDetails[u.id] ?? ''} 
+                                                    onChange={(e) => logic.handleDetailChange(u.id, e.target.value)} 
+                                                    className="w-full h-11 px-3 text-center bg-slate-50 dark:bg-slate-800 border border-transparent rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:bg-white dark:focus:bg-slate-900 tabular-nums transition-all"
+                                                />
+                                                {uiMode === 'percent' && <span className="absolute right-3 text-slate-400 text-xs font-bold">%</span>}
+                                            </div>
+                                        )}
                                     </div>
-                                )}
-                                <span className={`font-bold text-sm truncate ${
-                                    (formState.splitType === SPLIT_TYPES.EQUAL && !formState.involved.includes(u.id)) 
-                                    ? 'text-slate-400 line-through decoration-2 decoration-slate-200' 
-                                    : 'text-slate-700 dark:text-slate-200'
-                                }`}>
-                                    {u.name}
-                                </span>
+                                 )}
                              </div>
-                             
-                             {/* Inputs for Non-Equal modes */}
-                             {formState.splitType !== SPLIT_TYPES.EQUAL && (
-                                <div className="flex items-center">
-                                    {formState.splitType === SPLIT_TYPES.EXACT ? (
-                                        <div className="relative w-24">
-                                            <input 
-                                                type="text" 
-                                                inputMode="decimal"
-                                                placeholder="0" 
-                                                value={formState.splitDetails[u.id] ?? ''} 
-                                                onChange={(e) => logic.handleDetailChange(u.id, e.target.value)}
-                                                className={`w-full py-1.5 px-2 text-right bg-slate-50 dark:bg-slate-900 border rounded-md font-bold text-sm outline-none focus:ring-2 focus:ring-primary focus:border-primary tabular-nums
-                                                    ${(exactSplitStats?.isOverAllocated && parseFloat(formState.splitDetails[u.id] || '0') > 0) 
-                                                        ? 'border-red-300 text-red-600 bg-red-50' 
-                                                        : 'border-slate-200 dark:border-slate-700'}
-                                                `}
-                                            />
-                                            <span className="absolute right-8 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none opacity-0 focus-within:opacity-100">€</span>
-                                        </div>
-                                    ) : (
-                                        <div className="relative w-20">
-                                            <input 
-                                                type="number" 
-                                                inputMode="decimal"
-                                                min="0" placeholder="0"
-                                                step={uiMode === 'percent' ? "0.1" : "1"} 
-                                                value={formState.splitDetails[u.id] ?? ''} 
-                                                onChange={(e) => logic.handleDetailChange(u.id, e.target.value)} 
-                                                className="w-full py-1.5 px-2 text-center bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md font-bold text-sm outline-none focus:ring-2 focus:ring-primary focus:border-primary tabular-nums"
-                                            />
-                                        </div>
-                                    )}
-                                </div>
-                             )}
-                         </div>
-                    ))}
+                        ))}
+                    </div>
                 </div>
             </div>
+
+            {/* SPACER FOR SCROLL */}
+            <div className="h-6" />
         </div>
 
-        {/* --- FOOTER --- */}
-        <div className="p-4 bg-white dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700 mt-auto rounded-t-3xl shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20">
+        {/* --- SECTION 3: FOOTER --- */}
+        <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shrink-0 z-20 pb-safe">
             <div className="flex items-center gap-3">
                 {initialData && onDelete && (
                     <div className="flex items-center">
@@ -382,15 +392,15 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                             <button 
                                 type="button"
                                 onClick={() => initialData?.id && onDelete?.(initialData.id)}
-                                className="h-12 px-4 rounded-xl bg-red-50 text-red-600 font-bold text-sm border border-red-100 whitespace-nowrap"
+                                className="h-14 px-4 rounded-2xl bg-rose-50 text-rose-600 font-bold text-sm border border-rose-100 whitespace-nowrap active:scale-95 transition-transform"
                             >
-                                Confirmar
+                                Confirmar?
                             </button>
                         ) : (
                             <button 
                                 type="button" 
                                 onClick={() => setIsDeleting(true)} 
-                                className="w-12 h-12 flex items-center justify-center rounded-xl bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                className="w-14 h-14 flex items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors active:scale-95"
                             >
                                 <Trash2 size={20} />
                             </button>
@@ -399,7 +409,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                             <button 
                                 type="button" 
                                 onClick={() => setIsDeleting(false)}
-                                className="w-12 h-12 flex items-center justify-center rounded-xl bg-slate-50 text-slate-400"
+                                className="w-14 h-14 flex items-center justify-center rounded-2xl bg-slate-50 text-slate-400 ml-2"
                             >
                                 <X size={20} />
                             </button>
@@ -410,12 +420,12 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                 <Button 
                     type="submit" 
                     fullWidth
-                    className="h-12 text-base font-bold shadow-lg shadow-indigo-500/20" 
+                    className="h-14 text-base font-bold shadow-xl shadow-primary/20 rounded-2xl" 
                     loading={isSubmitting}
                     haptic="success"
                     disabled={formState.splitType === SPLIT_TYPES.EXACT && exactSplitStats?.isOverAllocated}
                 >
-                    {initialData ? 'Guardar' : 'Crear Despesa'}
+                    {initialData ? 'Guardar Canvis' : 'Crear Despesa'}
                 </Button>
             </div>
         </div>

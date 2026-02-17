@@ -4,8 +4,7 @@ import { Link } from 'react-router-dom';
 import { useTrip } from '../../context/TripContext';
 import { useTheme } from '../../hooks/useTheme';
 import { formatCurrency } from '../../utils/formatters';
-import { toCents } from '../../types'; // <--- NOU IMPORT NECESSARI
-import Button from '../Button';
+import { toCents } from '../../types';
 
 interface TripHeaderProps {
   displayedTotal: number;
@@ -31,115 +30,116 @@ export default function TripHeader({
   const { name, users, currency } = tripData;
   const activeUserCount = users.filter(u => !u.isDeleted).length;
 
-  // Classes base per als botons de navegació circulars
-  const navBtnClasses = "w-10 h-10 flex items-center justify-center rounded-full bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 transition-all hover:scale-105 active:scale-95 hover:text-primary dark:hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/50";
+  // Base classes per botons 'Glass'
+  const navBtnClasses = "w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-600 dark:text-slate-300 transition-all active:scale-95 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-primary dark:hover:text-white shadow-sm";
 
   return (
-    <header className="relative z-30 flex flex-col pt-4 pb-6 px-4 animate-fade-in bg-slate-50 dark:bg-slate-900/50 transition-colors duration-300">
+    <header className="relative z-30 flex flex-col pt-6 pb-2 px-4 animate-fade-in bg-slate-50/50 dark:bg-slate-950/50">
       
-      {/* --- NAVBAR SUPERIOR --- */}
-      <div className="flex items-center justify-between mb-8">
+      {/* --- 1. TOP NAVIGATION --- */}
+      <div className="flex items-center justify-between mb-6">
         <Link 
           to="/" 
           className={navBtnClasses}
           aria-label="Tornar a l'inici"
         >
-          <ArrowLeft size={20} strokeWidth={2.5} />
+          <ArrowLeft size={22} strokeWidth={2.5} />
         </Link>
 
         <div className="flex items-center gap-3">
           <button 
             onClick={toggleTheme}
             className={navBtnClasses}
-            aria-label={`Canviar a mode ${theme === 'dark' ? 'clar' : 'fosc'}`}
+            aria-label={`Mode ${theme === 'dark' ? 'clar' : 'fosc'}`}
           >
-            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            {theme === 'dark' ? <Sun size={22} strokeWidth={2} /> : <Moon size={22} strokeWidth={2} />}
           </button>
           
           <button 
             onClick={onOpenSettings}
             className={navBtnClasses}
-            aria-label="Configuració del viatge"
+            aria-label="Configuració"
           >
-            <Settings size={18} />
+            <Settings size={22} strokeWidth={2} />
           </button>
         </div>
       </div>
 
-      {/* --- HERO SECTION (Import & Títol) --- */}
+      {/* --- 2. HERO SECTION (Títol & Import) --- */}
       <div className="flex flex-col items-center text-center w-full mb-8 relative">
         
-        {/* Títol del Viatge (Context) */}
-        <h1 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2">
-          {name}
-        </h1>
+        {/* Títol del Viatge */}
+        <div className="mb-2 px-4 py-1.5 rounded-full bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm">
+            <h1 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-2 max-w-[200px] truncate">
+              {name}
+            </h1>
+        </div>
 
         {/* Import Principal */}
-        <div className="relative group cursor-default mb-4">
-          <div className="text-6xl sm:text-7xl font-black tracking-tighter tabular-nums text-slate-800 dark:text-white drop-shadow-sm transition-transform duration-300">
-            {/* FIX: Utilitzem toCents() per convertir el número al tipus MoneyCents que exigeix formatCurrency */}
+        <div className="relative group cursor-default mb-5 mt-1">
+          <div className="text-6xl sm:text-7xl font-black tracking-tighter tabular-nums text-slate-900 dark:text-white drop-shadow-sm scale-100 transition-transform">
             {formatCurrency(toCents(isFiltered ? displayedTotal : totalGroupSpending), currency)}
           </div>
           
-          {/* Badge de Filtres Actius (Molt més visible) */}
+          {/* Badge de Filtres Actius (Alerta visual) */}
           {isFiltered && (
-             <div className="absolute -top-6 right-0 left-0 mx-auto w-fit bg-primary/10 text-primary border border-primary/20 px-3 py-1 rounded-full flex items-center gap-1.5 animate-pulse">
-                <Filter size={12} className="stroke-[3]" />
-                <span className="text-[10px] font-black uppercase tracking-wide">Filtres Actius</span>
+             <div className="absolute -top-8 right-0 left-0 mx-auto w-fit bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800 px-3 py-1 rounded-full flex items-center gap-1.5 animate-pulse shadow-sm">
+                <Filter size={10} className="stroke-[3]" />
+                <span className="text-[10px] font-black uppercase tracking-wide">Filtre Actiu</span>
              </div>
           )}
         </div>
 
-        {/* Botó d'Acció Secundària (PDF) */}
+        {/* Botó PDF (Secundari) */}
         {!isFiltered && (
             <button 
               onClick={onExportPDF} 
               className="
-                flex items-center gap-2 text-xs font-bold text-primary 
-                bg-white dark:bg-slate-800 border border-primary/20 dark:border-primary/10
-                px-4 py-2 rounded-full shadow-sm transition-all active:scale-95 hover:bg-primary/5
+                flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400
+                bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800
+                px-4 py-2 rounded-xl shadow-sm transition-all active:scale-95 hover:border-indigo-200 hover:text-indigo-600 dark:hover:text-indigo-400
               "
             >
-              <FileText size={14} />
-              <span>Exportar PDF</span>
+              <FileText size={14} strokeWidth={2.5} />
+              <span>Informe PDF</span>
             </button>
         )}
       </div>
 
-      {/* --- ACTION GRID (Botons Grans) --- */}
-      <div className="grid grid-cols-3 gap-3 w-full max-w-md mx-auto">
+      {/* --- 3. QUICK ACTIONS GRID --- */}
+      <div className="grid grid-cols-3 gap-3 w-full max-w-sm mx-auto">
         <button 
           onClick={onOpenGroup}
-          className="flex flex-col items-center justify-center gap-1 h-20 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md hover:border-primary/30 transition-all active:scale-95 group"
+          className="flex flex-col items-center justify-center gap-2 h-24 rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-indigo-100 dark:hover:border-indigo-900/50 transition-all active:scale-95 group"
         >
-            <div className="text-slate-400 group-hover:text-primary transition-colors">
-                <Users size={24} />
+            <div className="p-2.5 rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform">
+                <Users size={24} strokeWidth={2} />
             </div>
-            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-                {activeUserCount} membres
+            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tight">
+                {activeUserCount} Membres
             </span>
         </button>
 
         <button 
           onClick={onOpenActivity}
-          className="flex flex-col items-center justify-center gap-1 h-20 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md hover:border-primary/30 transition-all active:scale-95 group"
+          className="flex flex-col items-center justify-center gap-2 h-24 rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-amber-100 dark:hover:border-amber-900/50 transition-all active:scale-95 group"
         >
-            <div className="text-slate-400 group-hover:text-primary transition-colors">
-                <History size={24} />
+            <div className="p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-500 group-hover:scale-110 transition-transform">
+                <History size={24} strokeWidth={2} />
             </div>
-            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-                Activitat
+            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tight">
+                Historial
             </span>
         </button>
 
         <button 
           onClick={onOpenShare}
-          className="flex flex-col items-center justify-center gap-1 h-20 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md hover:border-primary/30 transition-all active:scale-95 group"
+          className="flex flex-col items-center justify-center gap-2 h-24 rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-emerald-100 dark:hover:border-emerald-900/50 transition-all active:scale-95 group"
         >
-            <div className="text-slate-400 group-hover:text-primary transition-colors">
-                <Share2 size={24} />
+            <div className="p-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform">
+                <Share2 size={24} strokeWidth={2} />
             </div>
-            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tight">
                 Compartir
             </span>
         </button>
