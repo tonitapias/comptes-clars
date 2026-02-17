@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   User as UserIcon, Check, Trash2, X, 
-  PieChart, Percent, Calendar, ChevronDown
+  PieChart, Percent, Calendar, ChevronDown, 
+  Plus, Minus, Tag, Calculator
 } from 'lucide-react';
 import Modal from '../Modal';
 import Button from '../Button';
@@ -13,30 +14,30 @@ import { useTrip } from '../../context/TripContext';
 import { formatMoney } from '../../utils/formatters';
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
 
-// --- TYPES & HELPERS ---
+// --- TYPES & CONSTANTS ---
 
-// Safe Color Map to avoid Tailwind purging issues
-const COLOR_MAP: Record<string, { bg: string, text: string, border: string, ring: string }> = {
-  emerald: { bg: 'bg-emerald-50 dark:bg-emerald-900/20', text: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-200 dark:border-emerald-800', ring: 'ring-emerald-500' },
-  blue:    { bg: 'bg-blue-50 dark:bg-blue-900/20',    text: 'text-blue-600 dark:text-blue-400',    border: 'border-blue-200 dark:border-blue-800',    ring: 'ring-blue-500' },
-  violet:  { bg: 'bg-violet-50 dark:bg-violet-900/20',  text: 'text-violet-600 dark:text-violet-400',  border: 'border-violet-200 dark:border-violet-800',  ring: 'ring-violet-500' },
-  pink:    { bg: 'bg-pink-50 dark:bg-pink-900/20',    text: 'text-pink-600 dark:text-pink-400',    border: 'border-pink-200 dark:border-pink-800',    ring: 'ring-pink-500' },
-  amber:   { bg: 'bg-amber-50 dark:bg-amber-900/20',   text: 'text-amber-600 dark:text-amber-400',   border: 'border-amber-200 dark:border-amber-800',   ring: 'ring-amber-500' },
-  orange:  { bg: 'bg-orange-50 dark:bg-orange-900/20',  text: 'text-orange-600 dark:text-orange-400',  border: 'border-orange-200 dark:border-orange-800',  ring: 'ring-orange-500' },
-  teal:    { bg: 'bg-teal-50 dark:bg-teal-900/20',    text: 'text-teal-600 dark:text-teal-400',    border: 'border-teal-200 dark:border-teal-800',    ring: 'ring-teal-500' },
-  cyan:    { bg: 'bg-cyan-50 dark:bg-cyan-900/20',    text: 'text-cyan-600 dark:text-cyan-400',    border: 'border-cyan-200 dark:border-cyan-800',    ring: 'ring-cyan-500' },
-  slate:   { bg: 'bg-slate-50 dark:bg-slate-800',     text: 'text-slate-600 dark:text-slate-400',    border: 'border-slate-200 dark:border-slate-700',    ring: 'ring-slate-500' },
+// Refined Color Map for better dark mode contrast & a11y
+const COLOR_MAP: Record<string, { bg: string, text: string, border: string, ring: string, indicator: string }> = {
+  emerald: { bg: 'bg-emerald-50 dark:bg-emerald-900/30', text: 'text-emerald-700 dark:text-emerald-400', border: 'border-emerald-200 dark:border-emerald-700', ring: 'ring-emerald-500', indicator: 'bg-emerald-500' },
+  blue:    { bg: 'bg-blue-50 dark:bg-blue-900/30',    text: 'text-blue-700 dark:text-blue-400',    border: 'border-blue-200 dark:border-blue-700',    ring: 'ring-blue-500', indicator: 'bg-blue-500' },
+  violet:  { bg: 'bg-violet-50 dark:bg-violet-900/30',  text: 'text-violet-700 dark:text-violet-400',  border: 'border-violet-200 dark:border-violet-700',  ring: 'ring-violet-500', indicator: 'bg-violet-500' },
+  pink:    { bg: 'bg-pink-50 dark:bg-pink-900/30',    text: 'text-pink-700 dark:text-pink-400',    border: 'border-pink-200 dark:border-pink-700',    ring: 'ring-pink-500', indicator: 'bg-pink-500' },
+  amber:   { bg: 'bg-amber-50 dark:bg-amber-900/30',   text: 'text-amber-700 dark:text-amber-400',   border: 'border-amber-200 dark:border-amber-700',   ring: 'ring-amber-500', indicator: 'bg-amber-500' },
+  orange:  { bg: 'bg-orange-50 dark:bg-orange-900/30',  text: 'text-orange-700 dark:text-orange-400',  border: 'border-orange-200 dark:border-orange-700',  ring: 'ring-orange-500', indicator: 'bg-orange-500' },
+  teal:    { bg: 'bg-teal-50 dark:bg-teal-900/30',    text: 'text-teal-700 dark:text-teal-400',    border: 'border-teal-200 dark:border-teal-700',    ring: 'ring-teal-500', indicator: 'bg-teal-500' },
+  cyan:    { bg: 'bg-cyan-50 dark:bg-cyan-900/30',    text: 'text-cyan-700 dark:text-cyan-400',    border: 'border-cyan-200 dark:border-cyan-700',    ring: 'ring-cyan-500', indicator: 'bg-cyan-500' },
+  slate:   { bg: 'bg-slate-50 dark:bg-slate-800',     text: 'text-slate-700 dark:text-slate-400',    border: 'border-slate-200 dark:border-slate-700',    ring: 'ring-slate-500', indicator: 'bg-slate-500' },
 };
 
 interface ExtendedSplitMode {
   id: string;
   label: string;
-  icon: any;
+  icon: React.ElementType;
   mappedType?: SplitType;
 }
 
 const EXTENDED_MODES: ExtendedSplitMode[] = [
-  ...UI_SPLIT_MODES.filter(m => m.id !== 'percent'),
+  ...UI_SPLIT_MODES.filter(m => m.id !== 'percent').map(m => ({ ...m, icon: m.id === 'equal' ? Check : Calculator })), // Mapping basic icons if needed
   { 
     id: 'shares', 
     label: 'Parts', 
@@ -51,13 +52,21 @@ const EXTENDED_MODES: ExtendedSplitMode[] = [
   }
 ];
 
+// Fix icons for standard modes
+const MODE_ICONS: Record<string, React.ElementType> = {
+  equal: UserIcon,
+  exact: Tag,
+  shares: PieChart,
+  percent: Percent
+};
+
 const VISUAL_MODE_ORDER = ['equal', 'exact', 'shares', 'percent'];
 
 const getAmountFontSize = (value: string) => {
   const len = value.length;
-  if (len > 9) return 'text-4xl';
-  if (len > 6) return 'text-5xl';
-  return 'text-6xl';
+  if (len > 10) return 'text-3xl';
+  if (len > 7) return 'text-4xl';
+  return 'text-5xl'; // Started slightly smaller than 6xl for mobile safety
 };
 
 // --- SUBCOMPONENTS ---
@@ -69,11 +78,14 @@ const SplitModeSelector: React.FC<{
   const { trigger } = useHapticFeedback();
 
   const orderedModes = useMemo(() => VISUAL_MODE_ORDER
-    .map(id => EXTENDED_MODES.find(m => m.id === id))
+    .map(id => {
+      const mode = EXTENDED_MODES.find(m => m.id === id);
+      return mode ? { ...mode, icon: MODE_ICONS[id] || mode.icon } : null;
+    })
     .filter((m): m is ExtendedSplitMode => !!m), []);
 
   return (
-    <div className="bg-slate-100/80 dark:bg-black/20 p-1 rounded-xl mb-4 flex gap-1 relative z-0">
+    <div className="bg-slate-100/80 dark:bg-slate-900/50 p-1.5 rounded-2xl mb-6 flex gap-1 relative overflow-hidden border border-slate-200/50 dark:border-slate-700/50">
       {orderedModes.map((mode) => {
         const isActive = currentMode === mode.id;
         const Icon = mode.icon; 
@@ -84,15 +96,15 @@ const SplitModeSelector: React.FC<{
             type="button"
             onClick={() => { trigger('light'); onModeChange(mode.id, mode.mappedType); }}
             className={`
-              relative flex-1 py-2.5 rounded-lg text-[11px] font-bold flex flex-col items-center justify-center gap-1 transition-all duration-300
+              relative flex-1 py-3 rounded-xl text-[11px] font-bold flex flex-col items-center justify-center gap-1.5 transition-all duration-300
               ${isActive 
-                ? 'bg-white dark:bg-slate-700 text-primary dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/10' 
-                : 'text-slate-500 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-white/5'
+                ? 'bg-white dark:bg-slate-800 text-primary dark:text-indigo-400 shadow-sm ring-1 ring-black/5 dark:ring-white/10 translate-y-0' 
+                : 'text-slate-500 dark:text-slate-500 hover:bg-white/40 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-300'
               }
             `}
           >
-            <Icon size={16} strokeWidth={isActive ? 2.5 : 2} />
-            <span>{mode.label}</span>
+            <Icon size={18} strokeWidth={isActive ? 2.5 : 2} />
+            <span className="tracking-wide">{mode.label}</span>
           </button>
         );
       })}
@@ -118,7 +130,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
   const { trigger } = useHapticFeedback();
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Core Business Logic (Unchanged)
+  // Core Business Logic
   const { formState, setters, logic, isSubmitting, exactSplitStats } = useExpenseForm({
     initialData: initialData || null,
     users,
@@ -158,6 +170,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
+    // Regex allows digits and one decimal separator (dot or comma)
     if (/^\d*([.,]\d{0,2})?$/.test(val)) setters.setAmount(val);
   };
 
@@ -165,87 +178,96 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
     ? formatMoney(toCents(Math.abs(exactSplitStats.remainderCents)), currency) 
     : '';
 
-  const labelStyle = "text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2 block pl-1";
-  const cardStyle = "bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 shadow-sm";
+  const labelStyle = "text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2.5 block px-1";
+
+  // Dynamic Color Theme based on Category
+  const activeCategoryColor = useMemo(() => {
+    const cat = CATEGORIES.find(c => c.id === formState.category);
+    const colorKey = cat?.color.split('-')[1] || 'slate';
+    return COLOR_MAP[colorKey] || COLOR_MAP['slate'];
+  }, [formState.category]);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={initialData ? 'Editar Despesa' : 'Nova Despesa'}>
       <form onSubmit={logic.handleSubmit} className="flex flex-col h-full bg-slate-50/50 dark:bg-black/20 -m-5 sm:-m-6 relative"> 
         
-        {/* --- HERO SECTION: AMOUNT & TITLE --- */}
-        <div className="bg-white dark:bg-slate-900 pt-2 pb-8 px-6 rounded-b-[2.5rem] shadow-sm z-10 border-b border-slate-100 dark:border-slate-800 relative overflow-hidden">
-            {/* Background Pattern decoration */}
-            <div className="absolute top-0 left-0 w-full h-full opacity-[0.03] dark:opacity-[0.05] pointer-events-none">
-                 <div className="absolute top-[-50px] right-[-50px] w-40 h-40 rounded-full bg-primary blur-3xl"></div>
-                 <div className="absolute bottom-[-20px] left-[-20px] w-32 h-32 rounded-full bg-blue-500 blur-3xl"></div>
-            </div>
+        {/* --- HERO SECTION: FINANCIAL CARD --- */}
+        <div className="bg-white dark:bg-slate-900 pt-6 pb-8 px-6 rounded-b-[2rem] shadow-financial-sm z-20 relative overflow-hidden transition-colors duration-500">
+            
+            {/* Ambient Glow */}
+            <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-3/4 ${activeCategoryColor.bg} blur-[60px] opacity-40 rounded-full pointer-events-none transition-colors duration-500`}></div>
 
-            <div className="flex flex-col items-center gap-1 relative z-10">
-                
-                {/* AMOUNT */}
-                <div className="relative w-full flex justify-center items-baseline gap-1 group mt-4">
-                    <span className={`font-bold text-slate-300 dark:text-slate-600 transition-all duration-300 -translate-y-2 ${formState.amount ? 'text-3xl' : 'text-2xl opacity-50'}`}>
-                        {currency.symbol}
-                    </span>
+            <div className="flex flex-col items-center gap-4 relative z-10">
+                {/* AMOUNT INPUT GROUP */}
+                <div className="flex flex-col items-center w-full">
+                  <div className="relative flex justify-center items-baseline gap-1 group">
+                      <span className={`font-bold text-slate-400 dark:text-slate-600 transition-all duration-300 -translate-y-[10%] ${formState.amount ? 'text-3xl' : 'text-2xl opacity-50'}`}>
+                          {currency.symbol}
+                      </span>
+                      <input 
+                          type="text" 
+                          inputMode="decimal"
+                          placeholder="0" 
+                          required 
+                          autoFocus={!initialData}
+                          value={formState.amount} 
+                          onChange={handleAmountChange} 
+                          className={`
+                              bg-transparent outline-none font-black text-center 
+                              placeholder:text-slate-200 dark:placeholder:text-slate-700
+                              caret-primary tabular-nums tracking-tight w-full max-w-[85%]
+                              transition-all duration-200 p-0 m-0 border-none focus:ring-0
+                              ${getAmountFontSize(formState.amount)}
+                              ${exactSplitStats?.isOverAllocated ? 'text-rose-500' : 'text-slate-900 dark:text-white'}
+                          `}
+                      />
+                  </div>
+                  
+                  {/* TITLE INPUT */}
+                  <div className="w-full max-w-xs relative mt-2">
                     <input 
                         type="text" 
-                        inputMode="decimal"
-                        placeholder="0" 
+                        placeholder="Concepte (Ex: Sopar)" 
                         required 
-                        autoFocus={!initialData}
-                        value={formState.amount} 
-                        onChange={handleAmountChange} 
-                        className={`
-                            bg-transparent outline-none font-black text-center 
-                            placeholder:text-slate-200 dark:placeholder:text-slate-700
-                            caret-primary tabular-nums tracking-tighter w-full max-w-[80%]
-                            transition-all duration-200 p-0 m-0 border-none focus:ring-0
-                            ${getAmountFontSize(formState.amount)}
-                            ${exactSplitStats?.isOverAllocated ? 'text-rose-500' : 'text-slate-900 dark:text-white'}
-                        `}
+                        value={formState.title} 
+                        onChange={(e) => setters.setTitle(e.target.value)} 
+                        className="w-full text-center bg-transparent border-b-2 border-slate-100 dark:border-slate-800 focus:border-primary/50 outline-none text-lg font-medium text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:ring-0 transition-all py-2"
                     />
+                  </div>
                 </div>
-
-                {/* TITLE */}
-                <input 
-                    type="text" 
-                    placeholder="Què és aquesta despesa?" 
-                    required 
-                    value={formState.title} 
-                    onChange={(e) => setters.setTitle(e.target.value)} 
-                    className="w-full text-center bg-transparent border-none outline-none text-lg font-medium text-slate-600 dark:text-slate-300 placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:ring-0 transition-all"
-                />
             </div>
         </div>
 
         {/* --- SCROLLABLE FORM BODY --- */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-5 space-y-5 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-5 space-y-8 custom-scrollbar relative z-10">
             
             {/* ROW: METADATA (Who & When) */}
-            <div className="grid grid-cols-5 gap-3">
-                <div className={`col-span-3 ${cardStyle} relative group focus-within:ring-2 focus-within:ring-primary/10 transition-all`}>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+            <div className="flex gap-3">
+                <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-3 shadow-sm relative focus-within:ring-2 focus-within:ring-primary/10 transition-all">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 flex items-center gap-1">
                         <UserIcon size={10} /> Pagador
                     </label>
-                    <select 
-                        value={formState.payer} 
-                        onChange={(e) => setters.setPayer(e.target.value)} 
-                        className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-none appearance-none cursor-pointer text-sm py-1 relative z-10"
-                    >
-                        {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                    </select>
-                    <ChevronDown size={14} className="absolute right-3 bottom-4 text-slate-300 pointer-events-none" />
+                    <div className="relative">
+                      <select 
+                          value={formState.payer} 
+                          onChange={(e) => setters.setPayer(e.target.value)} 
+                          className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-none appearance-none cursor-pointer text-sm py-1.5 pr-6 relative z-10"
+                      >
+                          {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                      </select>
+                      <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none" />
+                    </div>
                 </div>
 
-                <div className={`col-span-2 ${cardStyle} relative focus-within:ring-2 focus-within:ring-primary/10 transition-all`}>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                <div className="w-2/5 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-3 shadow-sm relative focus-within:ring-2 focus-within:ring-primary/10 transition-all">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 flex items-center gap-1">
                         <Calendar size={10} /> Data
                     </label>
                     <input 
                         type="date" 
                         value={formState.date} 
                         onChange={(e) => setters.setDate(e.target.value)} 
-                        className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-none text-sm py-1 cursor-pointer" 
+                        className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-none text-sm py-1.5 cursor-pointer" 
                     />
                 </div>
             </div>
@@ -253,7 +275,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
             {/* CATEGORIES */}
             <div>
                 <label className={labelStyle}>Categoria</label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-4 gap-3">
                     {CATEGORIES.filter(c => c.id !== 'all').map(cat => {
                         const isSelected = formState.category === cat.id;
                         const colorKey = cat.color.split('-')[1] || 'slate';
@@ -266,20 +288,20 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                                 onClick={() => { trigger('light'); setters.setCategory(cat.id); }}
                                 className={`
                                     flex flex-col items-center justify-center aspect-square rounded-2xl transition-all duration-200
-                                    active:scale-95 border relative overflow-hidden
+                                    active:scale-95 border relative overflow-hidden group
                                     ${isSelected 
-                                        ? `bg-white dark:bg-slate-800 ${styles.border} shadow-md ring-2 ring-inset ${styles.ring}/20` 
-                                        : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                                        ? `bg-white dark:bg-slate-800 ${styles.border} shadow-md ring-2 ring-inset ${styles.ring}/30 scale-[1.02]` 
+                                        : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700'
                                     }
                                 `}
                             >
                                 <div className={`
-                                    w-8 h-8 rounded-full flex items-center justify-center mb-1.5 transition-colors
-                                    ${isSelected ? styles.bg + ' ' + styles.text : 'bg-slate-50 dark:bg-slate-800 text-slate-300 dark:text-slate-600'}
+                                    w-9 h-9 rounded-full flex items-center justify-center mb-1.5 transition-colors
+                                    ${isSelected ? styles.bg + ' ' + styles.text : 'bg-slate-50 dark:bg-slate-800 text-slate-300 dark:text-slate-600 group-hover:bg-slate-100 dark:group-hover:bg-slate-700'}
                                 `}>
                                     <cat.icon size={18} strokeWidth={2.5} />
                                 </div>
-                                <span className={`text-[9px] font-black uppercase tracking-tight ${isSelected ? styles.text : 'text-slate-400'}`}>
+                                <span className={`text-[10px] font-black uppercase tracking-tight truncate w-full px-1 ${isSelected ? styles.text : 'text-slate-400'}`}>
                                     {cat.label}
                                 </span>
                             </button>
@@ -289,7 +311,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
             </div>
 
             {/* SPLIT SECTION */}
-            <div className="pb-6">
+            <div className="pb-24">
                 <div className="flex items-center justify-between mb-2 pr-1">
                     <label className={labelStyle + " !mb-0"}>Repartiment</label>
                     
@@ -304,19 +326,19 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                     )}
                 </div>
 
-                <div className={cardStyle}>
-                    <SplitModeSelector currentMode={uiMode} onModeChange={(id, map) => {
+                <SplitModeSelector currentMode={uiMode} onModeChange={(id, map) => {
                          setUiMode(id);
                          setters.setSplitType(map || (id as SplitType));
-                    }} />
+                }} />
 
-                    <div className="space-y-3 mt-4">
+                <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-2 shadow-sm">
+                    <div className="space-y-1">
                         {users.map(u => {
                              const isIncluded = formState.involved.includes(u.id);
                              const isEqualMode = formState.splitType === SPLIT_TYPES.EQUAL;
 
                              return (
-                             <div key={u.id} className="flex items-center justify-between gap-3 group">
+                             <div key={u.id} className="flex items-center justify-between gap-3 p-2 rounded-2xl transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
                                  
                                  {/* User Toggle / Label */}
                                  <button
@@ -329,32 +351,32 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                                     }}
                                     disabled={!isEqualMode}
                                     className={`
-                                        flex items-center gap-3 flex-1 text-left transition-all rounded-xl p-1.5 -ml-1.5
-                                        ${isEqualMode ? 'hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer active:scale-98' : 'cursor-default'}
-                                        ${!isIncluded && isEqualMode ? 'opacity-50' : 'opacity-100'}
+                                        flex items-center gap-3 flex-1 text-left transition-all
+                                        ${isEqualMode ? 'cursor-pointer active:scale-98' : 'cursor-default'}
+                                        ${!isIncluded && isEqualMode ? 'opacity-50 grayscale' : 'opacity-100'}
                                     `}
                                  >
                                     <div className={`
-                                        w-10 h-10 rounded-full flex items-center justify-center transition-all flex-shrink-0 border-[2px]
+                                        w-11 h-11 rounded-full flex items-center justify-center transition-all flex-shrink-0 border-[2px] shadow-sm
                                         ${isEqualMode 
                                             ? (isIncluded
-                                                ? 'bg-primary border-primary text-white shadow-md shadow-primary/20 scale-100' 
-                                                : 'bg-transparent border-slate-300 dark:border-slate-600 text-transparent scale-90')
-                                            : 'bg-slate-100 dark:bg-slate-800 border-transparent text-slate-500 font-bold text-xs'
+                                                ? 'bg-primary border-primary text-white scale-100' 
+                                                : 'bg-transparent border-slate-200 dark:border-slate-700 text-transparent scale-90')
+                                            : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-sm'
                                         }
                                     `}>
                                         {isEqualMode 
-                                            ? <Check size={16} strokeWidth={4} /> 
+                                            ? <Check size={18} strokeWidth={4} /> 
                                             : u.name.charAt(0)
                                         }
                                     </div>
                                     
-                                    <span className="font-bold text-sm text-slate-700 dark:text-slate-200">
+                                    <span className="font-bold text-sm text-slate-700 dark:text-slate-200 truncate">
                                         {u.name}
                                     </span>
                                  </button>
                                  
-                                 {/* Dynamic Inputs */}
+                                 {/* Dynamic Inputs for Manual Modes */}
                                  {!isEqualMode && (
                                     <div className="animate-fade-in-right">
                                         {formState.splitType === SPLIT_TYPES.EXACT ? (
@@ -366,27 +388,31 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                                                     value={formState.splitDetails[u.id] ?? ''} 
                                                     onChange={(e) => logic.handleDetailChange(u.id, e.target.value)}
                                                     className={`
-                                                        w-28 h-12 px-3 text-right bg-slate-50 dark:bg-black/20 border-2 rounded-xl font-bold text-sm outline-none tabular-nums transition-all
+                                                        w-32 h-12 px-4 text-right bg-slate-50 dark:bg-black/40 border-2 rounded-xl font-bold text-sm outline-none tabular-nums transition-all
                                                         focus:scale-105 focus:bg-white dark:focus:bg-slate-800
                                                         ${(exactSplitStats?.isOverAllocated && parseFloat(formState.splitDetails[u.id] || '0') > 0) 
                                                             ? 'border-rose-300 text-rose-600 focus:border-rose-500' 
                                                             : 'border-slate-100 dark:border-slate-700 focus:border-primary text-slate-700 dark:text-white'}
                                                     `}
                                                 />
+                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-300 pointer-events-none">
+                                                  {currency.symbol}
+                                                </span>
                                             </div>
                                         ) : (
-                                            <div className="flex items-center bg-slate-50 dark:bg-black/20 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden h-12 w-32">
+                                            <div className="flex items-center bg-slate-50 dark:bg-black/40 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden h-12 w-36 shadow-sm">
                                                 <button 
                                                     type="button"
                                                     onClick={() => {
+                                                        trigger('selection');
                                                         const current = parseFloat(formState.splitDetails[u.id] || '0');
                                                         logic.handleDetailChange(u.id, Math.max(0, current - 1).toString());
                                                     }}
-                                                    className="w-9 h-full flex items-center justify-center text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-primary active:bg-slate-200 transition-colors"
+                                                    className="w-10 h-full flex items-center justify-center text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-rose-500 active:bg-slate-300 transition-colors"
                                                 >
-                                                    -
+                                                    <Minus size={16} strokeWidth={3} />
                                                 </button>
-                                                <div className="flex-1 h-full flex items-center justify-center border-x border-slate-100 dark:border-slate-800 relative bg-white dark:bg-slate-800">
+                                                <div className="flex-1 h-full flex items-center justify-center border-x border-slate-100 dark:border-slate-800 relative bg-white dark:bg-slate-800/50">
                                                     <input 
                                                         type="number" 
                                                         inputMode="decimal"
@@ -394,19 +420,20 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                                                         step={uiMode === 'percent' ? "0.1" : "1"} 
                                                         value={formState.splitDetails[u.id] ?? ''} 
                                                         onChange={(e) => logic.handleDetailChange(u.id, e.target.value)} 
-                                                        className="w-full h-full text-center bg-transparent outline-none font-bold text-sm text-slate-800 dark:text-white p-0"
+                                                        className="w-full h-full text-center bg-transparent outline-none font-black text-sm text-slate-800 dark:text-white p-0"
                                                     />
-                                                    {uiMode === 'percent' && <span className="absolute right-1 text-[9px] font-bold text-slate-400 top-1">%</span>}
+                                                    {uiMode === 'percent' && <span className="absolute right-1 text-[9px] font-bold text-slate-400 top-1.5">%</span>}
                                                 </div>
                                                 <button 
                                                     type="button"
                                                     onClick={() => {
+                                                        trigger('selection');
                                                         const current = parseFloat(formState.splitDetails[u.id] || '0');
                                                         logic.handleDetailChange(u.id, (current + 1).toString());
                                                     }}
-                                                    className="w-9 h-full flex items-center justify-center text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-primary active:bg-slate-200 transition-colors"
+                                                    className="w-10 h-full flex items-center justify-center text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-emerald-500 active:bg-slate-300 transition-colors"
                                                 >
-                                                    +
+                                                    <Plus size={16} strokeWidth={3} />
                                                 </button>
                                             </div>
                                         )}
@@ -420,15 +447,15 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
         </div>
 
         {/* --- STICKY FOOTER --- */}
-        <div className="p-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-t border-slate-100 dark:border-slate-800 z-50 rounded-t-2xl shadow-[0_-5px_30px_-15px_rgba(0,0,0,0.1)]">
-            <div className="flex items-center gap-3">
+        <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-white via-white/95 to-transparent dark:from-slate-900 dark:via-slate-900/95 z-30 pointer-events-none flex justify-center items-end h-32">
+            <div className="flex items-center gap-3 w-full pointer-events-auto max-w-md">
                 {initialData && onDelete && (
                     <div className="flex items-center transition-all duration-300">
                         {isDeleting ? (
                             <button 
                                 type="button"
                                 onClick={() => initialData?.id && onDelete?.(initialData.id)}
-                                className="h-14 px-5 rounded-2xl bg-rose-50 text-rose-600 font-bold text-sm border border-rose-100 whitespace-nowrap active:scale-95 transition-transform shadow-sm"
+                                className="h-14 px-5 rounded-2xl bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 font-bold text-sm border border-rose-100 dark:border-rose-800 whitespace-nowrap active:scale-95 transition-transform shadow-lg shadow-rose-500/10"
                             >
                                 Confirmar
                             </button>
@@ -436,7 +463,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                             <button 
                                 type="button" 
                                 onClick={() => setIsDeleting(true)} 
-                                className="w-14 h-14 flex items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-rose-500 hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-all active:scale-95 active:rotate-12"
+                                className="w-14 h-14 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-800 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 border border-slate-100 dark:border-slate-700 hover:border-rose-100 transition-all active:scale-95 shadow-lg shadow-slate-200/50 dark:shadow-none"
                             >
                                 <Trash2 size={20} />
                             </button>
@@ -456,7 +483,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                 <Button 
                     type="submit" 
                     fullWidth
-                    className="h-14 text-base font-black shadow-lg shadow-primary/20 rounded-2xl tracking-wide" 
+                    className="h-14 text-base font-black shadow-xl shadow-primary/30 rounded-2xl tracking-wide transform transition-all active:scale-98" 
                     loading={isSubmitting}
                     haptic="success"
                     disabled={formState.splitType === SPLIT_TYPES.EXACT && exactSplitStats?.isOverAllocated}

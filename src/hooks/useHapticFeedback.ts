@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 
-type HapticPattern = 'light' | 'medium' | 'heavy' | 'success' | 'error';
+// Afegeixo 'selection' al tipus per als botons de +/-
+type HapticPattern = 'light' | 'medium' | 'heavy' | 'success' | 'error' | 'selection';
 
 export const useHapticFeedback = () => {
   const trigger = useCallback((pattern: HapticPattern = 'light') => {
@@ -8,6 +9,10 @@ export const useHapticFeedback = () => {
     if (typeof navigator === 'undefined' || !navigator.vibrate) return;
 
     switch (pattern) {
+      case 'selection': 
+        // Feedback ultra-curt (5ms) per a repetició ràpida (steppers)
+        navigator.vibrate(5); 
+        break;
       case 'light':
         navigator.vibrate(10); // Feedback subtil (clic normal)
         break;
