@@ -7,12 +7,22 @@ import { Settlement, TripUser } from '../../../types';
 import { formatCurrency } from '../../../utils/formatters';
 import { useTrip } from '../../../context/TripContext';
 import { useHapticFeedback } from '../../../hooks/useHapticFeedback';
+import { LITERALS } from '../../../constants/literals'; // IMPORT NOU
+
+// --- CONFIGURACIÓ ESTÀTICA ---
+// Ara els textos venen del fitxer centralitzat
+const PAYMENT_METHODS = [
+  { id: 'manual', label: LITERALS.MODALS.PAYMENT_METHODS.MANUAL, icon: Banknote },
+  { id: 'bizum', label: LITERALS.MODALS.PAYMENT_METHODS.BIZUM, icon: Smartphone },
+  { id: 'transfer', label: LITERALS.MODALS.PAYMENT_METHODS.TRANSFER, icon: Building2 },
+  { id: 'card', label: LITERALS.MODALS.PAYMENT_METHODS.CARD, icon: CreditCard },
+];
 
 interface TripSettleModalProps {
   isOpen: boolean;
   onClose: () => void;
   settlement: Settlement | null;
-  onConfirm: (method: string) => Promise<boolean>; // CORREGIT: Ara accepta string
+  onConfirm: (method: string) => Promise<boolean>;
 }
 
 export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm }: TripSettleModalProps) {
@@ -22,26 +32,20 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
 
   if (!tripData || !settlement) return null;
 
-  const getUser = (id: string) => tripData.users.find(u => u.id === id) || { name: '?', photoUrl: null } as TripUser;
+  const getUser = (id: string) => tripData.users.find(u => u.id === id) || { name: LITERALS.COMMON.UNKNOWN_USER, photoUrl: null } as TripUser;
   
   const fromUser = getUser(settlement.from);
   const toUser = getUser(settlement.to);
 
   const handleConfirm = async () => {
       trigger('success');
-      // CLAU DEL FIX: Passem 'method' a la funció onConfirm
       await onConfirm(method); 
   };
 
-  const PAYMENT_METHODS = [
-    { id: 'manual', label: 'Efectiu', icon: Banknote },
-    { id: 'bizum', label: 'Bizum', icon: Smartphone },
-    { id: 'transfer', label: 'Banc', icon: Building2 },
-    { id: 'card', label: 'Altres', icon: CreditCard },
-  ];
+  const currentMethodLabel = PAYMENT_METHODS.find(m => m.id === method)?.label || 'Pagament';
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Liquidar Deute">
+    <Modal isOpen={isOpen} onClose={onClose} title={LITERALS.MODALS.SETTLE.TITLE}>
       <div className="pt-2 pb-2 space-y-6">
         
         {/* --- HOLOGRAPHIC TICKET --- */}
@@ -55,7 +59,9 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
                 <div className="h-28 bg-gradient-to-br from-indigo-600 to-purple-600 relative overflow-hidden flex flex-col items-center justify-center text-white">
                     <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay" />
                     <div className="absolute inset-0 bg-white/10 backdrop-blur-[1px]" />
-                    <span className="relative z-10 text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1">Total a Transferir</span>
+                    <span className="relative z-10 text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1">
+                        {LITERALS.MODALS.SETTLE.TOTAL_LABEL}
+                    </span>
                     <h2 className="relative z-10 text-4xl font-black tracking-tighter drop-shadow-md">
                         {formatCurrency(settlement.amount, tripData.currency)}
                     </h2>
@@ -87,7 +93,7 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
         {/* --- PAYMENT METHOD SELECTOR --- */}
         <div className="space-y-3">
             <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-2">
-                Mètode de Pagament
+                {LITERALS.MODALS.SETTLE.METHOD_LABEL}
             </label>
             <div className="grid grid-cols-4 gap-2">
                 {PAYMENT_METHODS.map((pm) => {
@@ -119,7 +125,7 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
             icon={CheckCircle2}
             className="h-14 rounded-2xl text-sm font-black uppercase tracking-wider bg-slate-900 dark:bg-white text-white dark:text-black shadow-xl hover:scale-[1.02] active:scale-95 transition-transform"
         >
-            Confirmar {method === 'bizum' ? 'Bizum' : method === 'manual' ? 'Efectiu' : method === 'transfer' ? 'Transferència' : 'Pagament'}
+            {LITERALS.MODALS.SETTLE.BTN_CONFIRM} {currentMethodLabel}
         </Button>
 
       </div>

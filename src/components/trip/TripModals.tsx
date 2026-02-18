@@ -12,6 +12,7 @@ import { useTripModals } from '../../hooks/useTripModals';
 import { useTripMutations } from '../../hooks/useTripMutations';
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
 import { ToastType } from '../Toast';
+import { LITERALS } from '../../constants/literals'; // IMPORT NOU
 
 interface TripModalsProps {
   tripData: TripData;
@@ -40,21 +41,15 @@ export default function TripModals({
     modals.closeExpenseModal();
   };
 
-  // --- AQUÍ ESTAVA EL PROBLEMA ---
-  // Aquesta funció ha de rebre 'method' (string) del modal fill
   const handleSettleConfirm = async (method: string) => {
     if (!modals.settleModalData) return false;
-    
-    // I l'ha de passar a la mutació. Si no ho fem, el hook fa servir 'manual' per defecte.
     const success = await mutations.settleDebt(modals.settleModalData, method);
-    
     if (success) {
        modals.setSettleModalData(null); 
     }
     return success;
   };
 
-  // Determinem si el modal de liquidació ha d'estar obert
   const isSettleOpen = !!modals.settleModalData;
 
   return (
@@ -73,8 +68,8 @@ export default function TripModals({
             modals.openConfirmAction({ 
                 type: 'delete_expense', 
                 id, 
-                title: 'Esborrar despesa?', 
-                message: 'Aquesta acció no es pot desfer. La despesa desapareixerà dels càlculs immediatament.' 
+                title: LITERALS.MODALS.CONFIRM.DELETE_EXPENSE_TITLE, 
+                message: LITERALS.MODALS.CONFIRM.DELETE_EXPENSE_MSG 
             });
         }} 
         showToast={showToast} 
@@ -109,7 +104,6 @@ export default function TripModals({
         isOpen={isSettleOpen}
         onClose={() => modals.setSettleModalData(null)}
         settlement={modals.settleModalData} 
-        // Passem la funció que accepta el mètode
         onConfirm={handleSettleConfirm} 
       />
 
@@ -126,7 +120,7 @@ export default function TripModals({
             </div>
 
             <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">
-                {modals.confirmAction?.title || 'Estàs segur?'}
+                {modals.confirmAction?.title || LITERALS.MODALS.CONFIRM.DEFAULT_TITLE}
             </h3>
 
             <p className="text-slate-500 dark:text-slate-400 mb-8 px-4 text-sm leading-relaxed">
@@ -139,7 +133,7 @@ export default function TripModals({
                     onClick={() => { trigger('light'); modals.closeConfirmAction(); }} 
                     className="h-12 rounded-xl border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold"
                 >
-                    Cancel·lar
+                    {LITERALS.MODALS.CONFIRM.BTN_CANCEL}
                 </Button>
                 
                 <Button 
@@ -148,7 +142,7 @@ export default function TripModals({
                     className="h-12 rounded-xl shadow-lg shadow-rose-500/20 active:shadow-none transition-all font-bold" 
                     icon={Trash2}
                 >
-                    Eliminar
+                    {LITERALS.MODALS.CONFIRM.BTN_DELETE}
                 </Button>
             </div>
           </div>

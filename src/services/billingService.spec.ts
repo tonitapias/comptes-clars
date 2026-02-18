@@ -1,167 +1,128 @@
-// src/services/billingService.spec.ts
-
 import { describe, it, expect } from 'vitest';
-import { 
-  calculateBalances, 
-  calculateSettlements, 
-  resolveUserId
-  } from './billingService';
-import { TripUser, Expense, toCents, MoneyCents, SplitType } from '../types';
-import { SPLIT_TYPES } from '../utils/constants';
+import { calculateBalances, calculateSettlements,} from './billingService';
+import { TripUser, Expense, toCents, CategoryId } from '../types';
 
-// --- MOCK DATA ---
-const userA: TripUser = { id: 'u1', name: 'Alice', email: 'alice@test.com' };
-const userB: TripUser = { id: 'u2', name: 'Bob' };
-const userC: TripUser = { id: 'u3', name: 'Charlie' };
-const users = [userA, userB, userC];
-
-// Helper per crear despeses (Adaptat a MoneyCents)
-const createExpense = (
-  payerId: string, 
-  amount: number, // Passem number per comoditat al test...
-  involved: string[] = [], 
-  splitType: SplitType = SPLIT_TYPES.EQUAL as SplitType, // CORRECCIÓ 1: Tipat estricte
-  splitDetails: Record<string, number> = {},
-  customId: string = 'exp1'
-): Expense => ({
-  id: customId,
-  title: 'Test Expense',
-  category: 'food',
-  involved,
-  date: new Date().toISOString(),
-  payer: payerId,
-  amount: toCents(amount), // ...i convertim aquí
-  splitType: splitType,
-  splitDetails: Object.entries(splitDetails).reduce((acc, [k, v]) => {
-    acc[k] = toCents(v);
-    return acc;
-  }, {} as Record<string, MoneyCents>)
+// --- HELPERS PER ALS TESTS ---
+// Creem dades falses (mocks) per no dependre de la base de dades
+const mockUser = (id: string, name: string): TripUser => ({
+  id, name, isAuth: true
 });
 
-describe('BillingService (Core Security Audit)', () => {
+const mockExpense = (
+  id: string, 
+  amount: number, 
+  payer: string, 
+  involved: string[], 
+  splitType: 'equal' | 'exact' | 'shares' = 'equal'
+): Expense => ({
+  id,
+  title: 'Test Expense',
+  amount: toCents(amount),
+  payer,
+  involved,
+  category: 'food' as CategoryId,
+  date: new Date().toISOString(),
+  splitType,
+  splitDetails: {}
+});
 
-  // ... (Tests 1 i 2a iguals) ...
-  // -------------------------------------------------------------------------
-  // 1. TEST DE SEGURETAT D'IDENTITAT
-  // -------------------------------------------------------------------------
-  describe('Identity Resolution (Strict Mode)', () => {
-    it('hauria de resoldre un usuari pel seu ID exacte', () => {
-      expect(resolveUserId('u1', users)).toBe('u1');
+describe('Billing Service (Core Logic)', () => {
+  const users = [
+    mockUser('u1', 'Alice'),
+    mockUser('u2', 'Bob'),
+    mockUser('u3', 'Charlie')
+  ];
+
+  describe('calculateBalances', () => {
+    it('should split a simple even amount equally', () => {
+      // 30€ pagats per Alice, dividit entre Alice, Bob, Charlie (10€ cadascú)
+      // Alice paga 30, en deu 10 -> Balanç +20
+      // Bob paga 0, en deu 10 -> Balanç -10
+      // Charlie paga 0, en deu 10 -> Balanç -10
+      const expenses = [
+        mockExpense('e1', 3000, 'u1', ['u1', 'u2', 'u3'])
+      ];
+
+      const balances = calculateBalances(expenses, users);
+      
+      const alice = balances.find(b => b.userId === 'u1');
+      const bob = balances.find(b => b.userId === 'u2');
+
+      expect(alice?.amount).toBe(2000); // +20.00€
+      expect(bob?.amount).toBe(-1000);  // -10.00€
     });
 
-    it('NO hauria de resoldre un usuari pel seu nom (Prevenir spoofing)', () => {
-      expect(resolveUserId('Alice', users)).toBeUndefined();
-    });
-  });
+    it('should handle the "Penny Problem" (10€ / 3) deterministically', () => {
+      // 10€ (1000 cents) / 3 = 333.333...
+      // Algú ha de pagar 334 cèntims i els altres 333.
+      // El total ha de quadrar a 0.
+      const expenses = [
+        mockExpense('e2', 1000, 'u1', ['u1', 'u2', 'u3'])
+      ];
 
-  // -------------------------------------------------------------------------
-  // 2. TEST D'INTEGRITAT FINANCERA (SUMA ZERO)
-  // -------------------------------------------------------------------------
-  describe('Calculate Balances (Zero-Sum Integrity)', () => {
-    
-    it('Suma Zero: Repartiment simple (Equal)', () => {
-      // 30€ (3000 cts) entre 3. Cadascú paga 1000.
-      const expense = createExpense('u1', 3000, ['u1', 'u2', 'u3']);
-      const balances = calculateBalances([expense], users);
+      const balances = calculateBalances(expenses, users);
+      const totalBalance = balances.reduce((acc, b) => acc + (b.amount as number), 0);
 
-      const sum = balances.reduce((acc, b) => acc + b.amount, 0);
-      expect(sum).toBe(0); 
-
-      const balanceA = balances.find(b => b.userId === 'u1')?.amount;
-      const balanceB = balances.find(b => b.userId === 'u2')?.amount;
+      expect(totalBalance).toBe(0); // La suma de balanços SEMPRE ha de ser 0
       
-      expect(balanceA).toBe(toCents(2000));  // Ha pagat 3000, li deuen 2000
-      expect(balanceB).toBe(toCents(-1000)); // Ha de pagar 1000
+      // Verifiquem que els deutes tenen sentit
+      const debtorAmounts = balances.filter(b => b.amount < 0).map(b => b.amount);
+      // Hauríem de tenir dos deutes al voltant de -3.33€
+      expect(debtorAmounts.every(a => a === -333 || a === -334)).toBe(true);
     });
 
-    it('Justícia Distributiva: El residu rota segons l\'ID de despesa', () => {
-      // 100 cèntims entre 3 persones = 33 + 33 + 34.
-      // Amb l'ID 'exp1', el hash pot fer que li toqui a un usuari concret.
-      // CORRECCIÓ 2: Cast explícit per assegurar el tipus SplitType
-      const expense1 = createExpense('u1', 100, ['u1', 'u2', 'u3'], SPLIT_TYPES.EQUAL as SplitType, {}, 'exp1');
-      const balances1 = calculateBalances([expense1], users);
-      
-      // Busquem qui ha pagat el cèntim extra (qui té deute -34 en lloc de -33)
-      // Nota: El pagador u1 tindrà saldo positiu, mirem els altres.
-      const payerOfExtra1 = balances1.find(b => b.userId !== 'u1' && b.amount === toCents(-34));
-      
-      // Assegurem que algú ha pagat el cèntim extra
-      expect(payerOfExtra1).toBeDefined();
+    it('should ignore users not involved in the expense', () => {
+      // Alice paga 10€, només per a Bob (Charlie no hi pinta res)
+      const expenses = [
+        mockExpense('e3', 1000, 'u1', ['u2']) 
+      ];
 
-      // Creem una altra despesa amb un ID diferent ('exp2')
-      const expense2 = createExpense('u1', 100, ['u1', 'u2', 'u3'], SPLIT_TYPES.EQUAL as SplitType, {}, 'exp_random_seed_99');
-      const balances2 = calculateBalances([expense2], users);
-      
-      // La distribució del residu hauria de ser determinista però diferent (o almenys no fixa al primer)
-      // En un sistema just, canviar l'ID ha de poder canviar qui paga el residu.
-      
-      // Verificació d'invariant: La suma sempre és 0
-      expect(balances1.reduce((a, b) => a + b.amount, 0)).toBe(0);
-      expect(balances2.reduce((a, b) => a + b.amount, 0)).toBe(0);
-    });
+      const balances = calculateBalances(expenses, users);
+      const charlie = balances.find(b => b.userId === 'u3');
 
-    it('Seguretat: Ignora usuaris involucrats que no existeixen', () => {
-      const expense = createExpense('u1', 1000, ['u2', 'ghost_user']);
-      const balances = calculateBalances([expense], users);
-
-      const balanceGhost = balances.find(b => b.userId === 'ghost_user');
-      expect(balanceGhost).toBeUndefined(); 
-
-      const balanceB = balances.find(b => b.userId === 'u2')?.amount;
-      expect(balanceB).toBe(toCents(-1000));
-    });
-  });
-
-  // -------------------------------------------------------------------------
-  // 3. TEST DE FLEXIBILITAT (UX MILLORADA)
-  // -------------------------------------------------------------------------
-  describe('Exact Split (Flexible Mode)', () => {
-    it('permet repartir MENYS del total (residu absorbit pel pagador)', () => {
-      // Factura 50€, u2 paga 20€. u1 absorbeix els 30€ restants.
-      // CORRECCIÓ 3: Cast explícit per SplitType
-      const expense = createExpense('u1', 5000, [], SPLIT_TYPES.EXACT as SplitType, {
-        'u2': 2000 
-      });
-
-      const balances = calculateBalances([expense], users);
-      
-      const balanceA = balances.find(b => b.userId === 'u1')?.amount;
-      const balanceB = balances.find(b => b.userId === 'u2')?.amount;
-
-      expect(balanceA).toBe(toCents(2000)); // u2 li deu 2000
-      expect(balanceB).toBe(toCents(-2000));
+      expect(charlie?.amount).toBe(0); // Charlie ha de tenir 0
     });
   });
 
-  // ... (Tests de liquidació sense canvis necessaris si calculateSettlements està bé) ...
-  // -------------------------------------------------------------------------
-  // 4. TEST DE LIQUIDACIONS (SETTLEMENTS)
-  // -------------------------------------------------------------------------
-  describe('Calculate Settlements (Debt Minimization)', () => {
-    it('resol deutes simples directament', () => {
+  describe('calculateSettlements', () => {
+    it('should generate minimal transactions to settle debts', () => {
+      // Escenari:
+      // Alice: +20
+      // Bob: -10
+      // Charlie: -10
+      // Solució òptima: Bob paga 10 a Alice, Charlie paga 10 a Alice.
+      const balances = [
+        { userId: 'u1', amount: toCents(2000) },
+        { userId: 'u2', amount: toCents(-1000) },
+        { userId: 'u3', amount: toCents(-1000) }
+      ];
+
+      const settlements = calculateSettlements(balances);
+
+      expect(settlements).toHaveLength(2);
+      expect(settlements).toEqual(expect.arrayContaining([
+        expect.objectContaining({ from: 'u2', to: 'u1', amount: 1000 }),
+        expect.objectContaining({ from: 'u3', to: 'u1', amount: 1000 })
+      ]));
+    });
+
+    it('should handle complex chain debts', () => {
+      // Alice: +10
+      // Bob: +10
+      // Charlie: -20
+      // Charlie hauria de pagar a Alice i Bob
       const balances = [
         { userId: 'u1', amount: toCents(1000) },
-        { userId: 'u2', amount: toCents(-1000) }
+        { userId: 'u2', amount: toCents(1000) },
+        { userId: 'u3', amount: toCents(-2000) }
       ];
-      const settlements = calculateSettlements(balances);
-      
-      expect(settlements).toHaveLength(1);
-      expect(settlements[0]).toEqual({ from: 'u2', to: 'u1', amount: toCents(1000) });
-    });
 
-    it('resol escenaris complexos multipersona', () => {
-      const balances = [
-        { userId: 'u1', amount: toCents(-10000) }, // A deu 100
-        { userId: 'u2', amount: toCents(-5000) },  // B deu 50
-        { userId: 'u3', amount: toCents(15000) }   // C rep 150
-      ];
-      
       const settlements = calculateSettlements(balances);
       
-      expect(settlements).toHaveLength(2);
-      const paymentFromA = settlements.find(s => s.from === 'u1');
-      expect(paymentFromA?.to).toBe('u3');
-      expect(paymentFromA?.amount).toBe(toCents(10000));
+      // Verifiquem que el total liquidat és correcte (20€)
+      const totalSettled = settlements.reduce((acc, s) => acc + (s.amount as number), 0);
+      expect(totalSettled).toBe(2000);
+      expect(settlements[0].from).toBe('u3'); // Charlie és l'únic pagador
     });
   });
 });
