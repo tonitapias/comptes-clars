@@ -20,7 +20,7 @@ import { useTripFilters } from '../hooks/useTripFilters';
 import { useTripMutations } from '../hooks/useTripMutations';
 import { generatePDF } from '../utils/exportPdf';
 import { CURRENCIES } from '../utils/constants';
-import { CategoryId } from '../types';
+import { CategoryId, unbrand } from '../types'; // CORRECCIÓ: Importem unbrand
 
 interface TripPageProps {
   user: User | null;
@@ -63,7 +63,22 @@ function TripView() {
     filters.filterCategory
   );
 
-  // 3. HANDLERS DEFINITS
+  // 3. CALCULAR BALANÇ PERSONAL (CORREGIT)
+  const userBalance = (() => {
+    if (!currentUser || !tripData) return 0;
+    
+    // Busquem l'usuari del viatge
+    const tripUser = tripData.users.find(u => u.id === currentUser.uid);
+    if (!tripUser) return 0;
+
+    // Busquem el balanç dins l'array de balanços
+    const bal = balances.find(b => b.userId === tripUser.id);
+    
+    // Retornem el valor numèric des-marcat (unbranded) o 0
+    return bal ? unbrand(bal.amount) : 0;
+  })();
+
+  // 4. HANDLERS
   const handleCategorySelect = (categoryId: string) => {
     filters.setFilterCategory(categoryId as CategoryId);
     filters.setActiveTab('expenses');
@@ -96,11 +111,11 @@ function TripView() {
     
     if (isEmptyState) {
       return (
-        <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in">
-            <Receipt size={48} className="text-indigo-400 dark:text-indigo-500 mb-4" aria-hidden="true" />
-            <h3 className="text-xl font-bold text-slate-700 dark:text-slate-200 mb-2">No hi ha despeses</h3>
-            <p className="text-slate-500 dark:text-slate-400 max-w-xs mb-6">Afegeix la primera despesa per començar a dividir comptes.</p>
-            <Button onClick={handleAddExpense} icon={Plus}>Afegir Despesa</Button>
+        <div className="flex flex-col items-center justify-center py-24 text-center animate-fade-in opacity-60">
+            <Receipt size={64} className="text-slate-300 dark:text-slate-700 mb-6" strokeWidth={1} />
+            <h3 className="text-xl font-bold text-slate-700 dark:text-slate-200 mb-2">Comencem?</h3>
+            <p className="text-slate-500 dark:text-slate-400 max-w-xs mb-8">Afegeix la primera despesa i oblida't dels càlculs.</p>
+            <Button onClick={handleAddExpense} icon={Plus} className="shadow-lg shadow-indigo-200 dark:shadow-none">Afegir Despesa</Button>
         </div>
       );
     }
@@ -137,16 +152,21 @@ function TripView() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <Loader2 className="animate-spin text-indigo-600 dark:text-indigo-400"/>
+        <Loader2 className="animate-spin text-indigo-600 dark:text-indigo-400" size={32} />
       </div>
     );
   }
 
   if (error || !tripData) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-slate-50 dark:bg-slate-950">
-        <AlertTriangle className="text-red-500" size={40}/>
-        <p className="text-slate-600 dark:text-slate-300 font-bold">{error || "No s'ha trobat el viatge"}</p>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-6 p-6 bg-slate-50 dark:bg-slate-950 text-center">
+        <div className="w-20 h-20 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center text-red-500">
+           <AlertTriangle size={32}/>
+        </div>
+        <div>
+            <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Viatge no trobat</h2>
+            <p className="text-slate-500 dark:text-slate-400 max-w-sm">{error || "No s'ha pogut carregar la informació del viatge."}</p>
+        </div>
         <Button variant="secondary" onClick={handleReturnHome}>Tornar a l'inici</Button>
       </div>
     );
@@ -156,12 +176,15 @@ function TripView() {
   const canChangeCurrency = expenses.length === 0;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 pb-24 md:pb-10 transition-colors duration-300 relative">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 transition-colors duration-500">
+      
       {toast && <Toast message={toast.msg} type={toast.type} onClose={clearToast} />}
       
+      {/* HEADER AMB FLUX NATURAL */}
       <TripHeader 
         displayedTotal={displayedTotal} 
         totalGroupSpending={totalGroupSpending}
+        userBalance={userBalance} // Connectat correctament
         isFiltered={!!filters.searchQuery || filters.filterCategory !== 'all'}
         onOpenSettings={handleOpenSettings}
         onOpenGroup={handleOpenMembers}
@@ -170,25 +193,30 @@ function TripView() {
         onOpenActivity={handleOpenActivity}
       />
 
+      {/* BANNER DE CONVIDAT */}
       {!isMember && currentUser && (
-          <div className="bg-indigo-600 dark:bg-indigo-700 text-white px-4 py-3 text-center shadow-md relative z-30 animate-fade-in">
-              <div className="max-w-3xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2">
-                  <p className="text-sm font-medium">Estàs veient aquest viatge com a convidat.</p>
+          <div className="mx-4 mt-2 mb-4 p-4 rounded-2xl bg-indigo-600 dark:bg-indigo-900 text-white shadow-lg relative z-20 animate-fade-in-up">
+              <div className="flex flex-col md:flex-row items-center justify-between gap-3 text-center md:text-left">
+                  <div>
+                    <p className="font-bold text-sm">Mode Convidat</p>
+                    <p className="text-xs opacity-80">Uneix-te per sincronitzar les teves dades.</p>
+                  </div>
                   <button 
                     onClick={mutations.joinTrip} 
-                    className="bg-white text-indigo-600 px-4 py-1.5 rounded-full text-xs font-bold shadow-sm hover:bg-indigo-50 flex items-center gap-1"
+                    className="bg-white text-indigo-700 px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wide shadow-sm hover:bg-indigo-50 active:scale-95 transition-all w-full md:w-auto flex items-center justify-center gap-2"
                   >
-                    <UserPlus size={14}/> Unir-me al grup
+                    <UserPlus size={14} strokeWidth={3}/> Unir-me
                   </button>
               </div>
           </div>
       )}
 
-      <main className="max-w-3xl mx-auto px-4 relative z-20 mt-6">
+      {/* COS PRINCIPAL */}
+      <main className="max-w-3xl mx-auto px-4 pb-32 relative z-10">
         
-        {/* Navegació de Pestanyes Accessible */}
+        {/* TAB NAVIGATION */}
         <div 
-          className="flex p-1.5 bg-white dark:bg-slate-900 rounded-2xl mb-6 shadow-sm border border-slate-200 dark:border-slate-800"
+          className="flex p-1.5 bg-white dark:bg-slate-900 rounded-2xl mb-6 shadow-sm border border-slate-100 dark:border-slate-800"
           role="tablist"
         >
           {(['expenses', 'balances', 'settle'] as const).map(tab => {
@@ -199,24 +227,19 @@ function TripView() {
                 onClick={() => filters.setActiveTab(tab)} 
                 role="tab"
                 aria-selected={isActive}
-                aria-controls={`panel-${tab}`}
-                id={`tab-${tab}`}
-                tabIndex={isActive ? 0 : -1}
                 className={`
-                  flex-1 py-2.5 text-sm font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 relative z-10
-                  focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:focus-visible:ring-offset-slate-900
+                  flex-1 py-3 rounded-xl text-xs font-bold transition-all duration-300 flex items-center justify-center gap-2 relative z-10
                   ${isActive 
-                    ? 'bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 shadow-md ring-1 ring-indigo-200 dark:ring-indigo-500/30' 
-                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 border border-transparent'
+                    ? 'bg-indigo-50 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 shadow-sm scale-100' 
+                    : 'text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-300 scale-95 opacity-80'
                   }
                 `}
               >
-                  {tab === 'expenses' && <Receipt size={16} strokeWidth={isActive ? 2.5 : 2} aria-hidden="true" />}
-                  {tab === 'balances' && <Wallet size={16} strokeWidth={isActive ? 2.5 : 2} aria-hidden="true" />}
-                  {tab === 'settle' && <CheckCircle2 size={16} strokeWidth={isActive ? 2.5 : 2} aria-hidden="true" />}
+                  {tab === 'expenses' && <Receipt size={16} strokeWidth={isActive ? 2.5 : 2} />}
+                  {tab === 'balances' && <Wallet size={16} strokeWidth={isActive ? 2.5 : 2} />}
+                  {tab === 'settle' && <CheckCircle2 size={16} strokeWidth={isActive ? 2.5 : 2} />}
                   
-                  <span className={isActive ? "inline" : "hidden sm:inline"}>
-                    {/* CORRECCIÓ DE L'ERROR 1005: Ternari complet amb els 3 casos */}
+                  <span>
                     {tab === 'expenses' ? 'Despeses' : tab === 'balances' ? 'Balanç' : 'Saldar'}
                   </span>
               </button>
@@ -224,48 +247,34 @@ function TripView() {
           })}
         </div>
 
-        {/* Contingut de les Pestanyes */}
-        <div className="relative min-h-[400px]">
-          {filters.activeTab === 'expenses' && (
-              <div role="tabpanel" id="panel-expenses" className="animate-fade-in focus:outline-none">
-                {renderExpenses()}
-              </div>
-          )}
-
-          {filters.activeTab === 'balances' && (
-             <div role="tabpanel" id="panel-balances" className="animate-fade-in focus:outline-none">
-                {renderBalances()}
-             </div>
-          )}
-
-          {filters.activeTab === 'settle' && (
-             <div role="tabpanel" id="panel-settle" className="animate-fade-in focus:outline-none">
-                {renderSettlements()}
-             </div>
-          )}
+        {/* CONTENT AREA */}
+        <div className="animate-fade-in min-h-[300px]">
+          {filters.activeTab === 'expenses' && renderExpenses()}
+          {filters.activeTab === 'balances' && renderBalances()}
+          {filters.activeTab === 'settle' && renderSettlements()}
         </div>
       </main>
       
-      {/* FAB */}
+      {/* FLOATING ACTION BUTTON (FAB) */}
       <button 
         onClick={handleAddExpense} 
         className="
-            fixed bottom-8 right-6 md:right-[calc(50%-350px)] 
-            bg-gradient-to-r from-indigo-600 to-indigo-500 
-            text-white p-4 rounded-2xl 
-            shadow-xl shadow-indigo-500/40 
-            dark:shadow-indigo-900/20 dark:border dark:border-white/10
-            hover:shadow-2xl hover:shadow-indigo-500/50 hover:scale-105 hover:-translate-y-1
-            active:scale-95 active:translate-y-0
-            transition-all duration-300 ease-out z-40 
-            focus:outline-none focus:ring-4 focus:ring-indigo-500/30
-            animate-scale-in
+            fixed bottom-8 right-6 md:right-[max(1.5rem,calc(50%-350px))]
+            w-16 h-16 rounded-[2rem]
+            bg-slate-900 dark:bg-white
+            text-white dark:text-slate-900
+            shadow-2xl shadow-slate-900/30 dark:shadow-white/10
+            flex items-center justify-center
+            hover:scale-110 hover:-translate-y-1 active:scale-90 active:translate-y-0
+            transition-all duration-500 cubic-bezier(0.34, 1.56, 0.64, 1)
+            z-50 group
         "
         aria-label="Afegir nova despesa"
       >
-        <Plus size={28} strokeWidth={2.5} aria-hidden="true" />
+        <Plus size={32} strokeWidth={2.5} className="group-hover:rotate-90 transition-transform duration-500" />
       </button>
       
+      {/* MODALS LAYER */}
       <TripModals 
         tripData={tripData}
         users={users}

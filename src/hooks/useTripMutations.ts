@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext';
 import { ToastType } from '../components/Toast';
-import { calculateBalances } from '../services/billingService'; // <--- Import necessari
+import { calculateBalances } from '../services/billingService'; 
+// CORRECCIÓ 1: Importem els tipus necessaris per evitar l'error
+import { Currency, CategoryId, SplitType } from '../types';
 
 export function useTripMutations() {
   const navigate = useNavigate();
-  // CORRECCIÓ: Traiem 'balances' del context (no existeix) i agafem 'expenses'
   const { actions, tripData, currentUser, expenses } = useTrip(); 
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
 
@@ -15,10 +16,10 @@ export function useTripMutations() {
 
   // --- Wrappers d'Accions ---
 
-  const updateTripSettings = async (name: string, date: string, currency?: any) => {
+  const updateTripSettings = async (name: string, currency: Currency) => {
     try {
-      await actions.updateTripSettings(name, date, currency);
-      showToast(currency ? "Moneda canviada" : "Configuració actualitzada");
+      await actions.updateTripSettings(name, new Date().toISOString(), currency);
+      showToast(currency ? "Configuració actualitzada" : "Nom canviat");
       return true;
     } catch (e: any) {
       showToast(e.message || "Error actualitzant", 'error');
@@ -26,17 +27,48 @@ export function useTripMutations() {
     }
   };
 
-  const settleDebt = async (settlement: any, method: string) => {
+  const settleDebt = async (settlement: any, method: string = 'manual') => {
     try {
-      const res = await actions.settleDebt(settlement, method);
+      // 1. Diccionari de títols segons el mètode seleccionat
+      const titles: Record<string, string> = {
+        bizum: 'Pagament via Bizum',
+        manual: 'Pagament en Efectiu',
+        transfer: 'Transferència Bancària',
+        card: 'Pagament (Altres)'
+      };
+
+      // 2. Seleccionem el títol
+      const customTitle = titles[method] || 'Liquidació de deute';
+
+      // 3. Construïm la despesa manualment
+      const expenseData = {
+        title: customTitle,
+        amount: settlement.amount,
+        payer: settlement.from,
+        involved: [settlement.to],
+        
+        // CORRECCIÓ 2: Forcem el tipus perquè TypeScript no es queixi
+        category: 'transfer' as CategoryId, 
+        
+        date: new Date().toISOString(),
+        
+        // CORRECCIÓ 3: També assegurem el tipus de split
+        splitType: 'equal' as SplitType 
+      };
+
+      // 4. Usem addExpense
+      const res = await actions.addExpense(expenseData);
+
       if (res.success) {
-        showToast("Pagament registrat!", 'success');
+        const methodText = titles[method]?.replace('Pagament via ', '') || 'Efectiu';
+        showToast(`Registrat: ${methodText}`, 'success');
         return true;
       } else {
         showToast("Error liquidant", 'error');
         return false;
       }
     } catch (e) {
+      console.error(e);
       showToast("Error inesperat", 'error');
       return false;
     }
@@ -61,11 +93,8 @@ export function useTripMutations() {
   const leaveTrip = async () => {
     if (!currentUser || !tripData) return;
     
-    // CORRECCIÓ: Calculem els balanços al moment per verificar deutes
     const balances = calculateBalances(expenses, tripData.users);
-
     const myUser = tripData.users.find(u => u.linkedUid === currentUser.uid);
-    // Ara TypeScript ja sap que 'b' és de tipus Balance
     const myBalance = balances.find(b => b.userId === myUser?.id)?.amount || 0;
 
     const res = await actions.leaveTrip(
@@ -77,7 +106,7 @@ export function useTripMutations() {
 
     if (res.success) {
       localStorage.removeItem('cc-last-trip-id');
-      navigate('/'); // CORRECCIÓ: Usem navigate en lloc de window.location
+      navigate('/'); 
     } else {
       showToast(res.error || "Error al sortir del grup", 'error');
     }
@@ -98,7 +127,7 @@ export function useTripMutations() {
       await actions.deleteTrip(); 
       showToast("Viatge eliminat correctament");
       localStorage.removeItem('cc-last-trip-id');
-      navigate('/'); // CORRECCIÓ: Usem navigate aquí també
+      navigate('/'); 
     } catch (e: any) {
       console.error(e);
       showToast(e.message || "Error eliminant el viatge", 'error');

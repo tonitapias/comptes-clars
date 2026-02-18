@@ -1,116 +1,127 @@
 import { useState } from 'react';
-import { ArrowRight, CheckCircle2, Wallet, Banknote, Landmark, Smartphone } from 'lucide-react';
+import { CheckCircle2, ArrowRight, Smartphone, Banknote, Building2, CreditCard } from 'lucide-react';
 import Modal from '../../Modal';
 import Button from '../../Button';
 import Avatar from '../../Avatar';
+import { Settlement, TripUser } from '../../../types';
 import { formatCurrency } from '../../../utils/formatters';
-import { Settlement, TripUser, Currency } from '../../../types';
+import { useTrip } from '../../../context/TripContext';
+import { useHapticFeedback } from '../../../hooks/useHapticFeedback';
 
 interface TripSettleModalProps {
-  data: Settlement | null;
+  isOpen: boolean;
   onClose: () => void;
-  users: TripUser[];
-  currency: Currency;
-  onConfirm: (data: Settlement, method: string) => Promise<boolean>;
+  settlement: Settlement | null;
+  onConfirm: (method: string) => Promise<boolean>; // CORREGIT: Ara accepta string
 }
 
-const PAYMENT_METHODS = [
-  { id: 'Bizum', icon: Smartphone, color: 'text-indigo-600 bg-indigo-50 border-indigo-200' },
-  { id: 'Efectiu', icon: Banknote, color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
-  { id: 'Transferència', icon: Landmark, color: 'text-blue-600 bg-blue-50 border-blue-200' },
-  { id: 'Altres', icon: Wallet, color: 'text-slate-600 bg-slate-50 border-slate-200' },
-];
+export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm }: TripSettleModalProps) {
+  const { tripData } = useTrip();
+  const { trigger } = useHapticFeedback();
+  const [method, setMethod] = useState<string>('manual');
 
-export default function TripSettleModal({ data, onClose, users, currency, onConfirm }: TripSettleModalProps) {
-  const [method, setMethod] = useState('Bizum');
-  const [isLoading, setIsLoading] = useState(false);
+  if (!tripData || !settlement) return null;
 
-  if (!data) return null;
+  const getUser = (id: string) => tripData.users.find(u => u.id === id) || { name: '?', photoUrl: null } as TripUser;
+  
+  const fromUser = getUser(settlement.from);
+  const toUser = getUser(settlement.to);
 
   const handleConfirm = async () => {
-    setIsLoading(true);
-    const success = await onConfirm(data, method);
-    setIsLoading(false);
-    if (success) onClose();
+      trigger('success');
+      // CLAU DEL FIX: Passem 'method' a la funció onConfirm
+      await onConfirm(method); 
   };
 
-  const fromUser = users.find(u => u.id === data.from);
-  const toUser = users.find(u => u.id === data.to);
+  const PAYMENT_METHODS = [
+    { id: 'manual', label: 'Efectiu', icon: Banknote },
+    { id: 'bizum', label: 'Bizum', icon: Smartphone },
+    { id: 'transfer', label: 'Banc', icon: Building2 },
+    { id: 'card', label: 'Altres', icon: CreditCard },
+  ];
 
   return (
-    <Modal isOpen={!!data} onClose={onClose} title="Confirmar Pagament">
-      <div className="flex flex-col items-center space-y-8 py-4 animate-fade-in">
+    <Modal isOpen={isOpen} onClose={onClose} title="Liquidar Deute">
+      <div className="pt-2 pb-2 space-y-6">
         
-        {/* SUMMARY CARD */}
-        <div className="w-full bg-slate-50 dark:bg-slate-900/50 rounded-3xl p-6 border border-slate-100 dark:border-slate-800 flex flex-col items-center gap-4 relative overflow-hidden">
-             {/* Background Decor */}
-             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500 to-transparent opacity-50" />
-             
-             <div className="flex items-center gap-4 w-full justify-between px-2">
-                <div className="flex flex-col items-center gap-2">
-                    <Avatar name={fromUser?.name || '?'} photoUrl={fromUser?.photoUrl} size="md" />
-                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300 max-w-[80px] truncate">{fromUser?.name}</span>
+        {/* --- HOLOGRAPHIC TICKET --- */}
+        <div className="relative mx-1 group perspective">
+            <div className="absolute top-[60%] -left-3 w-6 h-6 bg-slate-50 dark:bg-[#000000] rounded-full z-20" />
+            <div className="absolute top-[60%] -right-3 w-6 h-6 bg-slate-50 dark:bg-[#000000] rounded-full z-20" />
+            <div className="absolute inset-0 bg-indigo-500/20 blur-2xl rounded-[2rem] opacity-50 group-hover:opacity-70 transition-opacity" />
+
+            <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2rem] p-0 shadow-2xl shadow-slate-200/50 dark:shadow-black/50 overflow-hidden transform transition-transform duration-500 hover:scale-[1.01]">
+                
+                <div className="h-28 bg-gradient-to-br from-indigo-600 to-purple-600 relative overflow-hidden flex flex-col items-center justify-center text-white">
+                    <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay" />
+                    <div className="absolute inset-0 bg-white/10 backdrop-blur-[1px]" />
+                    <span className="relative z-10 text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1">Total a Transferir</span>
+                    <h2 className="relative z-10 text-4xl font-black tracking-tighter drop-shadow-md">
+                        {formatCurrency(settlement.amount, tripData.currency)}
+                    </h2>
                 </div>
 
-                <div className="flex flex-col items-center gap-1 flex-1">
-                    <span className="text-[10px] uppercase font-black text-slate-400 tracking-widest">Paga a</span>
-                    <ArrowRight className="text-indigo-400 animate-pulse" size={20} />
+                <div className="p-6 pt-6 relative">
+                    <div className="flex items-center justify-between relative z-10 mb-6">
+                        <div className="flex flex-col items-center gap-2 w-20">
+                            <Avatar name={fromUser.name} photoUrl={fromUser.photoUrl} size="md" className="grayscale" />
+                            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 truncate w-full text-center">{fromUser.name}</span>
+                        </div>
+                        <div className="flex-1 flex flex-col items-center justify-center text-slate-300 dark:text-slate-600 px-2">
+                             <div className="flex gap-1 mb-1">
+                                <span className="w-1 h-1 rounded-full bg-indigo-500 animate-ping" />
+                                <span className="w-1 h-1 rounded-full bg-indigo-400" />
+                                <span className="w-1 h-1 rounded-full bg-indigo-300" />
+                             </div>
+                             <ArrowRight size={20} className="text-indigo-500" />
+                        </div>
+                        <div className="flex flex-col items-center gap-2 w-20">
+                            <Avatar name={toUser.name} photoUrl={toUser.photoUrl} size="md" />
+                            <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 truncate w-full text-center">{toUser.name}</span>
+                        </div>
+                    </div>
                 </div>
-
-                <div className="flex flex-col items-center gap-2">
-                    <Avatar name={toUser?.name || '?'} photoUrl={toUser?.photoUrl} size="md" />
-                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300 max-w-[80px] truncate">{toUser?.name}</span>
-                </div>
-             </div>
-
-             <div className="bg-white dark:bg-slate-800 px-6 py-3 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-                <span className="text-3xl font-black text-slate-900 dark:text-white tabular-nums tracking-tight">
-                    {formatCurrency(data.amount, currency)}
-                </span>
-             </div>
-        </div>
-        
-        {/* METHOD SELECTION */}
-        <div className="w-full space-y-3">
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">Mètode de pagament</label>
-            <div className="grid grid-cols-2 gap-2">
-            {PAYMENT_METHODS.map((m) => {
-                const isSelected = method === m.id;
-                const Icon = m.icon;
-                return (
-                    <button 
-                    key={m.id} 
-                    onClick={() => setMethod(m.id)} 
-                    className={`
-                        flex items-center gap-3 px-4 py-3 rounded-xl border-2 font-bold transition-all text-sm
-                        ${isSelected 
-                            ? `${m.color} shadow-sm scale-[1.02]` 
-                            : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'
-                        }
-                    `}
-                    >
-                        <Icon size={18} />
-                        {m.id}
-                    </button>
-                );
-            })}
             </div>
         </div>
 
-        {/* ACTIONS */}
-        <div className="flex gap-3 w-full pt-2">
-          <Button variant="secondary" onClick={onClose} className="flex-1 h-12 rounded-xl">Cancel·lar</Button>
-          <Button 
-            variant="success" 
-            onClick={handleConfirm} 
-            className="flex-1 h-12 rounded-xl shadow-lg shadow-emerald-500/20" 
-            icon={CheckCircle2}
-            loading={isLoading}
-            haptic="success"
-          >
-            Confirmar
-          </Button>
+        {/* --- PAYMENT METHOD SELECTOR --- */}
+        <div className="space-y-3">
+            <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-2">
+                Mètode de Pagament
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+                {PAYMENT_METHODS.map((pm) => {
+                    const isSelected = method === pm.id;
+                    const Icon = pm.icon;
+                    return (
+                        <button
+                            key={pm.id}
+                            onClick={() => { trigger('selection'); setMethod(pm.id); }}
+                            className={`
+                                flex flex-col items-center justify-center gap-2 py-3 rounded-2xl border transition-all duration-200 relative overflow-hidden
+                                ${isSelected 
+                                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/30 ring-2 ring-indigo-500/20' 
+                                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400 hover:border-slate-300 dark:hover:border-slate-700'}
+                            `}
+                        >
+                            <Icon size={20} strokeWidth={2.5} />
+                            <span className="text-[9px] font-bold uppercase">{pm.label}</span>
+                        </button>
+                    );
+                })}
+            </div>
         </div>
+
+        {/* --- ACTION BUTTON --- */}
+        <Button 
+            onClick={handleConfirm}
+            fullWidth
+            icon={CheckCircle2}
+            className="h-14 rounded-2xl text-sm font-black uppercase tracking-wider bg-slate-900 dark:bg-white text-white dark:text-black shadow-xl hover:scale-[1.02] active:scale-95 transition-transform"
+        >
+            Confirmar {method === 'bizum' ? 'Bizum' : method === 'manual' ? 'Efectiu' : method === 'transfer' ? 'Transferència' : 'Pagament'}
+        </Button>
+
       </div>
     </Modal>
   );

@@ -29,6 +29,8 @@ export default function TripModals({
   
   const { trigger } = useHapticFeedback();
 
+  // --- ACTIONS ---
+  
   const handleDeleteExpense = async () => {
     trigger('medium');
     if (modals.confirmAction?.id) {
@@ -38,13 +40,26 @@ export default function TripModals({
     modals.closeExpenseModal();
   };
 
-  const handleLeaveTrip = async () => {
-    trigger('medium');
-    await mutations.leaveTrip();
+  // --- AQUÍ ESTAVA EL PROBLEMA ---
+  // Aquesta funció ha de rebre 'method' (string) del modal fill
+  const handleSettleConfirm = async (method: string) => {
+    if (!modals.settleModalData) return false;
+    
+    // I l'ha de passar a la mutació. Si no ho fem, el hook fa servir 'manual' per defecte.
+    const success = await mutations.settleDebt(modals.settleModalData, method);
+    
+    if (success) {
+       modals.setSettleModalData(null); 
+    }
+    return success;
   };
+
+  // Determinem si el modal de liquidació ha d'estar obert
+  const isSettleOpen = !!modals.settleModalData;
 
   return (
     <>
+      {/* 1. EDIT/CREATE EXPENSE */}
       <ExpenseModal 
         key={modals.editingExpense?.id || 'new'} 
         isOpen={modals.isExpenseModalOpen} 
@@ -65,6 +80,7 @@ export default function TripModals({
         showToast={showToast} 
       />
       
+      {/* 2. GROUP MANAGEMENT */}
       <GroupModal 
         isOpen={modals.isGroupModalOpen} 
         onClose={() => modals.setGroupModalOpen(false)} 
@@ -72,29 +88,32 @@ export default function TripModals({
         initialTab={modals.groupModalTab}
       />
       
+      {/* 3. ACTIVITY LOG */}
       <ActivityModal 
         isOpen={modals.isActivityOpen} 
         onClose={() => modals.setActivityOpen(false)} 
       />
 
+      {/* 4. SETTINGS */}
       <TripSettingsModal
         isOpen={modals.isSettingsOpen}
         onClose={() => modals.setSettingsOpen(false)}
-        tripData={tripData}
         canChangeCurrency={canChangeCurrency}
-        onUpdateSettings={mutations.updateTripSettings}
-        onLeaveTrip={handleLeaveTrip}
-        onDeleteTrip={mutations.deleteTrip} 
+        onUpdate={mutations.updateTripSettings}
+        onLeave={mutations.leaveTrip}
+        onDelete={mutations.deleteTrip} 
       />
       
+      {/* 5. SETTLE DEBT */}
       <TripSettleModal 
-        data={modals.settleModalData}
+        isOpen={isSettleOpen}
         onClose={() => modals.setSettleModalData(null)}
-        users={users}
-        currency={currency}
-        onConfirm={mutations.settleDebt}
+        settlement={modals.settleModalData} 
+        // Passem la funció que accepta el mètode
+        onConfirm={handleSettleConfirm} 
       />
 
+      {/* 6. GENERIC CONFIRMATION */}
       <Modal 
         isOpen={!!modals.confirmAction} 
         onClose={modals.closeConfirmAction} 

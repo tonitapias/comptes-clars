@@ -1,349 +1,235 @@
 import { useState, useEffect } from 'react';
-import { 
-  Lock, Download, Pencil, Check, X, Trash2, 
-  Calendar, Users, ShieldAlert, Save, AlertTriangle, LogOut 
-} from 'lucide-react'; 
+import { Trash2, Save, Type, AlertTriangle, Lock, Coins, LogOut } from 'lucide-react';
 import Modal from '../../Modal';
 import Button from '../../Button';
-import Avatar from '../../Avatar'; 
+import { Currency } from '../../../types';
 import { CURRENCIES } from '../../../utils/constants';
-import { TripData, Currency, TripUser } from '../../../types';
-import { downloadBackup } from '../../../utils/exportData';
-import { TripService } from '../../../services/tripService'; 
-import { auth } from '../../../config/firebase'; 
+import { useTrip } from '../../../context/TripContext';
+import { useHapticFeedback } from '../../../hooks/useHapticFeedback';
 
 interface TripSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  tripData: TripData;
   canChangeCurrency: boolean;
-  onUpdateSettings: (name: string, date: string, currency?: Currency) => Promise<boolean>;
-  onDeleteTrip?: () => Promise<void>;
-  onLeaveTrip?: () => Promise<void>;
+  onUpdate: (name: string, currency: Currency) => Promise<boolean>; // Canviat a boolean per coincidir amb mutation
+  onDelete: () => Promise<void>; // Promise
+  onLeave: () => Promise<void>;  // Promise
 }
 
-export default function TripSettingsModal({
-  isOpen, onClose, tripData, canChangeCurrency, onUpdateSettings, onDeleteTrip, onLeaveTrip
+export default function TripSettingsModal({ 
+  isOpen, 
+  onClose, 
+  canChangeCurrency, 
+  onUpdate, 
+  onDelete,
+  onLeave
 }: TripSettingsModalProps) {
+  const { tripData } = useTrip();
+  const { trigger } = useHapticFeedback();
   
-  const [name, setName] = useState(tripData?.name || '');
-  const [date, setDate] = useState(tripData?.createdAt ? tripData.createdAt.split('T')[0] : ''); 
-  const [currency, setCurrency] = useState<Currency>(tripData?.currency || CURRENCIES[0]);
+  const [name, setName] = useState('');
+  const [selectedCurrencyCode, setSelectedCurrencyCode] = useState<string>('EUR');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [localUsers, setLocalUsers] = useState<TripUser[]>(tripData.users || []);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
-    if (tripData) {
-        setLocalUsers(tripData.users);
-        setName(tripData.name);
-        setDate(tripData.createdAt ? tripData.createdAt.split('T')[0] : '');
-        setCurrency(tripData.currency);
+    if (isOpen && tripData) {
+      setName(tripData.name);
+      setSelectedCurrencyCode(tripData.currency.code);
+      setShowDeleteConfirm(false);
     }
-  }, [tripData, isOpen]);
+  }, [isOpen, tripData]);
 
-  const [editingUserId, setEditingUserId] = useState<string | null>(null);
-  const [editNameValue, setEditNameValue] = useState('');
-  const [isUpdatingUser, setIsUpdatingUser] = useState(false);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
 
-  const startEditUser = (user: TripUser) => {
-    setEditingUserId(user.id);
-    setEditNameValue(user.name);
-  };
-
-  const saveUserEdit = async (userId: string) => {
-    if (!editNameValue.trim()) return;
-    
-    const previousUsers = [...localUsers];
-    const updatedUsers = localUsers.map(u => 
-        u.id === userId ? { ...u, name: editNameValue.trim(), photoUrl: null } : u 
-    );
-    setLocalUsers(updatedUsers);
-    setEditingUserId(null); 
-    setIsUpdatingUser(true);
-
-    try {
-      await TripService.updateTripUserName(tripData.id, userId, editNameValue.trim());
-    } catch (error) {
-      console.error("Error updating user:", error);
-      setLocalUsers(previousUsers); 
-      alert("Error al guardar el nom. Comprova la connexió.");
-    } finally {
-      setIsUpdatingUser(false);
-    }
-  };
-
-  const deleteUser = async (userId: string) => {
-    if (!confirm("Segur que vols eliminar aquest participant del grup?")) return;
-    
-    const previousUsers = [...localUsers];
-    setLocalUsers(localUsers.filter(u => u.id !== userId));
-    setIsUpdatingUser(true);
-
-    try {
-      await TripService.leaveTrip(tripData.id, userId);
-    } catch (error) {
-      console.error("Error removing user:", error);
-      setLocalUsers(previousUsers); 
-      alert("No es pot eliminar l'usuari.");
-    } finally {
-      setIsUpdatingUser(false);
-    }
-  };
-
-  const handleSave = async () => {
+    trigger('success');
     setIsSubmitting(true);
     try {
-      const success = await onUpdateSettings(name, date, canChangeCurrency ? currency : undefined);
-      if (success) onClose();
-    } catch (e) {
-      console.error(e);
+      const currency = CURRENCIES.find(c => c.code === selectedCurrencyCode) || CURRENCIES[0];
+      await onUpdate(name, currency);
+      onClose();
+    } catch (error) {
+      console.error(error);
+      trigger('error');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const [showDangerConfirm, setShowDangerConfirm] = useState(false);
-  const isOwner = auth.currentUser?.uid === tripData.ownerId;
-  const hasDeletePermission = isOwner && !!onDeleteTrip;
-  const hasLeaveOption = !!onLeaveTrip;
-  const showDangerZone = hasDeletePermission || hasLeaveOption;
-
-  const handleDangerAction = async () => {
-      if (hasDeletePermission && onDeleteTrip) {
-          await onDeleteTrip();
-      } else if (hasLeaveOption && onLeaveTrip) {
-          await onLeaveTrip();
-      }
+  const handleDeleteClick = () => {
+      trigger('medium');
+      setShowDeleteConfirm(true);
   };
 
+  if (!tripData) return null;
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Configuració del Viatge">
-      <div className="space-y-8 pb-4">
+    <Modal isOpen={isOpen} onClose={onClose} title="Configuració">
+      <div className="space-y-8 pt-4">
         
-        {/* HERO SECTION */}
-        <div className="bg-slate-50 dark:bg-slate-900/50 -mx-6 -mt-2 px-6 py-8 border-b border-slate-100 dark:border-slate-800 flex flex-col items-center gap-4">
-            <div className="w-full relative group">
-                <label className="sr-only">Nom del viatge</label>
-                <input 
-                    type="text" 
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full text-center bg-transparent border-none outline-none text-3xl font-black text-slate-800 dark:text-slate-100 placeholder:text-slate-300 focus:placeholder:text-indigo-300 transition-all"
-                    placeholder="Nom del viatge..."
-                />
-                <Pencil size={16} className="absolute right-0 top-1/2 -translate-y-1/2 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-                <div className="h-1 w-12 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mt-2 group-focus-within:bg-indigo-500 group-focus-within:w-1/2 transition-all duration-300 ease-out" />
-            </div>
-        </div>
-
-        {/* SETTINGS GRID */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <form id="settings-form" onSubmit={handleSubmit} className="space-y-6">
+            
+            {/* --- NAME FIELD --- */}
             <div className="space-y-2">
-                <label className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
-                    <Calendar size={14} /> Data d'inici
+                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-1 flex items-center gap-2">
+                    <Type size={12}/> Nom del Viatge
                 </label>
-                <input 
-                    type="date" 
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="w-full p-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-bold text-slate-700 dark:text-slate-200 transition-all"
-                />
+                <div className="relative group">
+                    <div className="absolute inset-0 bg-indigo-500/20 rounded-2xl blur-lg opacity-0 group-focus-within:opacity-100 transition-opacity duration-500" />
+                    <input 
+                        type="text" 
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="relative w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white font-bold text-lg py-4 px-5 rounded-2xl outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm placeholder:text-slate-300 dark:placeholder:text-slate-700"
+                        placeholder="Ex: Costa Brava 2024"
+                    />
+                </div>
             </div>
 
-            <div className="space-y-2">
-                <label className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider ml-1">
-                    Moneda Principal
-                </label>
-                <div className="relative">
-                    <select 
-                        value={currency.code}
-                        onChange={(e) => {
-                            const c = CURRENCIES.find(cur => cur.code === e.target.value);
-                            if (c) setCurrency(c);
-                        }}
-                        disabled={!canChangeCurrency}
-                        className={`
-                            w-full p-3.5 appearance-none rounded-xl border font-bold outline-none transition-all
-                            ${!canChangeCurrency 
-                                ? 'bg-slate-100 dark:bg-slate-800/50 text-slate-400 border-slate-200 dark:border-slate-700 cursor-not-allowed pr-10' 
-                                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500'}
-                        `}
-                    >
-                        {CURRENCIES.map(c => (
-                            <option key={c.code} value={c.code}>{c.name} ({c.symbol})</option>
-                        ))}
-                    </select>
+            {/* --- CURRENCY SELECTOR --- */}
+            <div className="space-y-3">
+                <div className="flex items-center justify-between pl-1">
+                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                        <Coins size={12} /> Divisa Principal
+                    </label>
                     {!canChangeCurrency && (
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                            <Lock size={16} />
-                        </div>
+                        <span className="flex items-center gap-1.5 text-[9px] font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                            <Lock size={8} /> Bloquejat
+                        </span>
                     )}
                 </div>
-                {!canChangeCurrency && (
-                    <p className="text-[10px] text-orange-500/80 font-medium pl-1 flex items-center gap-1">
-                        <AlertTriangle size={10} />
-                        No es pot canviar amb despeses creades
-                    </p>
-                )}
-            </div>
-        </div>
-
-        {/* GESTIÓ PARTICIPANTS */}
-        <div className="space-y-3">
-             <div className="flex items-center justify-between px-1">
-                <label className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    <Users size={14} /> Participants
-                </label>
-                <span className="text-[10px] font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-slate-500">
-                    {localUsers.length}
-                </span>
-             </div>
-             
-             <div className="bg-slate-50 dark:bg-slate-900/30 rounded-[1.5rem] p-2 space-y-2 border border-slate-100 dark:border-slate-800/50">
-                {localUsers.map(user => (
-                    <div key={user.id} className="group flex items-center justify-between p-2 pl-3 bg-white dark:bg-slate-800 rounded-2xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700 shadow-sm transition-all">
-                        
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                            <Avatar name={user.name} photoUrl={user.photoUrl} size="sm" />
-                            
-                            {editingUserId === user.id ? (
-                                <input 
-                                    type="text" 
-                                    autoFocus
-                                    value={editNameValue}
-                                    onChange={(e) => setEditNameValue(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') saveUserEdit(user.id);
-                                        if (e.key === 'Escape') setEditingUserId(null);
-                                    }}
-                                    className="flex-1 min-w-0 bg-slate-50 dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded-lg px-3 py-1.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-slate-800 dark:text-slate-100"
-                                    disabled={isUpdatingUser}
-                                />
-                            ) : (
-                                <span className="font-bold text-slate-700 dark:text-slate-200 text-sm truncate">{user.name}</span>
-                            )}
+                
+                <div className="relative">
+                    {!canChangeCurrency && (
+                        <div 
+                            className="absolute inset-0 z-20 cursor-not-allowed bg-slate-50/50 dark:bg-black/60 backdrop-blur-[2px] rounded-2xl flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-300"
+                            onClick={() => trigger('error')}
+                        >
+                            <span className="bg-slate-900 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-xl border border-slate-700">
+                                Canvi bloquejat per seguretat
+                            </span>
                         </div>
-
-                        <div className="flex items-center gap-1 pl-2">
-                            {editingUserId === user.id ? (
-                                <>
-                                    <button 
-                                        onClick={() => saveUserEdit(user.id)} 
-                                        disabled={isUpdatingUser} 
-                                        className="h-8 w-8 flex items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-100 transition-colors"
-                                    >
-                                        <Check size={16} strokeWidth={3} />
-                                    </button>
-                                    <button 
-                                        onClick={() => setEditingUserId(null)} 
-                                        disabled={isUpdatingUser} 
-                                        className="h-8 w-8 flex items-center justify-center rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 border border-slate-200 transition-colors"
-                                    >
-                                        <X size={16} strokeWidth={3} />
-                                    </button>
-                                </>
-                            ) : (
-                                <>
-                                    <button 
-                                        onClick={() => startEditUser(user)} 
-                                        className="h-8 w-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all opacity-100 sm:opacity-0 group-hover:opacity-100 focus:opacity-100"
-                                    >
-                                        <Pencil size={16} />
-                                    </button>
-                                    
-                                    {isOwner && user.id !== tripData.ownerId && (
-                                        <button 
-                                            onClick={() => deleteUser(user.id)}
-                                            className="h-8 w-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all opacity-100 sm:opacity-0 group-hover:opacity-100 focus:opacity-100"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                    )}
-                                </>
-                            )}
-                        </div>
+                    )}
+                    
+                    <div className={`grid grid-cols-3 gap-3 ${!canChangeCurrency ? 'opacity-50 grayscale' : ''}`}>
+                        {CURRENCIES.map((curr) => {
+                            const isSelected = selectedCurrencyCode === curr.code;
+                            return (
+                                <button
+                                    key={curr.code}
+                                    type="button"
+                                    disabled={!canChangeCurrency}
+                                    onClick={() => { trigger('selection'); setSelectedCurrencyCode(curr.code); }}
+                                    className={`
+                                        relative overflow-hidden flex flex-col items-center justify-center py-4 rounded-2xl border transition-all duration-300 group
+                                        ${isSelected 
+                                            ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/40 scale-[1.02]' 
+                                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400 hover:border-slate-300 dark:hover:border-slate-700'}
+                                    `}
+                                >
+                                    {isSelected && <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent pointer-events-none" />}
+                                    <span className={`text-2xl font-black mb-1 ${isSelected ? 'text-white' : 'text-slate-700 dark:text-slate-200'}`}>
+                                        {curr.symbol}
+                                    </span>
+                                    <span className={`text-[10px] font-bold uppercase tracking-wider ${isSelected ? 'text-indigo-200' : 'text-slate-400'}`}>
+                                        {curr.code}
+                                    </span>
+                                </button>
+                            );
+                        })}
                     </div>
-                ))}
-             </div>
-        </div>
+                </div>
+            </div>
 
-        {/* EXTRA ACTIONS */}
-        <div className="space-y-6 pt-4">
-             <button 
-                onClick={() => downloadBackup(tripData)}
-                className="w-full group relative overflow-hidden bg-slate-900 dark:bg-white text-white dark:text-slate-900 p-4 rounded-2xl flex items-center justify-between shadow-lg shadow-slate-200 dark:shadow-none hover:scale-[1.01] active:scale-[0.99] transition-all"
-             >
-                <div className="flex items-center gap-3 relative z-10">
-                    <div className="p-2 bg-white/10 dark:bg-slate-900/10 rounded-xl">
-                        <Download size={20} />
+            <Button 
+                type="submit" 
+                fullWidth 
+                loading={isSubmitting}
+                disabled={name.trim() === ''}
+                icon={Save}
+                className="h-14 rounded-2xl text-base font-black uppercase tracking-wide bg-slate-900 dark:bg-white text-white dark:text-black shadow-xl hover:shadow-2xl transition-all"
+            >
+                Guardar Configuració
+            </Button>
+        </form>
+
+        {/* --- DANGER ZONE --- */}
+        <div className="pt-8 border-t border-slate-100 dark:border-slate-800 space-y-3">
+            {/* Leave Trip */}
+            <button 
+                type="button"
+                onClick={() => { trigger('medium'); onLeave(); }}
+                className="w-full flex items-center justify-between p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-600 transition-all group"
+            >
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 transition-colors">
+                        <LogOut size={20} />
                     </div>
                     <div className="text-left">
-                        <div className="font-bold text-sm">Còpia de Seguretat</div>
-                        <div className="text-[10px] opacity-70">Descarregar JSON</div>
+                        <span className="block text-sm font-bold text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
+                            Sortir del Viatge
+                        </span>
                     </div>
                 </div>
-                <div className="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-             </button>
+            </button>
 
-            {showDangerZone && (
-                <div className={`
-                    rounded-3xl border transition-all duration-300 overflow-hidden
-                    ${showDangerConfirm 
-                        ? 'bg-rose-50 border-rose-200 dark:bg-rose-900/10 dark:border-rose-900/30' 
-                        : 'bg-transparent border-transparent'}
-                `}>
-                    {!showDangerConfirm ? (
+            {/* Delete Trip */}
+            {showDeleteConfirm ? (
+                <div className="bg-rose-500/5 border border-rose-500/20 rounded-3xl p-6 animate-fade-in-up">
+                    <div className="flex items-start gap-4 mb-6">
+                        <div className="p-3 bg-rose-500/10 rounded-2xl text-rose-500 border border-rose-500/20">
+                            <AlertTriangle size={24} strokeWidth={2.5} />
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-rose-600 dark:text-rose-400 text-base">Eliminar Viatge?</h4>
+                            <p className="text-xs text-rose-600/70 dark:text-rose-400/70 mt-1 leading-relaxed max-w-[250px]">
+                                Esborraràs <strong>totes les dades</strong> per a tots els usuaris. Irreversible.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex gap-3">
                         <button 
-                            onClick={() => setShowDangerConfirm(true)}
-                            className="w-full flex items-center justify-center gap-2 p-4 text-rose-500 hover:text-rose-700 font-bold text-sm opacity-60 hover:opacity-100 transition-all hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-2xl"
+                            type="button"
+                            onClick={() => setShowDeleteConfirm(false)}
+                            className="flex-1 py-3.5 bg-transparent border border-rose-200 dark:border-rose-900 rounded-xl text-rose-600 dark:text-rose-400 font-bold text-xs hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-colors"
                         >
-                            {hasDeletePermission ? <Trash2 size={16} /> : <LogOut size={16} />} 
-                            {hasDeletePermission ? 'Eliminar Viatge' : 'Deixar de veure el grup'}
+                            Cancel·lar
                         </button>
-                    ) : (
-                        <div className="p-5 animate-in slide-in-from-bottom-2 fade-in">
-                            <div className="flex flex-col items-center text-center gap-2 mb-4">
-                                <div className="p-3 bg-rose-100 dark:bg-rose-900/30 text-rose-600 rounded-full mb-1">
-                                    <ShieldAlert size={24} />
-                                </div>
-                                <h4 className="text-rose-700 dark:text-rose-400 font-black text-lg">Estàs segur?</h4>
-                                <p className="text-xs text-rose-600/70 max-w-[200px] leading-relaxed">
-                                    {hasDeletePermission 
-                                        ? "Aquesta acció és irreversible. S'esborraran totes les dades." 
-                                        : "Deixaràs de tenir accés a aquest viatge."}
-                                </p>
+                        <button 
+                            type="button"
+                            onClick={() => { trigger('heavy'); onDelete(); }}
+                            className="flex-1 py-3.5 bg-rose-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-rose-500/30 hover:bg-rose-600 active:scale-95 transition-all flex items-center justify-center gap-2"
+                        >
+                            <Trash2 size={16} /> Eliminar
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <button 
+                    type="button"
+                    onClick={handleDeleteClick}
+                    className="w-full group relative overflow-hidden p-0.5 rounded-2xl transition-all hover:scale-[1.01] active:scale-[0.99]"
+                >
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-rose-500/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+                    <div className="relative flex items-center justify-between p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 hover:border-rose-200 dark:group-hover:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-colors">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-rose-500 group-hover:bg-rose-100 dark:group-hover:bg-rose-900/50 transition-colors">
+                                <Trash2 size={20} />
                             </div>
-                            <div className="flex gap-3">
-                                <button 
-                                    onClick={() => setShowDangerConfirm(false)}
-                                    className="flex-1 py-3 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-sm rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 transition-colors"
-                                >
-                                    Cancel·lar
-                                </button>
-                                <button 
-                                    onClick={handleDangerAction}
-                                    className="flex-1 py-3 bg-rose-600 text-white font-bold text-sm rounded-xl shadow-lg shadow-rose-200 dark:shadow-none hover:bg-rose-700 active:scale-95 transition-all"
-                                >
-                                    {hasDeletePermission ? 'Sí, eliminar' : 'Sí, marxar'}
-                                </button>
+                            <div className="text-left">
+                                <span className="block text-sm font-bold text-slate-600 dark:text-slate-300 group-hover:text-rose-700 dark:group-hover:text-rose-400 transition-colors">
+                                    Eliminar Viatge
+                                </span>
+                                <span className="text-[10px] text-slate-400 group-hover:text-rose-500/70">
+                                    Zona de perill
+                                </span>
                             </div>
                         </div>
-                    )}
-                </div>
+                    </div>
+                </button>
             )}
-        </div>
-
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 mt-4">
-            <Button 
-                onClick={handleSave} 
-                loading={isSubmitting} 
-                fullWidth 
-                className="h-14 text-lg"
-                icon={Save}
-                haptic="success"
-            >
-                Guardar Canvis
-            </Button>
         </div>
       </div>
     </Modal>
