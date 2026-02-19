@@ -1,7 +1,7 @@
 {
   "name": "Calculadora de Despeses",
   "private": true,
-  "version": "2.0.3",
+  "version": "2.0.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,11 +13,13 @@
   },
   "dependencies": {
     "firebase": "^12.6.0",
+    "i18next": "^25.8.11",
     "jspdf": "^4.1.0",
     "jspdf-autotable": "^5.0.2",
     "lucide-react": "^0.555.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-i18next": "^16.5.4",
     "react-qr-code": "^2.0.18",
     "react-router-dom": "^7.11.0",
     "zod": "^4.3.5"
@@ -39,7 +41,6 @@
     "vite-plugin-pwa": "^1.2.0",
     "vitest": "^4.0.18"
   },
-
   "overrides": {
     "ajv": "^8.17.1",
     "minimatch": "^10.2.1"

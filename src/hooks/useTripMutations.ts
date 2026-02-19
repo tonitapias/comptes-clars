@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useTrip } from '../context/TripContext';
+import { useTripState, useTripDispatch } from '../context/TripContext'; // [RISC ZERO]: Importem els nous hooks separats
 import { ToastType } from '../components/Toast';
 import { calculateBalances } from '../services/billingService';
 import { Currency, CategoryId, SplitType, Settlement } from '../types'; 
@@ -9,7 +9,6 @@ import { LITERALS } from '../constants/literals';
 const SETTLEMENT_CATEGORY: CategoryId = 'transfer';
 const SETTLEMENT_SPLIT_TYPE: SplitType = 'equal';
 
-// [SAFE-FIX]: Type Guard robuste per extreure missatges d'error sense fer servir 'any'
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message;
   if (typeof error === 'string') return error;
@@ -19,24 +18,31 @@ const getErrorMessage = (error: unknown): string => {
 
 export function useTripMutations() {
   const navigate = useNavigate();
-  const { actions, tripData, currentUser, expenses } = useTrip();
+  
+  // [RISC ZERO]: Consumim l'estat i les accions per separat!
+  const { tripData, currentUser, expenses } = useTripState();
+  const actions = useTripDispatch();
+  
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
 
-  const showToast = (msg: string, type: ToastType = 'success') => setToast({ msg, type });
-  const clearToast = () => setToast(null);
+  // Funcions estables
+  const showToast = useCallback((msg: string, type: ToastType = 'success') => setToast({ msg, type }), []);
+  const clearToast = useCallback(() => setToast(null), []);
 
-  const updateTripSettings = async (name: string, currency: Currency) => {
+  // [PREPARACIÓ REACT QUERY]: Embolcallem totes les mutacions amb useCallback
+  // Això garanteix que els Modals que reben aquestes funcions per props no es re-renderitzin innecessàriament.
+  const updateTripSettings = useCallback(async (name: string, currency: Currency) => {
     try {
       await actions.updateTripSettings(name, new Date().toISOString(), currency);
       showToast(currency ? LITERALS.ACTIONS.UPDATE_SETTINGS_SUCCESS : LITERALS.ACTIONS.UPDATE_NAME_SUCCESS);
       return true;
-    } catch (e: unknown) { // [SAFE-FIX]: Substituït 'any' per 'unknown'
-      showToast(getErrorMessage(e), 'error'); // [SAFE-FIX]: Ús segur de la funció getErrorMessage
+    } catch (e: unknown) { 
+      showToast(getErrorMessage(e), 'error'); 
       return false;
     }
-  };
+  }, [actions, showToast]);
 
-  const settleDebt = async (settlement: Settlement, method: string = 'manual') => {
+  const settleDebt = useCallback(async (settlement: Settlement, method: string = 'manual') => {
     try {
       const titles: Record<string, string> = {
         bizum: LITERALS.MODALS.PAYMENT_TITLES.BIZUM,
@@ -67,14 +73,14 @@ export function useTripMutations() {
         showToast(LITERALS.ACTIONS.SETTLE_ERROR, 'error');
         return false;
       }
-    } catch (e: unknown) { // [SAFE-FIX]: Canviat 'any' implícit per 'unknown'
+    } catch (e: unknown) { 
       console.error(e);
       showToast(LITERALS.ACTIONS.UNEXPECTED_ERROR, 'error');
       return false;
     }
-  };
+  }, [actions, showToast]);
 
-  const deleteExpense = async (id: string) => {
+  const deleteExpense = useCallback(async (id: string) => {
     try {
       const res = await actions.deleteExpense(id);
       if (res.success) {
@@ -84,13 +90,13 @@ export function useTripMutations() {
         showToast(res.error || LITERALS.ACTIONS.DELETE_EXPENSE_ERROR, 'error');
         return false;
       }
-    } catch (e: unknown) { // [SAFE-FIX]: Canviat 'any' implícit per 'unknown'
+    } catch (e: unknown) { 
       showToast(LITERALS.ACTIONS.CONNECTION_ERROR, 'error');
       return false;
     }
-  };
+  }, [actions, showToast]);
 
-  const leaveTrip = async () => {
+  const leaveTrip = useCallback(async () => {
     if (!currentUser || !tripData) return;
 
     const balances = calculateBalances(expenses, tripData.users);
@@ -110,30 +116,31 @@ export function useTripMutations() {
     } else {
       showToast(res.error || LITERALS.ACTIONS.LEAVE_TRIP_ERROR, 'error');
     }
-  };
+  }, [actions, currentUser, tripData, expenses, navigate, showToast]);
 
-  const joinTrip = async () => {
+  const joinTrip = useCallback(async () => {
      if(!currentUser) return;
      try {
          await actions.joinTrip(currentUser);
          showToast(LITERALS.ACTIONS.JOIN_TRIP_SUCCESS);
-     } catch(e: unknown) { // [SAFE-FIX]: Canviat 'any' implícit per 'unknown'
+     } catch(e: unknown) { 
          showToast(LITERALS.ACTIONS.JOIN_TRIP_ERROR, 'error');
      }
-  };
+  }, [actions, currentUser, showToast]);
 
-  const deleteTrip = async () => {
+  const deleteTrip = useCallback(async () => {
     try {
       await actions.deleteTrip();
       showToast(LITERALS.ACTIONS.DELETE_TRIP_SUCCESS);
       localStorage.removeItem('cc-last-trip-id');
       navigate('/');
-    } catch (e: unknown) { // [SAFE-FIX]: Canviat 'any' per 'unknown'
+    } catch (e: unknown) { 
       console.error(e);
-      showToast(getErrorMessage(e) || LITERALS.ACTIONS.DELETE_TRIP_ERROR, 'error'); // [SAFE-FIX]: Aplicant getErrorMessage
+      showToast(getErrorMessage(e) || LITERALS.ACTIONS.DELETE_TRIP_ERROR, 'error'); 
     }
-  };
+  }, [actions, navigate, showToast]);
 
+  // L'estructura de retorn roman EXACTAMENT IGUAL
   return {
     toast,
     showToast,

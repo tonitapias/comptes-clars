@@ -5,8 +5,8 @@ import { useTripMigration } from '../hooks/useTripMigration';
 import { useTripActions } from '../hooks/useTripActions';
 import { TripData, Expense } from '../types';
 
-// Definim la forma del Context
-interface TripContextType {
+// 1. Definim les formes dels nous Contexts separats
+interface TripState {
   tripId: string | undefined;
   tripData: TripData | null;
   expenses: Expense[];
@@ -14,10 +14,14 @@ interface TripContextType {
   error: string | null;
   currentUser: User | null;
   isMember: boolean;
-  actions: ReturnType<typeof useTripActions>;
 }
 
-const TripContext = createContext<TripContextType | undefined>(undefined);
+// Utilitzem ReturnType per mantenir el tipatge dinàmic de les accions sense trencar cap signatura
+type TripDispatch = ReturnType<typeof useTripActions>;
+
+// 2. Creem els dos Contexts
+const TripStateContext = createContext<TripState | undefined>(undefined);
+const TripDispatchContext = createContext<TripDispatch | undefined>(undefined);
 
 interface TripProviderProps {
   children: ReactNode;
@@ -26,35 +30,30 @@ interface TripProviderProps {
 }
 
 // --- SUB-COMPONENT: Aïllament d'Efectes ---
-// Separem la migració perquè un error aquí no bloquegi 
-// immediatament la renderització del Provider.
-// També compleix millor el principi de Responsabilitat Única.
 const TripMigrator = React.memo(({ tripId, tripData }: { tripId: string | undefined, tripData: TripData | null }) => {
   useTripMigration(tripId, tripData);
-  return null; // No renderitza res, només executa l'efecte
+  return null;
 });
 
 export function TripProvider({ children, tripId, currentUser }: TripProviderProps) {
-  // 1. Data Fetching
+  // Data Fetching
   const { tripData, expenses, loading, error } = useTripData(tripId);
 
-  // 2. Actions Hook
+  // Actions Hook
   const actions = useTripActions(tripId);
 
-  // 3. Derived State (Calculat fora del memo per claredat, però inclòs a deps)
+  // Derived State
   const isMember = !!(currentUser && tripData?.memberUids?.includes(currentUser.uid));
 
-  // 4. Memoització del Context Value (CRÍTIC PER RENDIMENT)
-  // Evitem que tots els fills es renderitzin si l'objecte pare canvia però les dades no.
-  const value = useMemo(() => ({
+  // 3. Memoització separada per a l'Estat (Lectura)
+  const stateValue = useMemo<TripState>(() => ({
     tripId,
     tripData,
     expenses,
     loading,
     error,
     currentUser,
-    isMember,
-    actions
+    isMember
   }), [
     tripId, 
     tripData, 
@@ -62,24 +61,58 @@ export function TripProvider({ children, tripId, currentUser }: TripProviderProp
     loading, 
     error, 
     currentUser, 
-    isMember, 
-    actions
+    isMember
   ]);
 
+  // 4. Memoització separada per a les Accions (Escriptura)
+  const dispatchValue = useMemo<TripDispatch>(() => actions, [actions]);
+
   return (
-    <TripContext.Provider value={value}>
-      {/* Execució aïllada de la migració */}
-      <TripMigrator tripId={tripId} tripData={tripData} />
-      {children}
-    </TripContext.Provider>
+    <TripDispatchContext.Provider value={dispatchValue}>
+      <TripStateContext.Provider value={stateValue}>
+        {/* Execució aïllada de la migració */}
+        <TripMigrator tripId={tripId} tripData={tripData} />
+        {children}
+      </TripStateContext.Provider>
+    </TripDispatchContext.Provider>
   );
 }
 
-// Hook consumidor personalitzat
+// ============================================================================
+// HOOKS CONSUMIDORS
+// ============================================================================
+
+// 🌟 HOOK LEGACY (PROXY PER COMPATIBILITAT - RISC ZERO)
+// Retorna EXACTAMENT la mateixa estructura que l'antic TripContext.
+// Cap component de l'app es trencarà, ja que fusionem l'estat i el dispatch sota el capó.
 export function useTrip() {
-  const context = useContext(TripContext);
-  if (context === undefined) {
+  const state = useContext(TripStateContext);
+  const dispatch = useContext(TripDispatchContext);
+
+  if (state === undefined || dispatch === undefined) {
     throw new Error('useTrip must be used within a TripProvider');
+  }
+
+  // Reconstruïm l'objecte original
+  return useMemo(() => ({
+    ...state,
+    actions: dispatch
+  }), [state, dispatch]);
+}
+
+// 🚀 NOUS HOOKS OPTIMITZATS (Per utilitzar-los en els propers refactors)
+export function useTripState() {
+  const context = useContext(TripStateContext);
+  if (context === undefined) {
+    throw new Error('useTripState must be used within a TripProvider');
+  }
+  return context;
+}
+
+export function useTripDispatch() {
+  const context = useContext(TripDispatchContext);
+  if (context === undefined) {
+    throw new Error('useTripDispatch must be used within a TripProvider');
   }
   return context;
 }
