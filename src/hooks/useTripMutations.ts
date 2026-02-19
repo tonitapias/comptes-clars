@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext';
 import { ToastType } from '../components/Toast';
 import { calculateBalances } from '../services/billingService';
-import { Currency, CategoryId, SplitType } from '../types';
-import { LITERALS } from '../constants/literals'; // IMPORT NOU
+import { Currency, CategoryId, SplitType, Settlement } from '../types'; // [REFAC]: Afegit Settlement
+import { LITERALS } from '../constants/literals';
 
 const SETTLEMENT_CATEGORY: CategoryId = 'transfer';
 const SETTLEMENT_SPLIT_TYPE: SplitType = 'equal';
@@ -30,7 +30,8 @@ export function useTripMutations() {
     }
   };
 
-  const settleDebt = async (settlement: any, method: string = 'manual') => {
+  // [REFAC]: 'settlement' ara és de tipus Settlement (Strict Mode), abans era 'any'
+  const settleDebt = async (settlement: Settlement, method: string = 'manual') => {
     try {
       // 1. Diccionari de títols (Centralitzat)
       const titles: Record<string, string> = {
@@ -45,9 +46,9 @@ export function useTripMutations() {
       // 2. Construïm la despesa de manera Type-Safe
       const expenseData = {
         title: customTitle,
-        amount: settlement.amount,
-        payer: settlement.from,
-        involved: [settlement.to],
+        amount: settlement.amount, // Ara TS sap que això és MoneyCents
+        payer: settlement.from,    // Ara TS sap que això és string (UserId)
+        involved: [settlement.to], // Ara TS sap que això és string (UserId)
         category: SETTLEMENT_CATEGORY,
         date: new Date().toISOString(),
         splitType: SETTLEMENT_SPLIT_TYPE

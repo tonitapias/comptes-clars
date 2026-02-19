@@ -7,28 +7,37 @@ import ActivityModal from '../modals/ActivityModal';
 import TripSettingsModal from './modals/TripSettingsModal';
 import TripSettleModal from './modals/TripSettleModal';
 
-import { TripData, TripUser, Currency } from '../../types';
+import { useTrip } from '../../context/TripContext'; // [REFAC]: Importem el Context
 import { useTripModals } from '../../hooks/useTripModals';
 import { useTripMutations } from '../../hooks/useTripMutations';
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
 import { ToastType } from '../Toast';
-import { LITERALS } from '../../constants/literals'; // IMPORT NOU
+import { LITERALS } from '../../constants/literals';
 
 interface TripModalsProps {
-  tripData: TripData;
-  users: TripUser[];
-  currency: Currency;
+  // [REFAC]: Hem eliminat tripData, users, currency i canChangeCurrency (redundants)
   modals: ReturnType<typeof useTripModals>;
   mutations: ReturnType<typeof useTripMutations>['mutations'];
   showToast: (msg: string, type?: ToastType) => void;
-  canChangeCurrency: boolean;
 }
 
 export default function TripModals({
-  tripData, users, currency, modals, mutations, showToast, canChangeCurrency
+  modals, mutations, showToast
 }: TripModalsProps) {
   
   const { trigger } = useHapticFeedback();
+  
+  // [REFAC]: Consumim les dades directament del "Cervell" (Context)
+  const { tripData, expenses } = useTrip();
+
+  // Guard de seguretat: Si no hi ha dades, no pintem res
+  if (!tripData) return null;
+
+  // [REFAC]: Lògica derivada (Calculada aquí en lloc de passar-la com a prop)
+  const users = tripData.users;
+  const currency = tripData.currency;
+  // Només permetem canviar divisa si no hi ha despeses creades per evitar problemes de canvi
+  const canChangeCurrency = expenses.length === 0;
 
   // --- ACTIONS ---
   

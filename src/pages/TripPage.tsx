@@ -20,7 +20,7 @@ import { useTripFilters } from '../hooks/useTripFilters';
 import { useTripMutations } from '../hooks/useTripMutations';
 import { generatePDF } from '../utils/exportPdf';
 import { CURRENCIES } from '../utils/constants';
-import { CategoryId, unbrand } from '../types'; // CORRECCIÓ: Importem unbrand
+import { CategoryId, unbrand } from '../types';
 
 interface TripPageProps {
   user: User | null;
@@ -63,7 +63,7 @@ function TripView() {
     filters.filterCategory
   );
 
-  // 3. CALCULAR BALANÇ PERSONAL (CORREGIT)
+  // 3. CALCULAR BALANÇ PERSONAL
   const userBalance = (() => {
     if (!currentUser || !tripData) return 0;
     
@@ -172,9 +172,6 @@ function TripView() {
     );
   }
 
-  const { currency = CURRENCIES[0], users = [] } = tripData;
-  const canChangeCurrency = expenses.length === 0;
-
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 transition-colors duration-500">
       
@@ -184,7 +181,7 @@ function TripView() {
       <TripHeader 
         displayedTotal={displayedTotal} 
         totalGroupSpending={totalGroupSpending}
-        userBalance={userBalance} // Connectat correctament
+        userBalance={userBalance} 
         isFiltered={!!filters.searchQuery || filters.filterCategory !== 'all'}
         onOpenSettings={handleOpenSettings}
         onOpenGroup={handleOpenMembers}
@@ -274,15 +271,11 @@ function TripView() {
         <Plus size={32} strokeWidth={2.5} className="group-hover:rotate-90 transition-transform duration-500" />
       </button>
       
-      {/* MODALS LAYER */}
+      {/* MODALS LAYER - [REFAC]: Net i sense Props Drilling */}
       <TripModals 
-        tripData={tripData}
-        users={users}
-        currency={currency}
         modals={modals}
         mutations={mutations}
         showToast={showToast}
-        canChangeCurrency={canChangeCurrency}
       />
     </div>
   );

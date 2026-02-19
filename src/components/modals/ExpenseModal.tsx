@@ -264,7 +264,7 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
                     </label>
                     <input 
                         type="date" 
-                        value={formState.date} 
+                        value={formState.date.split('T')[0]} 
                         onChange={(e) => setters.setDate(e.target.value)} 
                         className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 outline-none text-sm py-1 cursor-pointer" 
                     />

@@ -1,16 +1,14 @@
 import { useState } from 'react';
-import { CheckCircle2, ArrowRight, Smartphone, Banknote, Building2, CreditCard } from 'lucide-react';
+import { CheckCircle2, Smartphone, Banknote, Building2, CreditCard } from 'lucide-react';
 import Modal from '../../Modal';
 import Button from '../../Button';
-import Avatar from '../../Avatar';
+import HolographicTicket from '../HolographicTicket'; // [REFAC]: Importem el nou component
 import { Settlement, TripUser } from '../../../types';
-import { formatCurrency } from '../../../utils/formatters';
 import { useTrip } from '../../../context/TripContext';
 import { useHapticFeedback } from '../../../hooks/useHapticFeedback';
-import { LITERALS } from '../../../constants/literals'; // IMPORT NOU
+import { LITERALS } from '../../../constants/literals';
 
 // --- CONFIGURACIÓ ESTÀTICA ---
-// Ara els textos venen del fitxer centralitzat
 const PAYMENT_METHODS = [
   { id: 'manual', label: LITERALS.MODALS.PAYMENT_METHODS.MANUAL, icon: Banknote },
   { id: 'bizum', label: LITERALS.MODALS.PAYMENT_METHODS.BIZUM, icon: Smartphone },
@@ -48,47 +46,13 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
     <Modal isOpen={isOpen} onClose={onClose} title={LITERALS.MODALS.SETTLE.TITLE}>
       <div className="pt-2 pb-2 space-y-6">
         
-        {/* --- HOLOGRAPHIC TICKET --- */}
-        <div className="relative mx-1 group perspective">
-            <div className="absolute top-[60%] -left-3 w-6 h-6 bg-slate-50 dark:bg-[#000000] rounded-full z-20" />
-            <div className="absolute top-[60%] -right-3 w-6 h-6 bg-slate-50 dark:bg-[#000000] rounded-full z-20" />
-            <div className="absolute inset-0 bg-indigo-500/20 blur-2xl rounded-[2rem] opacity-50 group-hover:opacity-70 transition-opacity" />
-
-            <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2rem] p-0 shadow-2xl shadow-slate-200/50 dark:shadow-black/50 overflow-hidden transform transition-transform duration-500 hover:scale-[1.01]">
-                
-                <div className="h-28 bg-gradient-to-br from-indigo-600 to-purple-600 relative overflow-hidden flex flex-col items-center justify-center text-white">
-                    <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay" />
-                    <div className="absolute inset-0 bg-white/10 backdrop-blur-[1px]" />
-                    <span className="relative z-10 text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1">
-                        {LITERALS.MODALS.SETTLE.TOTAL_LABEL}
-                    </span>
-                    <h2 className="relative z-10 text-4xl font-black tracking-tighter drop-shadow-md">
-                        {formatCurrency(settlement.amount, tripData.currency)}
-                    </h2>
-                </div>
-
-                <div className="p-6 pt-6 relative">
-                    <div className="flex items-center justify-between relative z-10 mb-6">
-                        <div className="flex flex-col items-center gap-2 w-20">
-                            <Avatar name={fromUser.name} photoUrl={fromUser.photoUrl} size="md" className="grayscale" />
-                            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 truncate w-full text-center">{fromUser.name}</span>
-                        </div>
-                        <div className="flex-1 flex flex-col items-center justify-center text-slate-300 dark:text-slate-600 px-2">
-                             <div className="flex gap-1 mb-1">
-                                <span className="w-1 h-1 rounded-full bg-indigo-500 animate-ping" />
-                                <span className="w-1 h-1 rounded-full bg-indigo-400" />
-                                <span className="w-1 h-1 rounded-full bg-indigo-300" />
-                             </div>
-                             <ArrowRight size={20} className="text-indigo-500" />
-                        </div>
-                        <div className="flex flex-col items-center gap-2 w-20">
-                            <Avatar name={toUser.name} photoUrl={toUser.photoUrl} size="md" />
-                            <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 truncate w-full text-center">{toUser.name}</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+        {/* [REFAC]: Component extret per neteja visual */}
+        <HolographicTicket 
+          amount={settlement.amount}
+          currency={tripData.currency}
+          fromUser={fromUser}
+          toUser={toUser}
+        />
 
         {/* --- PAYMENT METHOD SELECTOR --- */}
         <div className="space-y-3">
