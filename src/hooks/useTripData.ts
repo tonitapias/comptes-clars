@@ -10,8 +10,28 @@ export function useTripData(tripId: string | undefined) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!tripId) return;
+    // [SAFE-FIX]: Neteja d'estat segura. Evitem que l'usuari vegi
+    // dades d'un altre viatge o que l'spinner quedi penjat si surt de la ruta.
+    if (!tripId) {
+      setTripData(null);
+      setExpenses([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
+    setError(null);
+
+    // [SAFE-FIX]: Semàfors. Sincronitzem l'aparició de dades perquè
+    // el renderitzat inicial sigui perfecte, sense parpellejos.
+    let isTripReady = false;
+    let isExpensesReady = false;
+
+    const resolveLoading = () => {
+      if (isTripReady && isExpensesReady) {
+        setLoading(false);
+      }
+    };
     
     // 1. Subscripció al Trip
     const tripRef = doc(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`);
@@ -23,17 +43,25 @@ export function useTripData(tripId: string | undefined) {
         setError("Grup no trobat");
         setTripData(null);
       }
-      setLoading(false);
-    }, (err) => {
+      isTripReady = true;
+      resolveLoading();
+    }, (err: any) => { 
       console.error(err);
-      setError(err.code === 'permission-denied' ? "⛔ Accés denegat." : "Error carregant el grup.");
-      setLoading(false);
+      setError(err?.code === 'permission-denied' ? "⛔ Accés denegat." : "Error carregant el grup.");
+      isTripReady = true;
+      resolveLoading();
     });
 
     // 2. Subscripció a les Despeses
     const expensesRef = collection(db, 'artifacts', appId, 'public', 'data', 'trips', `trip_${tripId}`, 'expenses');
     const unsubExpenses = onSnapshot(expensesRef, (snapshot) => {
       setExpenses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Expense[]);
+      isExpensesReady = true;
+      resolveLoading();
+    }, (err: any) => {
+      console.error(err);
+      isExpensesReady = true;
+      resolveLoading();
     });
 
     return () => {

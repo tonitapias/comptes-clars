@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Search, Receipt, ArrowRightLeft, Paperclip, Loader2, Calendar, X, SlidersHorizontal, ArrowDownRight } from 'lucide-react'; 
 import { CATEGORIES } from '../../utils/constants';
-import { Expense, CategoryId, TripUser } from '../../types';
+import { Expense, CategoryId, TripUser, Currency } from '../../types';
 import { formatCurrency, formatDateDisplay } from '../../utils/formatters';
 import { useTrip } from '../../context/TripContext';
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
@@ -28,6 +28,112 @@ const ExpenseSkeleton = () => (
   </div>
 );
 
+// [SAFE-FIX]: Definim els props de forma estricta (Sense 'any').
+interface MemoizedExpenseItemProps {
+  expense: Expense;
+  showDateHeader: boolean;
+  displayDate: string;
+  isToday: boolean;
+  payerName: string;
+  involvedName: string;
+  category: typeof CATEGORIES[0];
+  colorBase: string;
+  isTransfer: boolean;
+  currency: Currency;
+  onEdit: (e: Expense | null) => void;
+  trigger: (type: string) => void;
+}
+
+// [SAFE-FIX]: Extraiem el component i l'embolcallem amb React.memo.
+// Això impedeix el "re-render" dels tiquets vells quan només s'està carregant més llista pel final.
+const MemoizedExpenseItem = React.memo(({
+  expense,
+  showDateHeader,
+  displayDate,
+  isToday,
+  payerName,
+  involvedName,
+  category,
+  colorBase,
+  isTransfer,
+  currency,
+  onEdit,
+  trigger
+}: MemoizedExpenseItemProps) => {
+  return (
+    <React.Fragment>
+      {showDateHeader && (
+          <li className="sticky top-[130px] z-20 pl-14 py-3">
+              <div className={`
+                  inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] uppercase tracking-widest font-bold shadow-sm backdrop-blur-md border transition-all
+                  ${isToday 
+                      ? 'bg-indigo-50/90 text-indigo-600 border-indigo-100 dark:bg-indigo-900/50 dark:text-indigo-300 dark:border-indigo-800 shadow-indigo-500/10' 
+                      : 'bg-white/90 text-slate-500 border-slate-200 dark:bg-slate-900/90 dark:text-slate-400 dark:border-slate-800'}
+              `}>
+                  <Calendar size={11} strokeWidth={2.5} />
+                  {displayDate}
+              </div>
+          </li>
+      )}
+
+      <li className="group relative pl-3 pr-1">
+          <div className={`
+              absolute left-[23px] top-7 w-2.5 h-2.5 rounded-full border-[3px] bg-white dark:bg-slate-950 z-10 transition-all duration-300 group-hover:scale-125
+              ${isTransfer ? 'border-emerald-400' : `border-slate-300 dark:border-slate-600 group-hover:border-${colorBase}-500`}
+          `} />
+
+          <button 
+              type="button"
+              onClick={() => { trigger('light'); onEdit(expense); }}
+              className="w-full text-left pl-11 relative"
+          >
+              <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-lg hover:shadow-slate-200/40 dark:hover:shadow-none transition-all duration-300 active:scale-[0.99] group-hover:border-slate-200 dark:group-hover:border-slate-700 relative overflow-hidden">
+                  
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-slate-50/50 to-transparent dark:via-white/5 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 pointer-events-none" />
+
+                  <div className="flex items-start justify-between gap-3 relative z-10">
+                      <div className="flex items-start gap-3 overflow-hidden">
+                          <div className={`
+                              w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm transition-colors duration-300
+                              ${isTransfer 
+                                  ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' 
+                                  : `bg-${colorBase}-50 text-${colorBase}-600 dark:bg-${colorBase}-900/20 dark:text-${colorBase}-400 group-hover:bg-${colorBase}-100 dark:group-hover:bg-${colorBase}-900/30`
+                              }
+                          `}>
+                              {isTransfer ? <ArrowRightLeft size={20} strokeWidth={2} /> : <category.icon size={20} strokeWidth={2} />}
+                          </div>
+                          
+                          <div className="min-w-0 py-0.5">
+                              <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate leading-tight mb-1 group-hover:text-indigo-500 transition-colors">
+                                  {expense.title}
+                              </h4>
+                              <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 font-medium">
+                                  <span className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide font-bold">{payerName}</span>
+                                  {isTransfer && <ArrowDownRight size={10} />}
+                                  <span className="truncate max-w-[100px] opacity-80">
+                                      {isTransfer 
+                                          ? involvedName
+                                          : (expense.splitType !== 'equal' ? '• Manual' : '')
+                                      }
+                                  </span>
+                                  {expense.receiptUrl && <Paperclip size={10} className="text-indigo-400" />}
+                              </div>
+                          </div>
+                      </div>
+
+                      <div className="flex flex-col items-end py-1">
+                          <span className={`font-black text-lg tracking-tighter tabular-nums ${isTransfer ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'}`}>
+                              {formatCurrency(expense.amount, currency)}
+                          </span>
+                      </div>
+                  </div>
+              </div>
+          </button>
+      </li>
+    </React.Fragment>
+  );
+});
+
 export default function ExpensesList({ 
   expenses, 
   searchQuery, 
@@ -50,6 +156,13 @@ export default function ExpensesList({
     }, {} as Record<string, TripUser>);
   }, [tripData?.users]);
 
+  // [SAFE-FIX]: Diccionari O(1) per a les categories, evitem fer iteracions per cada tiquet.
+  const categoryMap = useMemo(() => {
+    const map = new Map<CategoryId | string, typeof CATEGORIES[0]>();
+    CATEGORIES.forEach(c => map.set(c.id, c));
+    return map;
+  }, []);
+
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
   }, [searchQuery, filterCategory, expenses]);
@@ -57,13 +170,17 @@ export default function ExpensesList({
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) setVisibleCount((prev) => prev + PAGE_SIZE);
+        if (entries[0].isIntersecting) {
+            setVisibleCount((prev) => prev + PAGE_SIZE); // Callback pattern en comptes de dependència
+        }
       },
       { threshold: 0.1, rootMargin: '400px' }
     );
+    
     if (observerTarget.current) observer.observe(observerTarget.current);
+    
     return () => observer.disconnect();
-  }, [expenses.length, isSearching, visibleCount]); 
+  }, [expenses.length, isSearching]); // [SAFE-FIX]: 'visibleCount' esborrat per evitar reiniciar l'observer constantment
 
   const getUserName = (id: string) => userMap[id]?.name || 'Desconegut';
   const visibleExpenses = expenses.slice(0, visibleCount);
@@ -141,7 +258,6 @@ export default function ExpensesList({
 
       {/* --- TIMELINE LIST --- */}
       <main className="flex-1 pt-4 relative">
-        {/* Línia de temps subtil */}
         <div className="absolute left-[27px] top-0 bottom-0 w-px bg-gradient-to-b from-slate-200 via-slate-200 to-transparent dark:from-slate-800 dark:via-slate-800 z-0" />
 
         {isSearching && expenses.length === 0 ? (
@@ -160,7 +276,7 @@ export default function ExpensesList({
         ) : (
             <ul className="space-y-4 relative z-10">
               {visibleExpenses.map((expense, index) => {
-                  const category = CATEGORIES.find(c => c.id === expense.category) || CATEGORIES[0];
+                  const category = categoryMap.get(expense.category) || CATEGORIES[0];
                   const isTransfer = expense.category === 'transfer';
                   const payerName = getUserName(expense.payer);
                   const colorBase = category.color.split('-')[1];
@@ -168,80 +284,25 @@ export default function ExpensesList({
                   const showDateHeader = index === 0 || expense.date !== visibleExpenses[index - 1].date;
                   const displayDate = formatDateDisplay(expense.date); 
                   const isToday = displayDate.toLowerCase().includes('avui') || displayDate.toLowerCase().includes('today');
+                  
+                  const involvedName = isTransfer && expense.involved[0] ? getUserName(expense.involved[0]) : '';
 
                   return (
-                    <React.Fragment key={expense.id}>
-                        {showDateHeader && (
-                            <li className="sticky top-[130px] z-20 pl-14 py-3">
-                                <div className={`
-                                    inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] uppercase tracking-widest font-bold shadow-sm backdrop-blur-md border transition-all
-                                    ${isToday 
-                                        ? 'bg-indigo-50/90 text-indigo-600 border-indigo-100 dark:bg-indigo-900/50 dark:text-indigo-300 dark:border-indigo-800 shadow-indigo-500/10' 
-                                        : 'bg-white/90 text-slate-500 border-slate-200 dark:bg-slate-900/90 dark:text-slate-400 dark:border-slate-800'}
-                                `}>
-                                    <Calendar size={11} strokeWidth={2.5} />
-                                    {displayDate}
-                                </div>
-                            </li>
-                        )}
-
-                        <li className="group relative pl-3 pr-1">
-                            {/* Punt del timeline */}
-                            <div className={`
-                                absolute left-[23px] top-7 w-2.5 h-2.5 rounded-full border-[3px] bg-white dark:bg-slate-950 z-10 transition-all duration-300 group-hover:scale-125
-                                ${isTransfer ? 'border-emerald-400' : `border-slate-300 dark:border-slate-600 group-hover:border-${colorBase}-500`}
-                            `} />
-
-                            <button 
-                                type="button"
-                                onClick={() => { trigger('light'); onEdit(expense); }}
-                                className="w-full text-left pl-11 relative"
-                            >
-                                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-lg hover:shadow-slate-200/40 dark:hover:shadow-none transition-all duration-300 active:scale-[0.99] group-hover:border-slate-200 dark:group-hover:border-slate-700 relative overflow-hidden">
-                                    
-                                    {/* Hover gradient effect */}
-                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-slate-50/50 to-transparent dark:via-white/5 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 pointer-events-none" />
-
-                                    <div className="flex items-start justify-between gap-3 relative z-10">
-                                        <div className="flex items-start gap-3 overflow-hidden">
-                                            <div className={`
-                                                w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm transition-colors duration-300
-                                                ${isTransfer 
-                                                    ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' 
-                                                    : `bg-${colorBase}-50 text-${colorBase}-600 dark:bg-${colorBase}-900/20 dark:text-${colorBase}-400 group-hover:bg-${colorBase}-100 dark:group-hover:bg-${colorBase}-900/30`
-                                                }
-                                            `}>
-                                                {isTransfer ? <ArrowRightLeft size={20} strokeWidth={2} /> : <category.icon size={20} strokeWidth={2} />}
-                                            </div>
-                                            
-                                            <div className="min-w-0 py-0.5">
-                                                <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm truncate leading-tight mb-1 group-hover:text-primary transition-colors">
-                                                    {expense.title}
-                                                </h4>
-                                                <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500 font-medium">
-                                                    <span className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide font-bold">{payerName}</span>
-                                                    {isTransfer && <ArrowDownRight size={10} />}
-                                                    <span className="truncate max-w-[100px] opacity-80">
-                                                        {isTransfer 
-                                                            ? (expense.involved[0] ? getUserName(expense.involved[0]) : '')
-                                                            : (expense.splitType !== 'equal' ? '• Manual' : '')
-                                                        }
-                                                    </span>
-                                                    {expense.receiptUrl && <Paperclip size={10} className="text-indigo-400" />}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex flex-col items-end py-1">
-                                            <span className={`font-black text-lg tracking-tighter tabular-nums ${isTransfer ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'}`}>
-                                                {formatCurrency(expense.amount, currency)}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </button>
-                        </li>
-                    </React.Fragment>
+                      <MemoizedExpenseItem 
+                          key={expense.id}
+                          expense={expense}
+                          showDateHeader={showDateHeader}
+                          displayDate={displayDate}
+                          isToday={isToday}
+                          payerName={payerName}
+                          involvedName={involvedName}
+                          category={category}
+                          colorBase={colorBase}
+                          isTransfer={isTransfer}
+                          currency={currency}
+                          onEdit={onEdit}
+                          trigger={trigger as (type: string) => void}
+                      />
                   );
               })}
             </ul>

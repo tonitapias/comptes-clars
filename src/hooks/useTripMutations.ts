@@ -3,11 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import { useTrip } from '../context/TripContext';
 import { ToastType } from '../components/Toast';
 import { calculateBalances } from '../services/billingService';
-import { Currency, CategoryId, SplitType, Settlement } from '../types'; // [REFAC]: Afegit Settlement
+import { Currency, CategoryId, SplitType, Settlement } from '../types'; 
 import { LITERALS } from '../constants/literals';
 
 const SETTLEMENT_CATEGORY: CategoryId = 'transfer';
 const SETTLEMENT_SPLIT_TYPE: SplitType = 'equal';
+
+// [SAFE-FIX]: Type Guard robuste per extreure missatges d'error sense fer servir 'any'
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  if (error && typeof error === 'object' && 'message' in error) return String(error.message);
+  return LITERALS.ACTIONS.UNEXPECTED_ERROR || 'S\'ha produït un error inesperat';
+};
 
 export function useTripMutations() {
   const navigate = useNavigate();
@@ -17,23 +25,19 @@ export function useTripMutations() {
   const showToast = (msg: string, type: ToastType = 'success') => setToast({ msg, type });
   const clearToast = () => setToast(null);
 
-  // --- Wrappers d'Accions ---
-
   const updateTripSettings = async (name: string, currency: Currency) => {
     try {
       await actions.updateTripSettings(name, new Date().toISOString(), currency);
       showToast(currency ? LITERALS.ACTIONS.UPDATE_SETTINGS_SUCCESS : LITERALS.ACTIONS.UPDATE_NAME_SUCCESS);
       return true;
-    } catch (e: any) {
-      showToast(e.message || LITERALS.ACTIONS.UPDATE_ERROR, 'error');
+    } catch (e: unknown) { // [SAFE-FIX]: Substituït 'any' per 'unknown'
+      showToast(getErrorMessage(e), 'error'); // [SAFE-FIX]: Ús segur de la funció getErrorMessage
       return false;
     }
   };
 
-  // [REFAC]: 'settlement' ara és de tipus Settlement (Strict Mode), abans era 'any'
   const settleDebt = async (settlement: Settlement, method: string = 'manual') => {
     try {
-      // 1. Diccionari de títols (Centralitzat)
       const titles: Record<string, string> = {
         bizum: LITERALS.MODALS.PAYMENT_TITLES.BIZUM,
         manual: LITERALS.MODALS.PAYMENT_TITLES.MANUAL,
@@ -43,12 +47,11 @@ export function useTripMutations() {
 
       const customTitle = titles[method] || LITERALS.MODALS.PAYMENT_TITLES.DEFAULT;
 
-      // 2. Construïm la despesa de manera Type-Safe
       const expenseData = {
         title: customTitle,
-        amount: settlement.amount, // Ara TS sap que això és MoneyCents
-        payer: settlement.from,    // Ara TS sap que això és string (UserId)
-        involved: [settlement.to], // Ara TS sap que això és string (UserId)
+        amount: settlement.amount, 
+        payer: settlement.from,    
+        involved: [settlement.to], 
         category: SETTLEMENT_CATEGORY,
         date: new Date().toISOString(),
         splitType: SETTLEMENT_SPLIT_TYPE
@@ -57,7 +60,6 @@ export function useTripMutations() {
       const res = await actions.addExpense(expenseData);
 
       if (res.success) {
-        // Netegem el prefix "Pagament via" per al missatge curt del toast
         const methodText = titles[method]?.replace('Pagament via ', '') || 'Efectiu';
         showToast(`${LITERALS.ACTIONS.SETTLE_SUCCESS}${methodText}`, 'success');
         return true;
@@ -65,7 +67,7 @@ export function useTripMutations() {
         showToast(LITERALS.ACTIONS.SETTLE_ERROR, 'error');
         return false;
       }
-    } catch (e) {
+    } catch (e: unknown) { // [SAFE-FIX]: Canviat 'any' implícit per 'unknown'
       console.error(e);
       showToast(LITERALS.ACTIONS.UNEXPECTED_ERROR, 'error');
       return false;
@@ -82,7 +84,7 @@ export function useTripMutations() {
         showToast(res.error || LITERALS.ACTIONS.DELETE_EXPENSE_ERROR, 'error');
         return false;
       }
-    } catch (e) {
+    } catch (e: unknown) { // [SAFE-FIX]: Canviat 'any' implícit per 'unknown'
       showToast(LITERALS.ACTIONS.CONNECTION_ERROR, 'error');
       return false;
     }
@@ -115,7 +117,7 @@ export function useTripMutations() {
      try {
          await actions.joinTrip(currentUser);
          showToast(LITERALS.ACTIONS.JOIN_TRIP_SUCCESS);
-     } catch(e) {
+     } catch(e: unknown) { // [SAFE-FIX]: Canviat 'any' implícit per 'unknown'
          showToast(LITERALS.ACTIONS.JOIN_TRIP_ERROR, 'error');
      }
   };
@@ -126,9 +128,9 @@ export function useTripMutations() {
       showToast(LITERALS.ACTIONS.DELETE_TRIP_SUCCESS);
       localStorage.removeItem('cc-last-trip-id');
       navigate('/');
-    } catch (e: any) {
+    } catch (e: unknown) { // [SAFE-FIX]: Canviat 'any' per 'unknown'
       console.error(e);
-      showToast(e.message || LITERALS.ACTIONS.DELETE_TRIP_ERROR, 'error');
+      showToast(getErrorMessage(e) || LITERALS.ACTIONS.DELETE_TRIP_ERROR, 'error'); // [SAFE-FIX]: Aplicant getErrorMessage
     }
   };
 

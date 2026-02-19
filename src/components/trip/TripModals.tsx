@@ -1,13 +1,16 @@
+import React, { Suspense } from 'react'; // [SAFE-FIX]: Afegit import de React i Suspense
 import { Trash2, AlertTriangle } from 'lucide-react';
 import Modal from '../Modal';
 import Button from '../Button';
-import ExpenseModal from '../modals/ExpenseModal';
-import GroupModal from '../modals/GroupModal';
-import ActivityModal from '../modals/ActivityModal';
-import TripSettingsModal from './modals/TripSettingsModal';
-import TripSettleModal from './modals/TripSettleModal';
 
-import { useTrip } from '../../context/TripContext'; // [REFAC]: Importem el Context
+// [SAFE-FIX]: Imports convertits a Lazy Loading per millorar el Temps Inicial (Code Splitting)
+const ExpenseModal = React.lazy(() => import('../modals/ExpenseModal'));
+const GroupModal = React.lazy(() => import('../modals/GroupModal'));
+const ActivityModal = React.lazy(() => import('../modals/ActivityModal'));
+const TripSettingsModal = React.lazy(() => import('./modals/TripSettingsModal'));
+const TripSettleModal = React.lazy(() => import('./modals/TripSettleModal'));
+
+import { useTrip } from '../../context/TripContext'; 
 import { useTripModals } from '../../hooks/useTripModals';
 import { useTripMutations } from '../../hooks/useTripMutations';
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
@@ -15,7 +18,6 @@ import { ToastType } from '../Toast';
 import { LITERALS } from '../../constants/literals';
 
 interface TripModalsProps {
-  // [REFAC]: Hem eliminat tripData, users, currency i canChangeCurrency (redundants)
   modals: ReturnType<typeof useTripModals>;
   mutations: ReturnType<typeof useTripMutations>['mutations'];
   showToast: (msg: string, type?: ToastType) => void;
@@ -26,20 +28,13 @@ export default function TripModals({
 }: TripModalsProps) {
   
   const { trigger } = useHapticFeedback();
-  
-  // [REFAC]: Consumim les dades directament del "Cervell" (Context)
   const { tripData, expenses } = useTrip();
 
-  // Guard de seguretat: Si no hi ha dades, no pintem res
   if (!tripData) return null;
 
-  // [REFAC]: Lògica derivada (Calculada aquí en lloc de passar-la com a prop)
   const users = tripData.users;
   const currency = tripData.currency;
-  // Només permetem canviar divisa si no hi ha despeses creades per evitar problemes de canvi
   const canChangeCurrency = expenses.length === 0;
-
-  // --- ACTIONS ---
   
   const handleDeleteExpense = async () => {
     trigger('medium');
@@ -63,60 +58,58 @@ export default function TripModals({
 
   return (
     <>
-      {/* 1. EDIT/CREATE EXPENSE */}
-      <ExpenseModal 
-        key={modals.editingExpense?.id || 'new'} 
-        isOpen={modals.isExpenseModalOpen} 
-        onClose={modals.closeExpenseModal} 
-        initialData={modals.editingExpense} 
-        users={users} 
-        currency={currency} 
-        tripId={tripData.id} 
-        onDelete={(id) => {
-            trigger('medium');
-            modals.openConfirmAction({ 
-                type: 'delete_expense', 
-                id, 
-                title: LITERALS.MODALS.CONFIRM.DELETE_EXPENSE_TITLE, 
-                message: LITERALS.MODALS.CONFIRM.DELETE_EXPENSE_MSG 
-            });
-        }} 
-        showToast={showToast} 
-      />
-      
-      {/* 2. GROUP MANAGEMENT */}
-      <GroupModal 
-        isOpen={modals.isGroupModalOpen} 
-        onClose={() => modals.setGroupModalOpen(false)} 
-        showToast={showToast} 
-        initialTab={modals.groupModalTab}
-      />
-      
-      {/* 3. ACTIVITY LOG */}
-      <ActivityModal 
-        isOpen={modals.isActivityOpen} 
-        onClose={() => modals.setActivityOpen(false)} 
-      />
+      {/* [SAFE-FIX]: Embolcall de Suspense per capturar els components "lazy". Fallback null assegura zero impacte visual fins que s'obren */}
+      <Suspense fallback={null}>
+          <ExpenseModal 
+            key={modals.editingExpense?.id || 'new'} 
+            isOpen={modals.isExpenseModalOpen} 
+            onClose={modals.closeExpenseModal} 
+            initialData={modals.editingExpense} 
+            users={users} 
+            currency={currency} 
+            tripId={tripData.id} 
+            onDelete={(id) => {
+                trigger('medium');
+                modals.openConfirmAction({ 
+                    type: 'delete_expense', 
+                    id, 
+                    title: LITERALS.MODALS.CONFIRM.DELETE_EXPENSE_TITLE, 
+                    message: LITERALS.MODALS.CONFIRM.DELETE_EXPENSE_MSG 
+                });
+            }} 
+            showToast={showToast} 
+          />
+          
+          <GroupModal 
+            isOpen={modals.isGroupModalOpen} 
+            onClose={() => modals.setGroupModalOpen(false)} 
+            showToast={showToast} 
+            initialTab={modals.groupModalTab}
+          />
+          
+          <ActivityModal 
+            isOpen={modals.isActivityOpen} 
+            onClose={() => modals.setActivityOpen(false)} 
+          />
 
-      {/* 4. SETTINGS */}
-      <TripSettingsModal
-        isOpen={modals.isSettingsOpen}
-        onClose={() => modals.setSettingsOpen(false)}
-        canChangeCurrency={canChangeCurrency}
-        onUpdate={mutations.updateTripSettings}
-        onLeave={mutations.leaveTrip}
-        onDelete={mutations.deleteTrip} 
-      />
-      
-      {/* 5. SETTLE DEBT */}
-      <TripSettleModal 
-        isOpen={isSettleOpen}
-        onClose={() => modals.setSettleModalData(null)}
-        settlement={modals.settleModalData} 
-        onConfirm={handleSettleConfirm} 
-      />
+          <TripSettingsModal
+            isOpen={modals.isSettingsOpen}
+            onClose={() => modals.setSettingsOpen(false)}
+            canChangeCurrency={canChangeCurrency}
+            onUpdate={mutations.updateTripSettings}
+            onLeave={mutations.leaveTrip}
+            onDelete={mutations.deleteTrip} 
+          />
+          
+          <TripSettleModal 
+            isOpen={isSettleOpen}
+            onClose={() => modals.setSettleModalData(null)}
+            settlement={modals.settleModalData} 
+            onConfirm={handleSettleConfirm} 
+          />
+      </Suspense>
 
-      {/* 6. GENERIC CONFIRMATION */}
+      {/* [SAFE-FIX]: El Modal de Confirmació manté naturalesa síncrona per urgència visual i lleugeresa */}
       <Modal 
         isOpen={!!modals.confirmAction} 
         onClose={modals.closeConfirmAction} 

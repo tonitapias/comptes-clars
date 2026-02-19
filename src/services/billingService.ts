@@ -1,6 +1,6 @@
 // src/services/billingService.ts
 
-import { Expense, TripUser, Balance, Settlement, CategoryStat, MoneyCents, toCents, unbrand } from '../types'; // CORRECCIÓ 1: Importem unbrand
+import { Expense, TripUser, Balance, Settlement, CategoryStat, MoneyCents, toCents, unbrand } from '../types';
 import { CATEGORIES, SPLIT_TYPES } from '../utils/constants';
 
 export const SPECIAL_CATEGORIES = {
@@ -8,14 +8,11 @@ export const SPECIAL_CATEGORIES = {
   OTHER: 'other',
 } as const;
 
-// Llindar mínim per a transaccions
 const MIN_SETTLEMENT_CENTS = toCents(1);
 
 interface SplitResult {
   allocations: Record<string, MoneyCents>; 
 }
-
-// --- HELPERS BÀSICS ---
 
 export const resolveUserId = (identifier: string, users: TripUser[]): string | undefined => {
   if (!identifier) return undefined;
@@ -42,8 +39,6 @@ const getStableDistributionOffset = (seed: string | number | undefined, modulus:
   return Math.abs(hash) % modulus;
 };
 
-// --- ESTRATÈGIES DE REPARTIMENT ---
-
 const calculateEqualSplit = (
   exp: Expense, 
   validUserIds: Set<string>, 
@@ -63,7 +58,7 @@ const calculateEqualSplit = (
   const count = receiversIds.length;
   if (count === 0) return { allocations };
 
-  const baseAmount = Math.floor(unbrand(exp.amount) / count); // CORRECCIÓ 2: unbrand per operacions segures
+  const baseAmount = Math.floor(unbrand(exp.amount) / count); 
   const remainder = unbrand(exp.amount) % count; 
   const offset = getStableDistributionOffset(exp.id, count);
 
@@ -86,7 +81,7 @@ const calculateExactSplit = (
 ): SplitResult => {
   const allocations: Record<string, MoneyCents> = {};
   const details = exp.splitDetails || {};
-  let totalAllocated = 0; // Treballem amb number primitiu per acumular
+  let totalAllocated = 0; 
 
   Object.entries(details).forEach(([identifier, amount]) => {
     const uid = getCanonicalId(identifier);
@@ -100,7 +95,9 @@ const calculateExactSplit = (
   });
 
   const remainder = unbrand(exp.amount) - totalAllocated;
-  if (remainder > 0 && validUserIds.has(payerId)) {
+  // [SAFE-FIX]: Canviat 'remainder > 0' per 'remainder !== 0'. Si els imports exactes sumen 
+  // més o menys que el total, el desajust va al pagador per mantenir la balança global a zero.
+  if (remainder !== 0 && validUserIds.has(payerId)) {
     const currentPayerDebt = unbrand(allocations[payerId] || toCents(0));
     allocations[payerId] = toCents(currentPayerDebt - remainder);
   }
@@ -117,8 +114,7 @@ const calculateSharesSplit = (
   const details = exp.splitDetails || {};
   
   const entries = Object.entries(details)
-    // CORRECCIÓ 3: Tipat explícit a filter
-    .map(([key, shares]) => ({ uid: getCanonicalId(key), shares: Number(shares) })) // Assegurem que shares és number
+    .map(([key, shares]) => ({ uid: getCanonicalId(key), shares: Number(shares) })) 
     .filter((entry): entry is { uid: string, shares: number } => !!entry.uid && validUserIds.has(entry.uid))
     .sort((a, b) => a.uid.localeCompare(b.uid));
 
@@ -128,9 +124,8 @@ const calculateSharesSplit = (
 
   let totalBaseAllocated = 0;
   const distributionList = entries.map(entry => {
-    // CORRECCIÓ 4: unbrand per assegurar conversió a BigInt
     const safeAmount = BigInt(unbrand(exp.amount));
-    const safeShares = BigInt(Math.round(entry.shares)); // Shares solen ser enters, però per si de cas
+    const safeShares = BigInt(Math.round(entry.shares)); 
     const safeTotal = BigInt(Math.round(totalShares));
     
     const rawBigInt = (safeAmount * safeShares) / safeTotal;
@@ -156,8 +151,6 @@ const calculateSharesSplit = (
 
   return { allocations };
 };
-
-// --- FUNCIÓ PRINCIPAL ---
 
 export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balance[] => {
   const balanceMap: Record<string, MoneyCents> = {};
@@ -191,7 +184,6 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
         break;
     }
 
-    // CORRECCIÓ 5: Gestió segura de tipus MoneyCents en acumuladors
     if (balanceMap[payerId] !== undefined) {
       const current = unbrand(balanceMap[payerId]);
       balanceMap[payerId] = toCents(current + unbrand(exp.amount));
@@ -211,8 +203,6 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
     .sort((a, b) => b.amount - a.amount);
 };
 
-// --- ALTRES FUNCIONS ---
-
 export const calculateSettlements = (balances: Balance[]): Settlement[] => {
   const totalBalance = balances.reduce((acc, b) => acc + unbrand(b.amount), 0);
   
@@ -221,10 +211,8 @@ export const calculateSettlements = (balances: Balance[]): Settlement[] => {
   }
 
   const debts: Settlement[] = [];
-  // CORRECCIÓ 6: Clonació profunda per evitar mutacions indesitjades
   const workingBalances = balances.map(b => ({ ...b }));
 
-  // Filtrar i ordenar
   const debtors = workingBalances
     .filter(b => b.amount < 0) 
     .sort((a, b) => a.amount - b.amount);
@@ -240,7 +228,6 @@ export const calculateSettlements = (balances: Balance[]): Settlement[] => {
     const debtor = debtors[i];
     const creditor = creditors[j];
 
-    // Guarda de seguretat
     if (!debtor || !creditor) break;
 
     const amount = toCents(Math.min(Math.abs(unbrand(debtor.amount)), unbrand(creditor.amount)));

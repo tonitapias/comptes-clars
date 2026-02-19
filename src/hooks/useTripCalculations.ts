@@ -11,7 +11,7 @@ interface CalculationsResult {
   settlements: ReturnType<typeof billingService.calculateSettlements>;
   totalGroupSpending: MoneyCents;
   displayedTotal: MoneyCents;
-  isSearching: boolean; // Nou flag per indicar estat de càrrega a la UI
+  isSearching: boolean; 
 }
 
 export function useTripCalculations(
@@ -21,13 +21,10 @@ export function useTripCalculations(
   filterCategory: string
 ): CalculationsResult {
   
-  // 1. Debounce de la cerca
-  // Evitem que el filtratge s'executi a cada tecla premuda.
   const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
   const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
-    // Si la query està buida, actualitzem immediatament per esborrar ràpid
     if (!searchQuery) {
       setDebouncedQuery('');
       setIsSearching(false);
@@ -38,12 +35,11 @@ export function useTripCalculations(
     const handler = setTimeout(() => {
       setDebouncedQuery(searchQuery);
       setIsSearching(false);
-    }, 300); // 300ms de retard (estàndard UX)
+    }, 300); 
 
     return () => clearTimeout(handler);
   }, [searchQuery]);
 
-  // 2. Creem un índex de noms d'usuaris (ID -> Nom)
   const userSearchIndex = useMemo(() => {
     const map: Record<string, string> = {};
     users.forEach(u => {
@@ -53,11 +49,28 @@ export function useTripCalculations(
     return map;
   }, [users]);
 
-  // 3. Optimització: Pre-càlcul de strings de cerca (Indexing)
-  // En lloc de buscar noms dins del bucle de filtre, preparem les dades abans.
-  // Això converteix el filtre de complexitat O(N*M) a O(N).
-  const searchableExpenses = useMemo(() => {
-    // Primer ordenem (lògica original preservada)
+  // [SAFE-FIX]: Substituït la mutació de dades (_searchString a l'Expense) per un diccionari separat.
+  // Protegeix les dades i el tipatge estricte, però ofereix el mateix rendiment de lectura O(1).
+  const searchIndexMap = useMemo(() => {
+    const map = new Map<string | number, string>();
+    expenses.forEach(e => {
+      const payerName = userSearchIndex[e.payer] || '';
+      const involvedNames = e.involved
+        .map(uid => userSearchIndex[uid] || '')
+        .join(' ');
+      
+      const searchString = `${e.title} ${payerName} ${involvedNames}`.toLowerCase();
+      map.set(e.id, searchString);
+    });
+    return map;
+  }, [expenses, userSearchIndex]);
+
+  // [SAFE-FIX]: Ara ordenem i filtrem l'array original directament.
+  const filteredExpenses = useMemo(() => {
+    const q = debouncedQuery.toLowerCase().trim();
+    const isCategoryFilterActive = filterCategory !== 'all';
+
+    // 1. Ordenem de manera immutadora
     const sorted = [...expenses].sort((a, b) => {
       const dateA = new Date(a.date).getTime();
       const dateB = new Date(b.date).getTime();
@@ -66,47 +79,26 @@ export function useTripCalculations(
       return String(b.id).localeCompare(String(a.id));
     });
 
-    // Després adjuntem l'string de cerca pre-calculat
-    return sorted.map(e => {
-      const payerName = userSearchIndex[e.payer] || '';
-      const involvedNames = e.involved
-        .map(uid => userSearchIndex[uid] || '')
-        .join(' ');
-      
-      // Creem un "super string" amb tot el contingut cercable normalitzat
-      const searchString = `${e.title} ${payerName} ${involvedNames}`.toLowerCase();
-      
-      return { ...e, _searchString: searchString };
-    });
-  }, [expenses, userSearchIndex]);
-
-  // 4. Filtratge Eficient
-  const filteredExpenses = useMemo(() => {
-    const q = debouncedQuery.toLowerCase().trim();
-    const isCategoryFilterActive = filterCategory !== 'all';
-
+    // 2. Si no hi ha filtres, retornem ràpid
     if (!q && !isCategoryFilterActive) {
-      return searchableExpenses; // Retornem directament (sense camps extra visibles)
+      return sorted; 
     }
     
-    return searchableExpenses.filter(e => {
-        // Filtre Categoria (Ràpid)
+    // 3. Apliquem filtres fent servir el diccionari per a la cerca de text
+    return sorted.filter(e => {
         if (isCategoryFilterActive && e.category !== filterCategory) {
             return false;
         }
 
-        // Filtre Text (Ara ultra-ràpid gràcies a l'índex)
-        if (q && !e._searchString.includes(q)) {
-            return false;
+        if (q) {
+            const searchStr = searchIndexMap.get(e.id);
+            if (!searchStr || !searchStr.includes(q)) return false;
         }
 
         return true;
       });
-  }, [searchableExpenses, debouncedQuery, filterCategory]);
+  }, [expenses, debouncedQuery, filterCategory, searchIndexMap]);
 
-  // 5. Càlculs Pesats (Balanços i Liquidacions)
-  // Aquests depenen de les despeses TOTALS, no de les filtrades.
-  // Es mantenen optimitzats perquè només canvien si expenses/users canvien.
   const balances = useMemo(() => {
     return billingService.calculateBalances(expenses, users);
   }, [users, expenses]);
@@ -119,7 +111,6 @@ export function useTripCalculations(
     return billingService.calculateSettlements(balances);
   }, [balances]);
 
-  // 6. Totals
   const totalGroupSpending = useMemo(() => 
     billingService.calculateTotalSpending(expenses), 
   [expenses]);
@@ -129,7 +120,7 @@ export function useTripCalculations(
   [filteredExpenses]);
 
   return { 
-    filteredExpenses, // React ignora la propietat interna '_searchString' al renderitzar
+    filteredExpenses,
     balances, 
     categoryStats, 
     settlements, 

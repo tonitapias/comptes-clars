@@ -13,7 +13,17 @@ import { calculateBalances } from './billingService';
 
 // --- HELPER: SANITIZE DATA ---
 const sanitizeData = <T>(data: T): T => {
-  return JSON.parse(JSON.stringify(data));
+  if (data === null || typeof data !== 'object') return data;
+  if (data instanceof Date) return data.toISOString() as unknown as T;
+  if (Array.isArray(data)) return data.map(sanitizeData) as unknown as T;
+  
+  const sanitized = {} as Record<string, any>;
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== undefined) {
+      sanitized[key] = sanitizeData(value);
+    }
+  }
+  return sanitized as T;
 };
 
 // --- CONVERTIDOR DE DADES ---
@@ -233,11 +243,15 @@ export const TripService = {
     if (!snap.exists()) return;
     
     const data = snap.data(); 
-    const newUsers = data.users.filter(u => u.id !== internalUserId);
-    const userToRemove = data.users.find(u => u.id === internalUserId);
-    const uidToRemove = userToRemove?.linkedUid;
+    const userToRemove = data.users.find((u: TripUser) => u.id === internalUserId);
+    if (!userToRemove) return;
 
-    const updatePayload: UpdateData<TripData> = { users: newUsers };
+    const uidToRemove = userToRemove.linkedUid;
+
+    const updatePayload: UpdateData<TripData> = { 
+      users: arrayRemove(sanitizeData(userToRemove)) 
+    };
+    
     if (uidToRemove) {
       updatePayload.memberUids = arrayRemove(uidToRemove);
     }
