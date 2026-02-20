@@ -1,6 +1,5 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { CheckCircle2, Smartphone, Banknote, Building2, CreditCard } from 'lucide-react';
-// [NOU]: Importem useTranslation per introduir i18n
 import { useTranslation } from 'react-i18next';
 import Modal from '../../Modal';
 import Button from '../../Button';
@@ -10,12 +9,14 @@ import { useTrip } from '../../../context/TripContext';
 import { useHapticFeedback } from '../../../hooks/useHapticFeedback';
 import { LITERALS } from '../../../constants/literals';
 
-const PAYMENT_METHODS = [
-  { id: 'manual', label: LITERALS.MODALS.PAYMENT_METHODS.MANUAL, icon: Banknote },
-  { id: 'bizum', label: LITERALS.MODALS.PAYMENT_METHODS.BIZUM, icon: Smartphone },
-  { id: 'transfer', label: LITERALS.MODALS.PAYMENT_METHODS.TRANSFER, icon: Building2 },
-  { id: 'card', label: LITERALS.MODALS.PAYMENT_METHODS.CARD, icon: CreditCard },
-];
+// [RISC ZERO]: Extraiem només la configuració estàtica. 
+// No avaluem traduccions fora de l'àmbit de React.
+const PAYMENT_METHOD_CONFIG = [
+  { id: 'manual', icon: Banknote, translationKey: 'MODALS.PAYMENT_METHODS.MANUAL', fallback: LITERALS.MODALS.PAYMENT_METHODS.MANUAL },
+  { id: 'bizum', icon: Smartphone, translationKey: 'MODALS.PAYMENT_METHODS.BIZUM', fallback: LITERALS.MODALS.PAYMENT_METHODS.BIZUM },
+  { id: 'transfer', icon: Building2, translationKey: 'MODALS.PAYMENT_METHODS.TRANSFER', fallback: LITERALS.MODALS.PAYMENT_METHODS.TRANSFER },
+  { id: 'card', icon: CreditCard, translationKey: 'MODALS.PAYMENT_METHODS.CARD', fallback: LITERALS.MODALS.PAYMENT_METHODS.CARD },
+] as const;
 
 interface TripSettleModalProps {
   isOpen: boolean;
@@ -29,12 +30,22 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
   const { trigger } = useHapticFeedback();
   const [method, setMethod] = useState<string>('manual');
   
-  // [NOU]: Inicialitzem el hook de traducció
   const { t } = useTranslation();
+
+  // [RISC ZERO]: Construïm l'array de botons dinàmicament memoitzat.
+  // Sempre utilitzem el fallback cap a LITERALS si falta la clau JSON.
+  const translatedPaymentMethods = useMemo(() => {
+    return PAYMENT_METHOD_CONFIG.map(config => ({
+        ...config,
+        label: t(config.translationKey, config.fallback)
+    }));
+  }, [t]);
 
   if (!tripData || !settlement) return null;
 
-  const getUser = (id: string) => tripData.users.find(u => u.id === id) || { name: LITERALS.COMMON.UNKNOWN_USER, photoUrl: null } as TripUser;
+  // [RISC ZERO]: Fallback explícit per als usuaris esborrats/desconeguts
+  const unknownUserText = t('COMMON.UNKNOWN_USER', LITERALS.COMMON.UNKNOWN_USER);
+  const getUser = (id: string) => tripData.users.find(u => u.id === id) || { name: unknownUserText, photoUrl: null } as TripUser;
   
   const fromUser = getUser(settlement.from);
   const toUser = getUser(settlement.to);
@@ -44,10 +55,10 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
       await onConfirm(method); 
   };
 
-  const currentMethodLabel = PAYMENT_METHODS.find(m => m.id === method)?.label || 'Pagament';
+  // Obtenim el label del mètode actual seleccionat (segur i traduït)
+  const currentMethodLabel = translatedPaymentMethods.find(m => m.id === method)?.label || t('COMMON.PAYMENT', 'Pagament');
 
   return (
-    // [REFACTOR]: Implementem i18n amb fallback cap als literals antics (RISC ZERO)
     <Modal isOpen={isOpen} onClose={onClose} title={t('MODALS.SETTLE.TITLE', LITERALS.MODALS.SETTLE.TITLE)}>
       <div className="pt-2 pb-2 space-y-6">
         
@@ -60,11 +71,10 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
 
         <div className="space-y-3">
             <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-2">
-                {/* [REFACTOR] */}
                 {t('MODALS.SETTLE.METHOD_LABEL', LITERALS.MODALS.SETTLE.METHOD_LABEL)}
             </label>
             <div className="grid grid-cols-4 gap-2">
-                {PAYMENT_METHODS.map((pm) => {
+                {translatedPaymentMethods.map((pm) => {
                     const isSelected = method === pm.id;
                     const Icon = pm.icon;
                     return (
@@ -92,7 +102,6 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
             icon={CheckCircle2}
             className="h-14 rounded-2xl text-sm font-black uppercase tracking-wider bg-slate-900 dark:bg-white text-white dark:text-black shadow-xl hover:scale-[1.02] active:scale-95 transition-transform"
         >
-            {/* [REFACTOR] */}
             {t('MODALS.SETTLE.BTN_CONFIRM', LITERALS.MODALS.SETTLE.BTN_CONFIRM)} {currentMethodLabel}
         </Button>
 

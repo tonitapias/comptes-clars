@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { Expense, TripUser, MoneyCents } from '../types';
 import * as billingService from '../services/billingService';
+import { toCents } from '../types'; // [RISC ZERO]: Necessitem el toCents per l'estat inicial
 
 interface CalculationsResult {
   filteredExpenses: Expense[];
@@ -12,6 +13,7 @@ interface CalculationsResult {
   totalGroupSpending: MoneyCents;
   displayedTotal: MoneyCents;
   isSearching: boolean; 
+  isCalculating: boolean; // [NOU]: Per mostrar petits spinners a la UI si volem
 }
 
 export function useTripCalculations(
@@ -23,6 +25,15 @@ export function useTripCalculations(
   
   const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
   const [isSearching, setIsSearching] = useState(false);
+
+  // [NOU]: Estat independent per retenir els valors asíncrons sense blanquejar la pantalla
+  const [calcState, setCalcState] = useState({
+    balances: [] as ReturnType<typeof billingService.calculateBalances>,
+    categoryStats: [] as ReturnType<typeof billingService.calculateCategoryStats>,
+    settlements: [] as ReturnType<typeof billingService.calculateSettlements>,
+    totalGroupSpending: toCents(0),
+    isCalculating: true
+  });
 
   useEffect(() => {
     if (!searchQuery) {
@@ -43,34 +54,26 @@ export function useTripCalculations(
   const userSearchIndex = useMemo(() => {
     const map: Record<string, string> = {};
     users.forEach(u => {
-      const nameKey = u.name.toLowerCase();
-      map[u.id] = nameKey;
+      map[u.id] = u.name.toLowerCase();
     });
     return map;
   }, [users]);
 
-  // [SAFE-FIX]: Substituït la mutació de dades (_searchString a l'Expense) per un diccionari separat.
-  // Protegeix les dades i el tipatge estricte, però ofereix el mateix rendiment de lectura O(1).
   const searchIndexMap = useMemo(() => {
     const map = new Map<string | number, string>();
     expenses.forEach(e => {
       const payerName = userSearchIndex[e.payer] || '';
-      const involvedNames = e.involved
-        .map(uid => userSearchIndex[uid] || '')
-        .join(' ');
-      
+      const involvedNames = e.involved.map(uid => userSearchIndex[uid] || '').join(' ');
       const searchString = `${e.title} ${payerName} ${involvedNames}`.toLowerCase();
       map.set(e.id, searchString);
     });
     return map;
   }, [expenses, userSearchIndex]);
 
-  // [SAFE-FIX]: Ara ordenem i filtrem l'array original directament.
   const filteredExpenses = useMemo(() => {
     const q = debouncedQuery.toLowerCase().trim();
     const isCategoryFilterActive = filterCategory !== 'all';
 
-    // 1. Ordenem de manera immutadora
     const sorted = [...expenses].sort((a, b) => {
       const dateA = new Date(a.date).getTime();
       const dateB = new Date(b.date).getTime();
@@ -79,53 +82,58 @@ export function useTripCalculations(
       return String(b.id).localeCompare(String(a.id));
     });
 
-    // 2. Si no hi ha filtres, retornem ràpid
-    if (!q && !isCategoryFilterActive) {
-      return sorted; 
-    }
+    if (!q && !isCategoryFilterActive) return sorted; 
     
-    // 3. Apliquem filtres fent servir el diccionari per a la cerca de text
     return sorted.filter(e => {
-        if (isCategoryFilterActive && e.category !== filterCategory) {
-            return false;
-        }
-
+        if (isCategoryFilterActive && e.category !== filterCategory) return false;
         if (q) {
             const searchStr = searchIndexMap.get(e.id);
             if (!searchStr || !searchStr.includes(q)) return false;
         }
-
         return true;
       });
   }, [expenses, debouncedQuery, filterCategory, searchIndexMap]);
 
-  const balances = useMemo(() => {
-    return billingService.calculateBalances(expenses, users);
-  }, [users, expenses]);
-
-  const categoryStats = useMemo(() => {
-    return billingService.calculateCategoryStats(expenses);
-  }, [expenses]);
-
-  const settlements = useMemo(() => {
-    return billingService.calculateSettlements(balances);
-  }, [balances]);
-
-  const totalGroupSpending = useMemo(() => 
-    billingService.calculateTotalSpending(expenses), 
-  [expenses]);
-
+  // [NOU] El Total Mostrat segueix sent síncron perquè depèn dels filtres (és molt ràpid)
   const displayedTotal = useMemo(() => 
     billingService.calculateTotalSpending(filteredExpenses), 
   [filteredExpenses]);
 
+  // [RISC ZERO]: Treiem el pes pesant del Main Thread.
+  useEffect(() => {
+    // 1. Marquem que estem calculant (permet posar estats de càrrega a la UI)
+    // però CONSERVEM les dades anteriors perquè la gràfica no parpellegi.
+    setCalcState(prev => ({ ...prev, isCalculating: true }));
+
+    // 2. Cedim el control a React perquè renderitzi el frame actual (ex: l'animació d'afegir despesa)
+    const workerTimer = setTimeout(() => {
+      const balances = billingService.calculateBalances(expenses, users);
+      const categoryStats = billingService.calculateCategoryStats(expenses);
+      const settlements = billingService.calculateSettlements(balances);
+      const totalGroupSpending = billingService.calculateTotalSpending(expenses);
+
+      // 3. Actualitzem amb les noves dades
+      setCalcState({
+        balances,
+        categoryStats,
+        settlements,
+        totalGroupSpending,
+        isCalculating: false
+      });
+    }, 0); // Un timeout de 0 mou l'execució al final de la cua d'events (Event Loop)
+
+    return () => clearTimeout(workerTimer);
+  }, [expenses, users]); // Només es recalcula si canvien de veritat les dades, no els filtres.
+
+  // [RISC ZERO]: Retornem l'objecte amb la mateixa signatura que l'antic Hook
   return { 
     filteredExpenses,
-    balances, 
-    categoryStats, 
-    settlements, 
-    totalGroupSpending, 
+    balances: calcState.balances, 
+    categoryStats: calcState.categoryStats, 
+    settlements: calcState.settlements, 
+    totalGroupSpending: calcState.totalGroupSpending, 
     displayedTotal,
-    isSearching 
+    isSearching,
+    isCalculating: calcState.isCalculating
   };
 }

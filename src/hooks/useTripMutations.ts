@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import { parseAppError } from '../utils/errorHandler';
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTripState, useTripDispatch } from '../context/TripContext';
@@ -9,15 +11,10 @@ import { LITERALS } from '../constants/literals';
 const SETTLEMENT_CATEGORY: CategoryId = 'transfer';
 const SETTLEMENT_SPLIT_TYPE: SplitType = 'equal';
 
-const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'string') return error;
-  if (error && typeof error === 'object' && 'message' in error) return String(error.message);
-  return LITERALS.ACTIONS.UNEXPECTED_ERROR || 'S\'ha produït un error inesperat';
-};
-
 export function useTripMutations() {
   const navigate = useNavigate();
+  // [NOU]: Instanciem les traduccions
+  const { t } = useTranslation(); 
   
   const { tripData, currentUser, expenses } = useTripState();
   const actions = useTripDispatch();
@@ -44,10 +41,11 @@ export function useTripMutations() {
       showToast(currency ? LITERALS.ACTIONS.UPDATE_SETTINGS_SUCCESS : LITERALS.ACTIONS.UPDATE_NAME_SUCCESS);
       return true;
     } catch (e: unknown) { 
-      showToast(getErrorMessage(e), 'error'); 
+      // [RISC ZERO]: Fem servir la nova utilitat d'errors passant 't'
+      showToast(parseAppError(e, t), 'error'); 
       return false;
     }
-  }, [actions, showToast, checkNetworkStatus]);
+  }, [actions, showToast, checkNetworkStatus, t]); // <-- Afegim 't' a les dependències
 
   const settleDebt = useCallback(async (settlement: Settlement, method: string = 'manual') => {
     if (!checkNetworkStatus()) return false; // [NOU]: Early Return
@@ -151,9 +149,9 @@ export function useTripMutations() {
       navigate('/');
     } catch (e: unknown) { 
       console.error(e);
-      showToast(getErrorMessage(e) || LITERALS.ACTIONS.DELETE_TRIP_ERROR, 'error'); 
+      showToast(parseAppError(e, t), 'error'); 
     }
-  }, [actions, navigate, showToast, checkNetworkStatus]);
+  }, [actions, navigate, showToast, checkNetworkStatus, t]);
 
   return {
     toast,
