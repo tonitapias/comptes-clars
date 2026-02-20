@@ -14,12 +14,15 @@ import { CURRENCIES } from '../utils/constants';
 import { TripData, TripUser } from '../types'; 
 import Modal from '../components/Modal';
 import Button from '../components/Button';
-import { useToast } from '../components/Toast'; // Importem el hook de Toast
+import { useToast } from '../components/Toast';
 
-// Components nous refactoritzats
+// COMPONENTS
 import BentoCard from '../components/landing/BentoCard';
 import TripCard from '../components/landing/TripCard';
 import AuthForm from '../components/auth/AuthForm';
+
+// UTILITATS PER AL CÀLCUL DEL BALANÇ (MANTENIR RISC ZERO)
+import { calculateBalances } from '../services/billingService';
 
 // --- TIPUS ---
 type ActionState = 'idle' | 'creating' | 'joining';
@@ -32,7 +35,7 @@ export default function LandingPage({ user }: LandingPageProps) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const inviteCode = searchParams.get('join');
-  const { toast, showToast } = useToast(); // Hook per a notificacions
+  const { toast, showToast } = useToast(); 
   
   const [myTrips, setMyTrips] = useState<TripData[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(false);
@@ -40,7 +43,7 @@ export default function LandingPage({ user }: LandingPageProps) {
   
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
-  // Estat per al Modal de Confirmació (Substitueix window.confirm)
+  // Estat per al Modal de Confirmació
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     tripId: string;
@@ -79,7 +82,6 @@ export default function LandingPage({ user }: LandingPageProps) {
       setLoadingTrips(true);
       try {
         const trips = await TripService.getUserTrips(user.uid);
-        // Ordenar per data de creació descendent
         trips.sort((a, b) => {
             const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
             const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -179,7 +181,6 @@ export default function LandingPage({ user }: LandingPageProps) {
     }
   };
 
-  // Obre el modal de confirmació en lloc d'usar window.confirm
   const requestLeaveTrip = (e: React.MouseEvent, tripId: string, internalUserId: string | undefined, tripName: string) => {
     e.stopPropagation();
     setConfirmModal({
@@ -190,14 +191,34 @@ export default function LandingPage({ user }: LandingPageProps) {
     });
   };
 
-  // Executa l'acció real de sortir/eliminar
   const confirmLeaveTrip = async () => {
-    if (!confirmModal.tripId) return;
-    setIsLeaving(true);
+    if (!confirmModal.tripId || !user) return;
+    
+    setIsLeaving(true); // Posem el botó de sortida en càrrega
+
     try {
+        const targetTrip = myTrips.find(t => t.id === confirmModal.tripId);
+        if (targetTrip) {
+            // [CLAU DEL RISC ZERO]: Obtenim les despeses REALS de la base de dades
+            const realExpenses = await TripService.getTripExpenses(confirmModal.tripId);
+            
+            // Fem el càlcul amb les dades actualitzades
+            const balances = calculateBalances(realExpenses, targetTrip.users);
+            const myBalance = balances.find(b => b.userId === confirmModal.internalUserId)?.amount || 0;
+            
+            if (Math.abs(myBalance) > 1) { 
+                showToast("No pots sortir d'un viatge si tens deutes pendents o et deuen diners.", "error");
+                setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                setIsLeaving(false);
+                return; // Bloquegem l'eliminació immediatament
+            }
+        }
+
+        // Si arribem aquí, vol dir que realment té el deute a 0.
         if (confirmModal.internalUserId) {
             await TripService.leaveTrip(confirmModal.tripId, confirmModal.internalUserId);
         }
+        
         setMyTrips(prev => prev.filter(t => t.id !== confirmModal.tripId));
         showToast(`Has sortit de "${confirmModal.tripName}"`, "success");
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -216,15 +237,12 @@ export default function LandingPage({ user }: LandingPageProps) {
   return (
     <div className="min-h-screen bg-surface-ground flex flex-col items-center p-4 md:p-8 font-sans transition-colors duration-300 relative overflow-x-hidden selection:bg-primary/20">
       
-      {/* Toast Notification Container */}
       {toast}
 
-      {/* Decorative Gradient Mesh */}
       <div className="fixed inset-0 pointer-events-none z-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-100/40 via-transparent to-transparent dark:from-indigo-900/10"></div>
 
       <div className="w-full max-w-6xl relative z-10 flex flex-col gap-8 h-full">
         
-        {/* NAVBAR */}
         <nav className="flex items-center justify-between py-2">
            <div className="flex items-center gap-3">
               <div className="bg-white dark:bg-slate-800 p-2.5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
@@ -252,7 +270,6 @@ export default function LandingPage({ user }: LandingPageProps) {
 
         <main className="flex-1 flex flex-col justify-center">
             
-            {/* 1. LANDING VISUAL (NO USER) */}
             {!user ? (
                 <div className="flex flex-col items-center text-center gap-12 py-12 md:py-20 animate-fade-in">
                     <div className="max-w-3xl space-y-6">
@@ -268,7 +285,6 @@ export default function LandingPage({ user }: LandingPageProps) {
                         </p>
                     </div>
 
-                    {/* HERO CARD (Input & CTA) */}
                     <div className="w-full max-w-md relative group">
                         <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-[2rem] blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
                         
@@ -307,7 +323,6 @@ export default function LandingPage({ user }: LandingPageProps) {
                     </div>
                 </div>
             ) : (
-                /* 2. DASHBOARD (USER LOGGED IN) */
                 <div className="w-full max-w-5xl mx-auto py-6 animate-fade-in">
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
                         <div>
@@ -333,7 +348,6 @@ export default function LandingPage({ user }: LandingPageProps) {
                         </div>
                     </div>
 
-                    {/* ÀREA DE CREACIÓ / UNIÓ (Expandable) */}
                     {(actionState === 'creating' || actionState === 'joining') && (
                         <div className="mb-10 animate-slide-up">
                             <div className="bg-surface-card p-6 md:p-8 rounded-[2rem] shadow-financial-lg border border-indigo-100 dark:border-indigo-900/30 relative overflow-hidden">
@@ -365,7 +379,6 @@ export default function LandingPage({ user }: LandingPageProps) {
                         </div>
                     )}
 
-                    {/* GRID DE PROJECTES */}
                     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {loadingTrips ? (
                             [1,2,3].map(i => <div key={i} className="h-48 bg-surface-card animate-pulse rounded-3xl border border-slate-100 dark:border-slate-800"></div>)
@@ -392,12 +405,10 @@ export default function LandingPage({ user }: LandingPageProps) {
         </main>
       </div>
 
-      {/* Auth Modal */}
       <Modal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} title="Accés">
         <AuthForm onClose={() => setIsAuthModalOpen(false)} />
       </Modal>
 
-      {/* NEW: Confirmation Modal for Leaving Trip */}
       <Modal 
         isOpen={confirmModal.isOpen} 
         onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))} 

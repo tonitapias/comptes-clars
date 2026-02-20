@@ -82,9 +82,13 @@ export function TripProvider({ children, tripId, currentUser }: TripProviderProp
 // HOOKS CONSUMIDORS
 // ============================================================================
 
-// 🌟 HOOK LEGACY (PROXY PER COMPATIBILITAT - RISC ZERO)
-// Retorna EXACTAMENT la mateixa estructura que l'antic TripContext.
-// Cap component de l'app es trencarà, ja que fusionem l'estat i el dispatch sota el capó.
+/**
+ * 🌟 HOOK LEGACY (PROXY PER COMPATIBILITAT - RISC ZERO)
+ * [TASCA 3] Marcat com a deprecated oficialment al sistema de tipus (TSDoc).
+ * @deprecated Aquest hook es divideix en useTripState() i useTripDispatch()
+ * per evitar re-renders innecessaris en l'arbre de components.
+ * Si us plau, migra el teu component el més aviat possible.
+ */
 export function useTrip() {
   const state = useContext(TripStateContext);
   const dispatch = useContext(TripDispatchContext);
@@ -93,7 +97,7 @@ export function useTrip() {
     throw new Error('useTrip must be used within a TripProvider');
   }
 
-  // Reconstruïm l'objecte original
+  // Reconstruïm l'objecte original per no trencar cap integració de la v1
   return useMemo(() => ({
     ...state,
     actions: dispatch

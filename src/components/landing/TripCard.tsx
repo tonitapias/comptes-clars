@@ -1,8 +1,8 @@
 import React from 'react';
-import { FolderGit2, Trash2, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { FolderGit2, LogOut, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { TripData } from '../../types';
-import Avatar from '../Avatar'; // Import arreglat
+import Avatar from '../Avatar';
 
 interface TripCardProps {
     trip: TripData;
@@ -27,13 +27,13 @@ export default function TripCard({ trip, currentUser, onNavigate, onLeave }: Tri
                         <FolderGit2 size={20} strokeWidth={2.5} />
                     </div>
                     
-                    {/* Botó Esborrar */}
+                    {/* Botó Sortir (Abans era una paperera confusa) */}
                     <button 
                         onClick={(e) => onLeave(e, trip.id, currentUserInfo?.id, trip.name)}
                         className="p-2 text-content-subtle hover:text-status-error hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-full transition-colors md:opacity-0 md:group-hover:opacity-100"
-                        title="Arxivar viatge"
+                        title="Sortir del viatge"
                     >
-                        <Trash2 size={16} />
+                        <LogOut size={16} />
                     </button>
                 </div>
                 

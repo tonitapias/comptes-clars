@@ -5,15 +5,17 @@ import {
   browserLocalPersistence, 
   GoogleAuthProvider, 
   signInWithPopup,
-  createUserWithEmailAndPassword, // <--- NOU
-  signInWithEmailAndPassword,     // <--- NOU
-  updateProfile                   // <--- NOU
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateProfile
 } from "firebase/auth";
 import { 
   initializeFirestore, 
   persistentLocalCache, 
   persistentMultipleTabManager 
 } from "firebase/firestore";
+// [NOU] Importem getFunctions
+import { getFunctions } from "firebase/functions";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -39,7 +41,6 @@ setPersistence(auth, browserLocalPersistence)
 
 // --- FUNCIONS D'AUTENTICACIÓ EXPORTADES ---
 const googleProvider = new GoogleAuthProvider();
-// Forcem que Google pregunti quin compte utilitzar
 googleProvider.setCustomParameters({ prompt: 'select_account' }); 
 
 export const signInWithGoogle = async () => {
@@ -52,7 +53,6 @@ export const signInWithGoogle = async () => {
   }
 };
 
-// Registre amb Email (amb nom d'usuari)
 export const registerWithEmail = async (email: string, pass: string, name: string) => {
   try {
     const result = await createUserWithEmailAndPassword(auth, email, pass);
@@ -65,7 +65,6 @@ export const registerWithEmail = async (email: string, pass: string, name: strin
   }
 };
 
-// Login amb Email
 export const loginWithEmail = async (email: string, pass: string) => {
   try {
     const result = await signInWithEmailAndPassword(auth, email, pass);
@@ -75,11 +74,15 @@ export const loginWithEmail = async (email: string, pass: string) => {
   }
 };
 
-// --- FIRESTORE ---
+// --- FIRESTORE (TASCA 2: Offline Persistance ja actiu nativament) ---
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager() 
   })
 });
+
+// --- [NOU] CLOUD FUNCTIONS ---
+// Configurat per a la regió d'Europa (ajusta segons la teva necessitat)
+export const functions = getFunctions(app, 'us-central1');
 
 export const appId = "comptes-clars-v1";

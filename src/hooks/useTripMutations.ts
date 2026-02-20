@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTripState, useTripDispatch } from '../context/TripContext';
 import { ToastType } from '../components/Toast';
-import { calculateBalances } from '../services/billingService';
+import { calculateBalances } from '../services/billingService'; 
 import { Currency, CategoryId, SplitType, Settlement } from '../types'; 
 import { LITERALS } from '../constants/literals';
 
@@ -13,7 +13,6 @@ const SETTLEMENT_SPLIT_TYPE: SplitType = 'equal';
 
 export function useTripMutations() {
   const navigate = useNavigate();
-  // [NOU]: Instanciem les traduccions
   const { t } = useTranslation(); 
   
   const { tripData, currentUser, expenses } = useTripState();
@@ -24,32 +23,18 @@ export function useTripMutations() {
   const showToast = useCallback((msg: string, type: ToastType = 'success') => setToast({ msg, type }), []);
   const clearToast = useCallback(() => setToast(null), []);
 
-  // [NOU]: Funció validadora de connectivitat abans d'atacar el servidor
-  const checkNetworkStatus = useCallback((): boolean => {
-    if (!navigator.onLine) {
-      showToast(LITERALS.ACTIONS.CONNECTION_ERROR || 'Sense connexió a Internet', 'error');
-      return false;
-    }
-    return true;
-  }, [showToast]);
-
   const updateTripSettings = useCallback(async (name: string, currency: Currency) => {
-    if (!checkNetworkStatus()) return false; // [NOU]: Early Return
-
     try {
       await actions.updateTripSettings(name, new Date().toISOString(), currency);
       showToast(currency ? LITERALS.ACTIONS.UPDATE_SETTINGS_SUCCESS : LITERALS.ACTIONS.UPDATE_NAME_SUCCESS);
       return true;
     } catch (e: unknown) { 
-      // [RISC ZERO]: Fem servir la nova utilitat d'errors passant 't'
       showToast(parseAppError(e, t), 'error'); 
       return false;
     }
-  }, [actions, showToast, checkNetworkStatus, t]); // <-- Afegim 't' a les dependències
+  }, [actions, showToast, t]);
 
   const settleDebt = useCallback(async (settlement: Settlement, method: string = 'manual') => {
-    if (!checkNetworkStatus()) return false; // [NOU]: Early Return
-
     try {
       const titles: Record<string, string> = {
         bizum: LITERALS.MODALS.PAYMENT_TITLES.BIZUM,
@@ -82,14 +67,12 @@ export function useTripMutations() {
       }
     } catch (e: unknown) { 
       console.error(e);
-      showToast(LITERALS.ACTIONS.UNEXPECTED_ERROR, 'error');
+      showToast(parseAppError(e, t), 'error');
       return false;
     }
-  }, [actions, showToast, checkNetworkStatus]);
+  }, [actions, showToast, t]);
 
   const deleteExpense = useCallback(async (id: string) => {
-    if (!checkNetworkStatus()) return false; // [NOU]: Early Return
-
     try {
       const res = await actions.deleteExpense(id);
       if (res.success) {
@@ -100,47 +83,69 @@ export function useTripMutations() {
         return false;
       }
     } catch (e: unknown) { 
-      showToast(LITERALS.ACTIONS.CONNECTION_ERROR, 'error');
+      showToast(parseAppError(e, t), 'error');
       return false;
     }
-  }, [actions, showToast, checkNetworkStatus]);
+  }, [actions, showToast, t]);
 
   const leaveTrip = useCallback(async () => {
-    if (!checkNetworkStatus()) return; // [NOU]: Early Return
     if (!currentUser || !tripData) return;
 
     const balances = calculateBalances(expenses, tripData.users);
     const myUser = tripData.users.find(u => u.linkedUid === currentUser.uid);
     const myBalance = balances.find(b => b.userId === myUser?.id)?.amount || 0;
 
-    const res = await actions.leaveTrip(
-      myUser ? myUser.id : currentUser.uid,
-      myBalance,
-      !!myUser,
-      currentUser.uid
-    );
-
-    if (res.success) {
-      localStorage.removeItem('cc-last-trip-id');
-      navigate('/');
-    } else {
-      showToast(res.error || LITERALS.ACTIONS.LEAVE_TRIP_ERROR, 'error');
+    if (Math.abs(myBalance) > 1) {
+      showToast("No pots sortir del viatge fins que no saldis els teus deutes o et paguin el que et deuen.", "error");
+      return;
     }
-  }, [actions, currentUser, tripData, expenses, navigate, showToast, checkNetworkStatus]);
+
+    try {
+      const res = await actions.leaveTrip(
+        myUser ? myUser.id : currentUser.uid,
+        myBalance,
+        !!myUser,
+        currentUser.uid
+      );
+
+      if (res.success) {
+        showToast("Has abandonat el viatge correctament.", "success");
+        localStorage.removeItem('cc-last-trip-id');
+        navigate('/');
+      } else {
+        showToast(res.error || "No s'ha pogut sortir del viatge", 'error');
+      }
+    } catch (e: unknown) {
+      showToast(parseAppError(e, t), 'error');
+    }
+  }, [actions, currentUser, tripData, expenses, navigate, showToast, t]);
 
   const joinTrip = useCallback(async () => {
-     if (!checkNetworkStatus()) return; // [NOU]: Early Return
      if(!currentUser) return;
      try {
          await actions.joinTrip(currentUser);
          showToast(LITERALS.ACTIONS.JOIN_TRIP_SUCCESS);
      } catch(e: unknown) { 
-         showToast(LITERALS.ACTIONS.JOIN_TRIP_ERROR, 'error');
+         showToast(parseAppError(e, t), 'error');
      }
-  }, [actions, currentUser, showToast, checkNetworkStatus]);
+  }, [actions, currentUser, showToast, t]);
 
+  // LA MÀGIA DEL RISC ZERO (Doble comprovació al nucli)
   const deleteTrip = useCallback(async () => {
-    if (!checkNetworkStatus()) return; // [NOU]: Early Return
+    if (!tripData || !currentUser) return;
+
+    // Utilitzem la mateixa validació estricta (memberUids)
+    const isOwner = Boolean(
+        currentUser.uid && (
+            tripData.ownerId === currentUser.uid || 
+            tripData.memberUids?.[0] === currentUser.uid
+        )
+    );
+    
+    if (!isOwner) {
+        showToast("Accés denegat: Només el creador pot eliminar el projecte sencer.", 'error');
+        return; // Aturem la funció en sec.
+    }
 
     try {
       await actions.deleteTrip();
@@ -151,7 +156,7 @@ export function useTripMutations() {
       console.error(e);
       showToast(parseAppError(e, t), 'error'); 
     }
-  }, [actions, navigate, showToast, checkNetworkStatus, t]);
+  }, [actions, navigate, showToast, t, tripData, currentUser]);
 
   return {
     toast,

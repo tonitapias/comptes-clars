@@ -11,9 +11,9 @@ interface TripSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   canChangeCurrency: boolean;
-  onUpdate: (name: string, currency: Currency) => Promise<boolean>; // Canviat a boolean per coincidir amb mutation
-  onDelete: () => Promise<void>; // Promise
-  onLeave: () => Promise<void>;  // Promise
+  onUpdate: (name: string, currency: Currency) => Promise<boolean>;
+  onDelete: () => Promise<void>; 
+  onLeave: () => Promise<void>;  
 }
 
 export default function TripSettingsModal({ 
@@ -24,7 +24,7 @@ export default function TripSettingsModal({
   onDelete,
   onLeave
 }: TripSettingsModalProps) {
-  const { tripData } = useTrip();
+  const { tripData, currentUser } = useTrip(); 
   const { trigger } = useHapticFeedback();
   
   const [name, setName] = useState('');
@@ -64,6 +64,15 @@ export default function TripSettingsModal({
   };
 
   if (!tripData) return null;
+
+  // [SOLUCIÓ BLINDADA]: Ens assegurem de mirar l'ordre real d'inserció a la base de dades (memberUids),
+  // no l'ordre de l'array visual (users) que podria estar alterat/ordenat.
+  const isOwner = Boolean(
+      currentUser?.uid && (
+          tripData.ownerId === currentUser.uid || 
+          tripData.memberUids?.[0] === currentUser.uid
+      )
+  );
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Configuració">
@@ -157,7 +166,7 @@ export default function TripSettingsModal({
 
         {/* --- DANGER ZONE --- */}
         <div className="pt-8 border-t border-slate-100 dark:border-slate-800 space-y-3">
-            {/* Leave Trip */}
+            {/* Leave Trip (Tothom pot sortir del viatge) */}
             <button 
                 type="button"
                 onClick={() => { trigger('medium'); onLeave(); }}
@@ -175,60 +184,62 @@ export default function TripSettingsModal({
                 </div>
             </button>
 
-            {/* Delete Trip */}
-            {showDeleteConfirm ? (
-                <div className="bg-rose-500/5 border border-rose-500/20 rounded-3xl p-6 animate-fade-in-up">
-                    <div className="flex items-start gap-4 mb-6">
-                        <div className="p-3 bg-rose-500/10 rounded-2xl text-rose-500 border border-rose-500/20">
-                            <AlertTriangle size={24} strokeWidth={2.5} />
-                        </div>
-                        <div>
-                            <h4 className="font-bold text-rose-600 dark:text-rose-400 text-base">Eliminar Viatge?</h4>
-                            <p className="text-xs text-rose-600/70 dark:text-rose-400/70 mt-1 leading-relaxed max-w-[250px]">
-                                Esborraràs <strong>totes les dades</strong> per a tots els usuaris. Irreversible.
-                            </p>
-                        </div>
-                    </div>
-                    <div className="flex gap-3">
-                        <button 
-                            type="button"
-                            onClick={() => setShowDeleteConfirm(false)}
-                            className="flex-1 py-3.5 bg-transparent border border-rose-200 dark:border-rose-900 rounded-xl text-rose-600 dark:text-rose-400 font-bold text-xs hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-colors"
-                        >
-                            Cancel·lar
-                        </button>
-                        <button 
-                            type="button"
-                            onClick={() => { trigger('heavy'); onDelete(); }}
-                            className="flex-1 py-3.5 bg-rose-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-rose-500/30 hover:bg-rose-600 active:scale-95 transition-all flex items-center justify-center gap-2"
-                        >
-                            <Trash2 size={16} /> Eliminar
-                        </button>
-                    </div>
-                </div>
-            ) : (
-                <button 
-                    type="button"
-                    onClick={handleDeleteClick}
-                    className="w-full group relative overflow-hidden p-0.5 rounded-2xl transition-all hover:scale-[1.01] active:scale-[0.99]"
-                >
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-rose-500/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-                    <div className="relative flex items-center justify-between p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 hover:border-rose-200 dark:group-hover:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-colors">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-rose-500 group-hover:bg-rose-100 dark:group-hover:bg-rose-900/50 transition-colors">
-                                <Trash2 size={20} />
+            {/* Delete Trip (NOMÉS VISIBLE PER AL PROPIETARI) */}
+            {isOwner && (
+                showDeleteConfirm ? (
+                    <div className="bg-rose-500/5 border border-rose-500/20 rounded-3xl p-6 animate-fade-in-up">
+                        <div className="flex items-start gap-4 mb-6">
+                            <div className="p-3 bg-rose-500/10 rounded-2xl text-rose-500 border border-rose-500/20">
+                                <AlertTriangle size={24} strokeWidth={2.5} />
                             </div>
-                            <div className="text-left">
-                                <span className="block text-sm font-bold text-slate-600 dark:text-slate-300 group-hover:text-rose-700 dark:group-hover:text-rose-400 transition-colors">
-                                    Eliminar Viatge
-                                </span>
-                                <span className="text-[10px] text-slate-400 group-hover:text-rose-500/70">
-                                    Zona de perill
-                                </span>
+                            <div>
+                                <h4 className="font-bold text-rose-600 dark:text-rose-400 text-base">Eliminar Viatge?</h4>
+                                <p className="text-xs text-rose-600/70 dark:text-rose-400/70 mt-1 leading-relaxed max-w-[250px]">
+                                    Esborraràs <strong>totes les dades</strong> per a tots els usuaris. Irreversible.
+                                </p>
                             </div>
                         </div>
+                        <div className="flex gap-3">
+                            <button 
+                                type="button"
+                                onClick={() => setShowDeleteConfirm(false)}
+                                className="flex-1 py-3.5 bg-transparent border border-rose-200 dark:border-rose-900 rounded-xl text-rose-600 dark:text-rose-400 font-bold text-xs hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-colors"
+                            >
+                                Cancel·lar
+                            </button>
+                            <button 
+                                type="button"
+                                onClick={() => { trigger('heavy'); onDelete(); }}
+                                className="flex-1 py-3.5 bg-rose-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-rose-500/30 hover:bg-rose-600 active:scale-95 transition-all flex items-center justify-center gap-2"
+                            >
+                                <Trash2 size={16} /> Eliminar
+                            </button>
+                        </div>
                     </div>
-                </button>
+                ) : (
+                    <button 
+                        type="button"
+                        onClick={handleDeleteClick}
+                        className="w-full group relative overflow-hidden p-0.5 rounded-2xl transition-all hover:scale-[1.01] active:scale-[0.99]"
+                    >
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-rose-500/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+                        <div className="relative flex items-center justify-between p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 hover:border-rose-200 dark:group-hover:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-colors">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-rose-500 group-hover:bg-rose-100 dark:group-hover:bg-rose-900/50 transition-colors">
+                                    <Trash2 size={20} />
+                                </div>
+                                <div className="text-left">
+                                    <span className="block text-sm font-bold text-slate-600 dark:text-slate-300 group-hover:text-rose-700 dark:group-hover:text-rose-400 transition-colors">
+                                        Eliminar Viatge
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 group-hover:text-rose-500/70">
+                                        Zona de perill
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </button>
+                )
             )}
         </div>
       </div>

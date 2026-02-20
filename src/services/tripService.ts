@@ -70,7 +70,6 @@ const getExpenseRef = (tripId: string, expenseId: string) =>
 
 const generateId = () => crypto.randomUUID();
 
-// --- FUNCIÓ AUXILIAR: RECALCULAR ESTAT SALDAT ---
 const recalculateTripSettledStatus = async (tripId: string) => {
   try {
     const expensesSnap = await getDocs(getExpensesCol(tripId));
@@ -89,7 +88,6 @@ const recalculateTripSettledStatus = async (tripId: string) => {
   }
 };
 
-// --- SISTEMA DE LOGS INTERN ---
 const logAction = async (tripId: string, message: string, action: LogEntry['action']) => {
   try {
     const currentUser = auth.currentUser;
@@ -114,6 +112,17 @@ export const TripService = {
       return snap.docs.map(d => d.data()).filter(trip => !trip.isDeleted); 
     } catch (error) {
       console.error("Error obtenint viatges:", error);
+      return [];
+    }
+  },
+
+  // [NOU] Funció específica per obtenir les despeses d'un viatge i verificar el deute remot
+  getTripExpenses: async (tripId: string): Promise<Expense[]> => {
+    try {
+      const snap = await getDocs(getExpensesCol(tripId));
+      return snap.docs.map(d => ({ ...d.data(), id: d.id })) as Expense[];
+    } catch (error) {
+      console.error("Error obtenint despeses:", error);
       return [];
     }
   },
@@ -224,11 +233,7 @@ export const TripService = {
 
     const updatedUsers = tripData.users.map(u => {
       if (u.id === userId) {
-        return { 
-          ...u, 
-          name: newName, 
-          photoUrl: null 
-        };
+        return { ...u, name: newName, photoUrl: null };
       }
       return u;
     });
@@ -261,7 +266,6 @@ export const TripService = {
     await recalculateTripSettledStatus(tripId);
   },
 
-  // --- NOU: LINK USER (Reclamar perfil) ---
   linkUserToAccount: async (tripId: string, tripUserId: string, user: User) => {
     const tripRef = getTripRef(tripId);
     const tripSnap = await getDoc(tripRef);
@@ -270,12 +274,7 @@ export const TripService = {
     const data = tripSnap.data();
     const updatedUsers = data.users.map(u => {
       if (u.id === tripUserId) {
-        return {
-          ...u,
-          linkedUid: user.uid,
-          photoUrl: user.photoURL || null,
-          isAuth: true
-        };
+        return { ...u, linkedUid: user.uid, photoUrl: user.photoURL || null, isAuth: true };
       }
       return u;
     });

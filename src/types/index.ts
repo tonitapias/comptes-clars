@@ -69,7 +69,8 @@ export interface Expense {
 // --- LOGS ---
 export interface LogEntry {
   id: string;
-  action: 'create' | 'update' | 'delete' | 'join' | 'settle' | 'settings';
+  // [NOU] AFEGIM 'leave' al final de la llista
+  action: 'create' | 'update' | 'delete' | 'join' | 'settle' | 'settings' | 'leave';
   message: string;
   userId: UserId;
   userName: string;
