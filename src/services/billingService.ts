@@ -58,16 +58,22 @@ const calculateEqualSplit = (
   const count = receiversIds.length;
   if (count === 0) return { allocations };
 
-  const baseAmount = Math.floor(unbrand(exp.amount) / count); 
-  const remainder = unbrand(exp.amount) % count; 
+  // [REFACTOR RISC ZERO]: Extracció de l'absolut per evitar fallades amb imports negatius (reemborsaments)
+  const totalCents = unbrand(exp.amount);
+  const absTotal = Math.abs(totalCents);
+  const isNegative = totalCents < 0;
+
+  const baseAmount = Math.floor(absTotal / count); 
+  const remainder = absTotal % count; 
   const offset = getStableDistributionOffset(exp.id, count);
 
   receiversIds.forEach((uid, i) => {
     const rotatedIndex = (i - offset + count) % count;
     const paysExtraCent = rotatedIndex < remainder;
-    const amountToPay = toCents(baseAmount + (paysExtraCent ? 1 : 0));
+    const amountToPay = baseAmount + (paysExtraCent ? 1 : 0);
     
-    allocations[uid] = toCents(-amountToPay);
+    // Si és negatiu (ingrés), la lògica de deute s'inverteix perfectament
+    allocations[uid] = toCents(isNegative ? amountToPay : -amountToPay);
   });
 
   return { allocations };
@@ -113,9 +119,14 @@ const calculateSharesSplit = (
   const allocations: Record<string, MoneyCents> = {};
   const details = exp.splitDetails || {};
   
+  // [REFACTOR RISC ZERO]: Protecció de seguretat absoluta als imports negatius i shares
+  const totalCents = unbrand(exp.amount);
+  const absTotal = Math.abs(totalCents);
+  const isNegative = totalCents < 0;
+
   const entries = Object.entries(details)
-    .map(([key, shares]) => ({ uid: getCanonicalId(key), shares: Number(shares) })) 
-    .filter((entry): entry is { uid: string, shares: number } => !!entry.uid && validUserIds.has(entry.uid))
+    .map(([key, shares]) => ({ uid: getCanonicalId(key), shares: Math.max(0, Number(shares)) })) // Bloquem parts negatives
+    .filter((entry): entry is { uid: string, shares: number } => !!entry.uid && validUserIds.has(entry.uid) && entry.shares > 0)
     .sort((a, b) => a.uid.localeCompare(b.uid));
 
   const totalShares = entries.reduce((acc, curr) => acc + curr.shares, 0);
@@ -124,7 +135,7 @@ const calculateSharesSplit = (
 
   let totalBaseAllocated = 0;
   const distributionList = entries.map(entry => {
-    const safeAmount = BigInt(unbrand(exp.amount));
+    const safeAmount = BigInt(absTotal); // Calculem sempre captius en positiu
     const safeShares = BigInt(Math.round(entry.shares)); 
     const safeTotal = BigInt(Math.round(totalShares));
     
@@ -135,7 +146,7 @@ const calculateSharesSplit = (
     return { ...entry, baseAmount: rawAmount };
   });
 
-  const remainder = unbrand(exp.amount) - totalBaseAllocated;
+  const remainder = absTotal - totalBaseAllocated;
   
   const offset = getStableDistributionOffset(exp.id, distributionList.length);
   const count = distributionList.length;
@@ -144,9 +155,9 @@ const calculateSharesSplit = (
     const rotatedIndex = (i - offset + count) % count;
     const extraCent = rotatedIndex < remainder ? 1 : 0;
     const currentDebt = unbrand(allocations[item.uid] || toCents(0));
-    const finalAmount = item.baseAmount + extraCent;
+    const finalAbsAmount = item.baseAmount + extraCent;
 
-    allocations[item.uid] = toCents(currentDebt - finalAmount);
+    allocations[item.uid] = toCents(currentDebt + (isNegative ? finalAbsAmount : -finalAbsAmount));
   });
 
   return { allocations };

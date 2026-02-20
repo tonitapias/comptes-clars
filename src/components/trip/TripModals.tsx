@@ -1,16 +1,16 @@
-import React, { Suspense } from 'react'; // [SAFE-FIX]: Afegit import de React i Suspense
+import React, { Suspense } from 'react';
 import { Trash2, AlertTriangle } from 'lucide-react';
 import Modal from '../Modal';
 import Button from '../Button';
 
-// [SAFE-FIX]: Imports convertits a Lazy Loading per millorar el Temps Inicial (Code Splitting)
 const ExpenseModal = React.lazy(() => import('../modals/ExpenseModal'));
 const GroupModal = React.lazy(() => import('../modals/GroupModal'));
 const ActivityModal = React.lazy(() => import('../modals/ActivityModal'));
 const TripSettingsModal = React.lazy(() => import('./modals/TripSettingsModal'));
 const TripSettleModal = React.lazy(() => import('./modals/TripSettleModal'));
 
-import { useTrip } from '../../context/TripContext'; 
+// [REFACTOR]: Importem exclusivament el hook d'estat
+import { useTripState } from '../../context/TripContext'; 
 import { useTripModals } from '../../hooks/useTripModals';
 import { useTripMutations } from '../../hooks/useTripMutations';
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
@@ -28,7 +28,9 @@ export default function TripModals({
 }: TripModalsProps) {
   
   const { trigger } = useHapticFeedback();
-  const { tripData, expenses } = useTrip();
+  
+  // [REFACTOR]: Consumim només l'estat per evitar re-renders per canvis d'accions
+  const { tripData, expenses } = useTripState();
 
   if (!tripData) return null;
 
@@ -58,7 +60,6 @@ export default function TripModals({
 
   return (
     <>
-      {/* [SAFE-FIX]: Embolcall de Suspense per capturar els components "lazy". Fallback null assegura zero impacte visual fins que s'obren */}
       <Suspense fallback={null}>
           <ExpenseModal 
             key={modals.editingExpense?.id || 'new'} 
@@ -109,7 +110,6 @@ export default function TripModals({
           />
       </Suspense>
 
-      {/* [SAFE-FIX]: El Modal de Confirmació manté naturalesa síncrona per urgència visual i lleugeresa */}
       <Modal 
         isOpen={!!modals.confirmAction} 
         onClose={modals.closeConfirmAction} 

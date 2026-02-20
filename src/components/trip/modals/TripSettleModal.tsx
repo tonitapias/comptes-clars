@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { CheckCircle2, Smartphone, Banknote, Building2, CreditCard } from 'lucide-react';
+// [NOU]: Importem useTranslation per introduir i18n
+import { useTranslation } from 'react-i18next';
 import Modal from '../../Modal';
 import Button from '../../Button';
-import HolographicTicket from '../HolographicTicket'; // [REFAC]: Importem el nou component
+import HolographicTicket from '../HolographicTicket'; 
 import { Settlement, TripUser } from '../../../types';
 import { useTrip } from '../../../context/TripContext';
 import { useHapticFeedback } from '../../../hooks/useHapticFeedback';
 import { LITERALS } from '../../../constants/literals';
 
-// --- CONFIGURACIÓ ESTÀTICA ---
 const PAYMENT_METHODS = [
   { id: 'manual', label: LITERALS.MODALS.PAYMENT_METHODS.MANUAL, icon: Banknote },
   { id: 'bizum', label: LITERALS.MODALS.PAYMENT_METHODS.BIZUM, icon: Smartphone },
@@ -27,6 +28,9 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
   const { tripData } = useTrip();
   const { trigger } = useHapticFeedback();
   const [method, setMethod] = useState<string>('manual');
+  
+  // [NOU]: Inicialitzem el hook de traducció
+  const { t } = useTranslation();
 
   if (!tripData || !settlement) return null;
 
@@ -43,10 +47,10 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
   const currentMethodLabel = PAYMENT_METHODS.find(m => m.id === method)?.label || 'Pagament';
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={LITERALS.MODALS.SETTLE.TITLE}>
+    // [REFACTOR]: Implementem i18n amb fallback cap als literals antics (RISC ZERO)
+    <Modal isOpen={isOpen} onClose={onClose} title={t('MODALS.SETTLE.TITLE', LITERALS.MODALS.SETTLE.TITLE)}>
       <div className="pt-2 pb-2 space-y-6">
         
-        {/* [REFAC]: Component extret per neteja visual */}
         <HolographicTicket 
           amount={settlement.amount}
           currency={tripData.currency}
@@ -54,10 +58,10 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
           toUser={toUser}
         />
 
-        {/* --- PAYMENT METHOD SELECTOR --- */}
         <div className="space-y-3">
             <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-2">
-                {LITERALS.MODALS.SETTLE.METHOD_LABEL}
+                {/* [REFACTOR] */}
+                {t('MODALS.SETTLE.METHOD_LABEL', LITERALS.MODALS.SETTLE.METHOD_LABEL)}
             </label>
             <div className="grid grid-cols-4 gap-2">
                 {PAYMENT_METHODS.map((pm) => {
@@ -82,14 +86,14 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
             </div>
         </div>
 
-        {/* --- ACTION BUTTON --- */}
         <Button 
             onClick={handleConfirm}
             fullWidth
             icon={CheckCircle2}
             className="h-14 rounded-2xl text-sm font-black uppercase tracking-wider bg-slate-900 dark:bg-white text-white dark:text-black shadow-xl hover:scale-[1.02] active:scale-95 transition-transform"
         >
-            {LITERALS.MODALS.SETTLE.BTN_CONFIRM} {currentMethodLabel}
+            {/* [REFACTOR] */}
+            {t('MODALS.SETTLE.BTN_CONFIRM', LITERALS.MODALS.SETTLE.BTN_CONFIRM)} {currentMethodLabel}
         </Button>
 
       </div>

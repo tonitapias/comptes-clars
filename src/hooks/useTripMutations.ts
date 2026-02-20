@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useTripState, useTripDispatch } from '../context/TripContext'; // [RISC ZERO]: Importem els nous hooks separats
+import { useTripState, useTripDispatch } from '../context/TripContext';
 import { ToastType } from '../components/Toast';
 import { calculateBalances } from '../services/billingService';
 import { Currency, CategoryId, SplitType, Settlement } from '../types'; 
@@ -19,19 +19,26 @@ const getErrorMessage = (error: unknown): string => {
 export function useTripMutations() {
   const navigate = useNavigate();
   
-  // [RISC ZERO]: Consumim l'estat i les accions per separat!
   const { tripData, currentUser, expenses } = useTripState();
   const actions = useTripDispatch();
   
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
 
-  // Funcions estables
   const showToast = useCallback((msg: string, type: ToastType = 'success') => setToast({ msg, type }), []);
   const clearToast = useCallback(() => setToast(null), []);
 
-  // [PREPARACIÓ REACT QUERY]: Embolcallem totes les mutacions amb useCallback
-  // Això garanteix que els Modals que reben aquestes funcions per props no es re-renderitzin innecessàriament.
+  // [NOU]: Funció validadora de connectivitat abans d'atacar el servidor
+  const checkNetworkStatus = useCallback((): boolean => {
+    if (!navigator.onLine) {
+      showToast(LITERALS.ACTIONS.CONNECTION_ERROR || 'Sense connexió a Internet', 'error');
+      return false;
+    }
+    return true;
+  }, [showToast]);
+
   const updateTripSettings = useCallback(async (name: string, currency: Currency) => {
+    if (!checkNetworkStatus()) return false; // [NOU]: Early Return
+
     try {
       await actions.updateTripSettings(name, new Date().toISOString(), currency);
       showToast(currency ? LITERALS.ACTIONS.UPDATE_SETTINGS_SUCCESS : LITERALS.ACTIONS.UPDATE_NAME_SUCCESS);
@@ -40,9 +47,11 @@ export function useTripMutations() {
       showToast(getErrorMessage(e), 'error'); 
       return false;
     }
-  }, [actions, showToast]);
+  }, [actions, showToast, checkNetworkStatus]);
 
   const settleDebt = useCallback(async (settlement: Settlement, method: string = 'manual') => {
+    if (!checkNetworkStatus()) return false; // [NOU]: Early Return
+
     try {
       const titles: Record<string, string> = {
         bizum: LITERALS.MODALS.PAYMENT_TITLES.BIZUM,
@@ -78,9 +87,11 @@ export function useTripMutations() {
       showToast(LITERALS.ACTIONS.UNEXPECTED_ERROR, 'error');
       return false;
     }
-  }, [actions, showToast]);
+  }, [actions, showToast, checkNetworkStatus]);
 
   const deleteExpense = useCallback(async (id: string) => {
+    if (!checkNetworkStatus()) return false; // [NOU]: Early Return
+
     try {
       const res = await actions.deleteExpense(id);
       if (res.success) {
@@ -94,9 +105,10 @@ export function useTripMutations() {
       showToast(LITERALS.ACTIONS.CONNECTION_ERROR, 'error');
       return false;
     }
-  }, [actions, showToast]);
+  }, [actions, showToast, checkNetworkStatus]);
 
   const leaveTrip = useCallback(async () => {
+    if (!checkNetworkStatus()) return; // [NOU]: Early Return
     if (!currentUser || !tripData) return;
 
     const balances = calculateBalances(expenses, tripData.users);
@@ -116,9 +128,10 @@ export function useTripMutations() {
     } else {
       showToast(res.error || LITERALS.ACTIONS.LEAVE_TRIP_ERROR, 'error');
     }
-  }, [actions, currentUser, tripData, expenses, navigate, showToast]);
+  }, [actions, currentUser, tripData, expenses, navigate, showToast, checkNetworkStatus]);
 
   const joinTrip = useCallback(async () => {
+     if (!checkNetworkStatus()) return; // [NOU]: Early Return
      if(!currentUser) return;
      try {
          await actions.joinTrip(currentUser);
@@ -126,9 +139,11 @@ export function useTripMutations() {
      } catch(e: unknown) { 
          showToast(LITERALS.ACTIONS.JOIN_TRIP_ERROR, 'error');
      }
-  }, [actions, currentUser, showToast]);
+  }, [actions, currentUser, showToast, checkNetworkStatus]);
 
   const deleteTrip = useCallback(async () => {
+    if (!checkNetworkStatus()) return; // [NOU]: Early Return
+
     try {
       await actions.deleteTrip();
       showToast(LITERALS.ACTIONS.DELETE_TRIP_SUCCESS);
@@ -138,9 +153,8 @@ export function useTripMutations() {
       console.error(e);
       showToast(getErrorMessage(e) || LITERALS.ACTIONS.DELETE_TRIP_ERROR, 'error'); 
     }
-  }, [actions, navigate, showToast]);
+  }, [actions, navigate, showToast, checkNetworkStatus]);
 
-  // L'estructura de retorn roman EXACTAMENT IGUAL
   return {
     toast,
     showToast,
