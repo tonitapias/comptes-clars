@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { Expense, TripUser, MoneyCents } from '../types';
 import * as billingService from '../services/billingService';
-import { toCents } from '../types'; // [RISC ZERO]: Necessitem el toCents per l'estat inicial
 
 interface CalculationsResult {
   filteredExpenses: Expense[];
@@ -13,7 +12,7 @@ interface CalculationsResult {
   totalGroupSpending: MoneyCents;
   displayedTotal: MoneyCents;
   isSearching: boolean; 
-  isCalculating: boolean; // [NOU]: Per mostrar petits spinners a la UI si volem
+  isCalculating: boolean; 
 }
 
 export function useTripCalculations(
@@ -25,15 +24,6 @@ export function useTripCalculations(
   
   const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
   const [isSearching, setIsSearching] = useState(false);
-
-  // [NOU]: Estat independent per retenir els valors asíncrons sense blanquejar la pantalla
-  const [calcState, setCalcState] = useState({
-    balances: [] as ReturnType<typeof billingService.calculateBalances>,
-    categoryStats: [] as ReturnType<typeof billingService.calculateCategoryStats>,
-    settlements: [] as ReturnType<typeof billingService.calculateSettlements>,
-    totalGroupSpending: toCents(0),
-    isCalculating: true
-  });
 
   useEffect(() => {
     if (!searchQuery) {
@@ -94,46 +84,26 @@ export function useTripCalculations(
       });
   }, [expenses, debouncedQuery, filterCategory, searchIndexMap]);
 
-  // [NOU] El Total Mostrat segueix sent síncron perquè depèn dels filtres (és molt ràpid)
   const displayedTotal = useMemo(() => 
     billingService.calculateTotalSpending(filteredExpenses), 
   [filteredExpenses]);
 
-  // [RISC ZERO]: Treiem el pes pesant del Main Thread.
-  useEffect(() => {
-    // 1. Marquem que estem calculant (permet posar estats de càrrega a la UI)
-    // però CONSERVEM les dades anteriors perquè la gràfica no parpellegi.
-    setCalcState(prev => ({ ...prev, isCalculating: true }));
+  // [RISC ZERO]: Eliminem el useState i useEffect asíncron que causaven el bucle.
+  // Utilitzem useMemo per calcular les dades derivades de forma síncrona, segura i òptima.
+  const balances = useMemo(() => billingService.calculateBalances(expenses, users), [expenses, users]);
+  const categoryStats = useMemo(() => billingService.calculateCategoryStats(expenses), [expenses]);
+  const settlements = useMemo(() => billingService.calculateSettlements(balances), [balances]);
+  const totalGroupSpending = useMemo(() => billingService.calculateTotalSpending(expenses), [expenses]);
 
-    // 2. Cedim el control a React perquè renderitzi el frame actual (ex: l'animació d'afegir despesa)
-    const workerTimer = setTimeout(() => {
-      const balances = billingService.calculateBalances(expenses, users);
-      const categoryStats = billingService.calculateCategoryStats(expenses);
-      const settlements = billingService.calculateSettlements(balances);
-      const totalGroupSpending = billingService.calculateTotalSpending(expenses);
-
-      // 3. Actualitzem amb les noves dades
-      setCalcState({
-        balances,
-        categoryStats,
-        settlements,
-        totalGroupSpending,
-        isCalculating: false
-      });
-    }, 0); // Un timeout de 0 mou l'execució al final de la cua d'events (Event Loop)
-
-    return () => clearTimeout(workerTimer);
-  }, [expenses, users]); // Només es recalcula si canvien de veritat les dades, no els filtres.
-
-  // [RISC ZERO]: Retornem l'objecte amb la mateixa signatura que l'antic Hook
+  // Retornem l'objecte amb la mateixa signatura que l'antic Hook
   return { 
     filteredExpenses,
-    balances: calcState.balances, 
-    categoryStats: calcState.categoryStats, 
-    settlements: calcState.settlements, 
-    totalGroupSpending: calcState.totalGroupSpending, 
+    balances, 
+    categoryStats, 
+    settlements, 
+    totalGroupSpending, 
     displayedTotal,
     isSearching,
-    isCalculating: calcState.isCalculating
+    isCalculating: false // Ja no hi ha timeout asíncron, els càlculs són immediats
   };
 }

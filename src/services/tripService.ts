@@ -91,17 +91,35 @@ const recalculateTripSettledStatus = async (tripId: string) => {
 const logAction = async (tripId: string, message: string, action: LogEntry['action']) => {
   try {
     const currentUser = auth.currentUser;
+    let finalUserName = currentUser?.displayName || 'Algú';
+
+    // [RISC ZERO]: Anem a buscar el nom personalitzat de l'usuari DINS d'aquest viatge.
+    // Així, si es canvia el nom a "Joan", el registre farà servir "Joan" i no el seu Google/Email alias.
+    if (currentUser) {
+        const tripSnap = await getDoc(getTripRef(tripId));
+        if (tripSnap.exists()) {
+            const tripData = tripSnap.data();
+            const matchedUser = tripData.users.find((u: TripUser) => u.linkedUid === currentUser.uid);
+            if (matchedUser && matchedUser.name) {
+                finalUserName = matchedUser.name;
+            }
+        }
+    }
+
     const log: LogEntry = {
       id: generateId(),
       action,
       message,
       userId: currentUser?.uid || 'anonymous',
-      userName: currentUser?.displayName || 'Algú',
+      userName: finalUserName,
       timestamp: new Date().toISOString()
     };
+    
     const updatePayload: UpdateData<TripData> = { logs: arrayUnion(sanitizeData(log)) };
     await updateDoc(getTripRef(tripId), updatePayload);
-  } catch (e) { console.error("Error guardant log:", e); }
+  } catch (e) { 
+      console.error("Error guardant log:", e); 
+  }
 };
 
 export const TripService = {
@@ -116,7 +134,6 @@ export const TripService = {
     }
   },
 
-  // [NOU] Funció específica per obtenir les despeses d'un viatge i verificar el deute remot
   getTripExpenses: async (tripId: string): Promise<Expense[]> => {
     try {
       const snap = await getDocs(getExpensesCol(tripId));
@@ -248,13 +265,38 @@ export const TripService = {
     if (!snap.exists()) return;
     
     const data = snap.data(); 
-    const userToRemove = data.users.find((u: TripUser) => u.id === internalUserId);
-    if (!userToRemove) return;
+    
+    const userIndex = data.users.findIndex((u: TripUser) => u.id === internalUserId);
+    if (userIndex === -1) return;
 
+    const userToRemove = data.users[userIndex];
     const uidToRemove = userToRemove.linkedUid;
 
+    await recalculateTripSettledStatus(tripId);
+
+    const updatedUsers = [...data.users];
+    updatedUsers[userIndex] = {
+        ...userToRemove,
+        linkedUid: null,      
+        isAuth: false,        
+        name: `${userToRemove.name} (Ha sortit)` 
+    };
+
+    const currentUser = auth.currentUser;
+    const newLog: LogEntry = {
+      id: generateId(),
+      action: 'settings',
+      message: `ha sortit del grup`,
+      userId: currentUser?.uid || internalUserId,
+      userName: userToRemove.name || currentUser?.displayName || 'Algú',
+      timestamp: new Date().toISOString()
+    };
+
+    // [ESCRIPTURA ATÒMICA]: Empaquetem la modificació d'usuaris, 
+    // l'afegiment del log i l'expulsió a memberUids en una SOLA transacció.
     const updatePayload: UpdateData<TripData> = { 
-      users: arrayRemove(sanitizeData(userToRemove)) 
+      users: updatedUsers,
+      logs: arrayUnion(sanitizeData(newLog))
     };
     
     if (uidToRemove) {
@@ -262,8 +304,6 @@ export const TripService = {
     }
 
     await updateDoc(tripRef, updatePayload);
-    await logAction(tripId, `ha sortit del grup`, 'settings');
-    await recalculateTripSettledStatus(tripId);
   },
 
   linkUserToAccount: async (tripId: string, tripUserId: string, user: User) => {

@@ -31,12 +31,14 @@ export default function TripSettingsModal({
   const [selectedCurrencyCode, setSelectedCurrencyCode] = useState<string>('EUR');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
 
   useEffect(() => {
     if (isOpen && tripData) {
       setName(tripData.name);
       setSelectedCurrencyCode(tripData.currency.code);
       setShowDeleteConfirm(false);
+      setShowLeaveConfirm(false);
     }
   }, [isOpen, tripData]);
 
@@ -65,13 +67,11 @@ export default function TripSettingsModal({
 
   if (!tripData) return null;
 
-  // [SOLUCIÓ BLINDADA]: Ens assegurem de mirar l'ordre real d'inserció a la base de dades (memberUids),
-  // no l'ordre de l'array visual (users) que podria estar alterat/ordenat.
+  // [SOLUCIÓ BLINDADA - RISC ZERO]
   const isOwner = Boolean(
-      currentUser?.uid && (
-          tripData.ownerId === currentUser.uid || 
-          tripData.memberUids?.[0] === currentUser.uid
-      )
+      currentUser?.uid && 
+      tripData?.ownerId && 
+      currentUser.uid === tripData.ownerId
   );
 
   return (
@@ -166,23 +166,56 @@ export default function TripSettingsModal({
 
         {/* --- DANGER ZONE --- */}
         <div className="pt-8 border-t border-slate-100 dark:border-slate-800 space-y-3">
+            
             {/* Leave Trip (Tothom pot sortir del viatge) */}
-            <button 
-                type="button"
-                onClick={() => { trigger('medium'); onLeave(); }}
-                className="w-full flex items-center justify-between p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-600 transition-all group"
-            >
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 transition-colors">
-                        <LogOut size={20} />
+            {showLeaveConfirm ? (
+                <div className="bg-amber-500/5 border border-amber-500/20 rounded-3xl p-6 animate-fade-in-up">
+                    <div className="flex items-start gap-4 mb-6">
+                        <div className="p-3 bg-amber-500/10 rounded-2xl text-amber-500 border border-amber-500/20">
+                            <LogOut size={24} strokeWidth={2.5} />
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-amber-600 dark:text-amber-400 text-base">Sortir del viatge?</h4>
+                            <p className="text-xs text-amber-600/70 dark:text-amber-400/70 mt-1 leading-relaxed max-w-[250px]">
+                                Deixaràs de tenir accés i <strong>no hi podràs tornar a entrar</strong> tret que el creador et torni a convidar.
+                            </p>
+                        </div>
                     </div>
-                    <div className="text-left">
-                        <span className="block text-sm font-bold text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
-                            Sortir del Viatge
-                        </span>
+                    <div className="flex gap-3">
+                        <button 
+                            type="button"
+                            onClick={() => setShowLeaveConfirm(false)}
+                            className="flex-1 py-3.5 bg-transparent border border-amber-200 dark:border-amber-900 rounded-xl text-amber-600 dark:text-amber-400 font-bold text-xs hover:bg-amber-50 dark:hover:bg-amber-900/10 transition-colors"
+                        >
+                            Cancel·lar
+                        </button>
+                        <button 
+                            type="button"
+                            onClick={() => { trigger('medium'); onLeave(); }}
+                            className="flex-1 py-3.5 bg-amber-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-amber-500/30 hover:bg-amber-600 active:scale-95 transition-all flex items-center justify-center gap-2"
+                        >
+                            <LogOut size={16} /> Confirmar
+                        </button>
                     </div>
                 </div>
-            </button>
+            ) : (
+                <button 
+                    type="button"
+                    onClick={() => { trigger('selection'); setShowLeaveConfirm(true); }}
+                    className="w-full flex items-center justify-between p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 hover:border-amber-200 dark:hover:border-amber-900/50 hover:bg-amber-50 dark:hover:bg-amber-900/10 transition-all group"
+                >
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-amber-500 group-hover:bg-amber-100 dark:group-hover:bg-amber-900/50 transition-colors">
+                            <LogOut size={20} />
+                        </div>
+                        <div className="text-left">
+                            <span className="block text-sm font-bold text-slate-600 dark:text-slate-300 group-hover:text-amber-700 dark:group-hover:text-amber-400 transition-colors">
+                                Sortir del Viatge
+                            </span>
+                        </div>
+                    </div>
+                </button>
+            )}
 
             {/* Delete Trip (NOMÉS VISIBLE PER AL PROPIETARI) */}
             {isOwner && (

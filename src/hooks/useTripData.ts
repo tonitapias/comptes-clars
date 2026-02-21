@@ -10,8 +10,6 @@ export function useTripData(tripId: string | undefined) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // [SAFE-FIX]: Neteja d'estat segura. Evitem que l'usuari vegi
-    // dades d'un altre viatge o que l'spinner quedi penjat si surt de la ruta.
     if (!tripId) {
       setTripData(null);
       setExpenses([]);
@@ -22,8 +20,6 @@ export function useTripData(tripId: string | undefined) {
     setLoading(true);
     setError(null);
 
-    // [SAFE-FIX]: Semàfors. Sincronitzem l'aparició de dades perquè
-    // el renderitzat inicial sigui perfecte, sense parpellejos.
     let isTripReady = false;
     let isExpensesReady = false;
 
@@ -46,7 +42,10 @@ export function useTripData(tripId: string | undefined) {
       isTripReady = true;
       resolveLoading();
     }, (err: any) => { 
-      console.error(err);
+      // Si hem sortit o ens han fet fora silenciarem l'error groc a consola
+      if (err?.code !== 'permission-denied') {
+        console.error(err);
+      }
       setError(err?.code === 'permission-denied' ? "⛔ Accés denegat." : "Error carregant el grup.");
       isTripReady = true;
       resolveLoading();
@@ -59,7 +58,10 @@ export function useTripData(tripId: string | undefined) {
       isExpensesReady = true;
       resolveLoading();
     }, (err: any) => {
-      console.error(err);
+      // Si estem sortint del viatge no mostrem error a consola, ja que és un comportament natural
+      if (err?.code !== 'permission-denied') {
+        console.error("Error carregant despeses:", err);
+      }
       isExpensesReady = true;
       resolveLoading();
     });
