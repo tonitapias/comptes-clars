@@ -1,3 +1,4 @@
+// src/hooks/useTripMutations.ts
 import { useTranslation } from 'react-i18next';
 import { parseAppError } from '../utils/errorHandler';
 import { useState, useCallback } from 'react';
@@ -7,6 +8,7 @@ import { ToastType } from '../components/Toast';
 import { calculateBalances } from '../services/billingService'; 
 import { Currency, CategoryId, SplitType, Settlement } from '../types'; 
 import { LITERALS } from '../constants/literals';
+import { BUSINESS_RULES } from '../config/businessRules';
 
 const SETTLEMENT_CATEGORY: CategoryId = 'transfer';
 const SETTLEMENT_SPLIT_TYPE: SplitType = 'equal';
@@ -72,6 +74,7 @@ export function useTripMutations() {
     }
   }, [actions, showToast, t]);
 
+  // [CORRECCIÓ]: Aquesta és la funció que faltava!
   const deleteExpense = useCallback(async (id: string) => {
     try {
       const res = await actions.deleteExpense(id);
@@ -95,7 +98,8 @@ export function useTripMutations() {
     const myUser = tripData.users.find(u => u.linkedUid === currentUser.uid);
     const myBalance = balances.find(b => b.userId === myUser?.id)?.amount || 0;
 
-    if (Math.abs(myBalance) > 1) {
+    // [RISC ZERO]: Ús de la constant de negoci centralitzada en comptes del '1'
+    if (Math.abs(myBalance) > BUSINESS_RULES.MAX_LEAVE_BALANCE_MARGIN) {
       showToast("No pots sortir del viatge fins que no saldis els teus deutes o et paguin el que et deuen.", "error");
       return;
     }
@@ -130,11 +134,9 @@ export function useTripMutations() {
      }
   }, [actions, currentUser, showToast, t]);
 
-  // LA MÀGIA DEL RISC ZERO (Doble comprovació al nucli)
   const deleteTrip = useCallback(async () => {
     if (!tripData || !currentUser) return;
 
-    // Utilitzem la mateixa validació estricta (memberUids)
     const isOwner = Boolean(
         currentUser.uid && (
             tripData.ownerId === currentUser.uid || 
@@ -144,7 +146,7 @@ export function useTripMutations() {
     
     if (!isOwner) {
         showToast("Accés denegat: Només el creador pot eliminar el projecte sencer.", 'error');
-        return; // Aturem la funció en sec.
+        return; 
     }
 
     try {
@@ -165,7 +167,7 @@ export function useTripMutations() {
     mutations: {
       updateTripSettings,
       settleDebt,
-      deleteExpense,
+      deleteExpense, // Ara ja està definida a dalt!
       leaveTrip,
       joinTrip,
       deleteTrip

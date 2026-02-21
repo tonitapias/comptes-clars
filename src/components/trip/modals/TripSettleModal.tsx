@@ -1,3 +1,4 @@
+// src/components/trip/modals/TripSettleModal.tsx
 import { useState, useMemo } from 'react';
 import { CheckCircle2, Smartphone, Banknote, Building2, CreditCard } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -5,12 +6,10 @@ import Modal from '../../Modal';
 import Button from '../../Button';
 import HolographicTicket from '../HolographicTicket'; 
 import { Settlement, TripUser } from '../../../types';
-import { useTrip } from '../../../context/TripContext';
+import { useTripState } from '../../../context/TripContext'; // <-- CANVI AQUÍ (Substituïm useTrip per useTripState)
 import { useHapticFeedback } from '../../../hooks/useHapticFeedback';
 import { LITERALS } from '../../../constants/literals';
 
-// [RISC ZERO]: Extraiem només la configuració estàtica. 
-// No avaluem traduccions fora de l'àmbit de React.
 const PAYMENT_METHOD_CONFIG = [
   { id: 'manual', icon: Banknote, translationKey: 'MODALS.PAYMENT_METHODS.MANUAL', fallback: LITERALS.MODALS.PAYMENT_METHODS.MANUAL },
   { id: 'bizum', icon: Smartphone, translationKey: 'MODALS.PAYMENT_METHODS.BIZUM', fallback: LITERALS.MODALS.PAYMENT_METHODS.BIZUM },
@@ -26,14 +25,13 @@ interface TripSettleModalProps {
 }
 
 export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm }: TripSettleModalProps) {
-  const { tripData } = useTrip();
+  // [RISC ZERO]: Només demanem l'estat, reduint la dependència i els re-renders
+  const { tripData } = useTripState(); 
   const { trigger } = useHapticFeedback();
   const [method, setMethod] = useState<string>('manual');
   
   const { t } = useTranslation();
 
-  // [RISC ZERO]: Construïm l'array de botons dinàmicament memoitzat.
-  // Sempre utilitzem el fallback cap a LITERALS si falta la clau JSON.
   const translatedPaymentMethods = useMemo(() => {
     return PAYMENT_METHOD_CONFIG.map(config => ({
         ...config,
@@ -43,7 +41,6 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
 
   if (!tripData || !settlement) return null;
 
-  // [RISC ZERO]: Fallback explícit per als usuaris esborrats/desconeguts
   const unknownUserText = t('COMMON.UNKNOWN_USER', LITERALS.COMMON.UNKNOWN_USER);
   const getUser = (id: string) => tripData.users.find(u => u.id === id) || { name: unknownUserText, photoUrl: null } as TripUser;
   
@@ -55,7 +52,6 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
       await onConfirm(method); 
   };
 
-  // Obtenim el label del mètode actual seleccionat (segur i traduït)
   const currentMethodLabel = translatedPaymentMethods.find(m => m.id === method)?.label || t('COMMON.PAYMENT', 'Pagament');
 
   return (
