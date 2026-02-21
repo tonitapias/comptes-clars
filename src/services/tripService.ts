@@ -171,22 +171,43 @@ export const TripService = {
     ExpenseSchema.parse(expense); 
     const cleanExpense = sanitizeData(expense);
     const docRef = await addDoc(getExpensesCol(tripId), cleanExpense);
-    await logAction(tripId, `ha afegit "${expense.title}"`, 'create');
+    
+    // [NOU DETALL]: Formatem l'import per mostrar-lo al registre
+    const formattedAmount = (expense.amount / 100).toFixed(2).replace('.', ',');
+    await logAction(tripId, `ha afegit la despesa "${expense.title}" de ${formattedAmount} €`, 'create');
+    
     await recalculateTripSettledStatus(tripId);
     return docRef.id;
   },
 
   updateExpense: async (tripId: string, expenseId: string, expense: Partial<Expense>) => {
     await updateDoc(getExpenseRef(tripId, expenseId), sanitizeData(expense));
-    await logAction(tripId, `ha editat "${expense.title || 'una despesa'}"`, 'update');
+    
+    let detail = '';
+    if (expense.amount) {
+        detail = ` (nou import: ${(expense.amount / 100).toFixed(2).replace('.', ',')} €)`;
+    }
+    
+    await logAction(tripId, `ha modificat la despesa "${expense.title || 'sense nom'}"${detail}`, 'update');
     await recalculateTripSettledStatus(tripId);
   },
 
   deleteExpense: async (tripId: string, expenseId: string) => {
     const snap = await getDoc(getExpenseRef(tripId, expenseId));
-    const title = snap.exists() ? snap.data().title : 'una despesa';
+    let title = 'una despesa';
+    let amountDetail = '';
+    
+    // [NOU DETALL]: Llegim l'import abans d'esborrar per guardar-ho a l'historial
+    if (snap.exists()) {
+        const data = snap.data();
+        title = data.title || title;
+        if (data.amount) {
+            amountDetail = ` de ${(data.amount / 100).toFixed(2).replace('.', ',')} €`;
+        }
+    }
+    
     await deleteDoc(getExpenseRef(tripId, expenseId));
-    await logAction(tripId, `ha eliminat "${title}"`, 'delete');
+    await logAction(tripId, `ha eliminat la despesa "${title}"${amountDetail}`, 'delete');
     await recalculateTripSettledStatus(tripId);
   },
 
@@ -201,7 +222,11 @@ export const TripService = {
       splitType: 'equal' as const
     };
     await addDoc(getExpensesCol(tripId), sanitizeData(repayment));
-    await logAction(tripId, `ha liquidat un deute via ${method}`, 'settle');
+    
+    // [NOU DETALL]: Indiquem la quantitat exacte liquidada
+    const formattedAmount = (settlement.amount / 100).toFixed(2).replace('.', ',');
+    await logAction(tripId, `ha liquidat un deute de ${formattedAmount} € via ${method}`, 'settle');
+    
     await recalculateTripSettledStatus(tripId);
   },
 
