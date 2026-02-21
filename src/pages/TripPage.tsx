@@ -1,4 +1,5 @@
 // src/pages/TripPage.tsx
+import { useEffect, useRef } from 'react'; // [RISC ZERO]: Importem els hooks necessaris
 import { useParams } from 'react-router-dom';
 import { Plus, Loader2, AlertTriangle, UserPlus, Wallet, Receipt, CheckCircle2 } from 'lucide-react'; 
 import { User } from 'firebase/auth';
@@ -36,7 +37,8 @@ export default function TripPageWrapper({ user }: TripPageProps) {
 }
 
 function TripView() {
-  const { tripData, expenses, loading, error, currentUser, isMember } = useTripState(); // <-- CANVI
+  // [RISC ZERO]: Extraiem el nou estat `isOffline` del nostre context
+  const { tripData, expenses, loading, error, currentUser, isMember, isOffline } = useTripState(); 
 
   const modals = useTripModals();
   const filters = useTripFilters();
@@ -46,6 +48,26 @@ function TripView() {
     filteredExpenses, balances, categoryStats, settlements, 
     totalGroupSpending, displayedTotal, isSearching 
   } = useTripCalculations(expenses, tripData?.users || [], filters.searchQuery, filters.filterCategory);
+
+  // [RISC ZERO]: Afegim el cicle de vida per avisar a l'usuari amb Toasts segons la xarxa
+  const wasOffline = useRef(isOffline);
+  
+  useEffect(() => {
+    if (isOffline) {
+      // Ignorem l'avís si només estem carregant per primer cop sense dades
+      if (!loading) {
+        // Mode offline detectat
+        // @ts-ignore - Per si el showToast de useTripMutations no té el 3r argument tipat
+        showToast('Sense connexió a Internet. Mode lectura.', 'warning', Infinity);
+        wasOffline.current = true;
+      }
+    } else if (wasOffline.current) {
+      // Hem recuperat la connexió
+      clearToast(); 
+      showToast('Connexió recuperada', 'success');
+      wasOffline.current = false;
+    }
+  }, [isOffline, loading, showToast, clearToast]);
 
   const userBalance = (() => {
     if (!currentUser || !tripData) return 0;
@@ -123,7 +145,8 @@ function TripView() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 transition-colors duration-500">
-      {toast && <Toast message={toast.msg} type={toast.type} onClose={clearToast} />}
+      {/* [RISC ZERO]: Afegim la propietat duration al Toast per suportar l'Infinity (si ho proveeix el mutator) */}
+      {toast && <Toast message={toast.msg} type={toast.type} duration={(toast as any).duration} onClose={clearToast} />}
       
       <TripHeader 
         displayedTotal={displayedTotal} totalGroupSpending={totalGroupSpending} userBalance={userBalance} 

@@ -18,7 +18,8 @@ export function useTripMutations() {
   const navigate = useNavigate();
   const { t } = useTranslation(); 
   
-  const { tripData, currentUser, expenses } = useTripState();
+  // [RISC ZERO]: Extraiem isOffline de l'estat global
+  const { tripData, currentUser, expenses, isOffline } = useTripState();
   const actions = useTripDispatch();
   
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
@@ -27,6 +28,12 @@ export function useTripMutations() {
   const clearToast = useCallback(() => setToast(null), []);
 
   const updateTripSettings = useCallback(async (name: string, currency: Currency) => {
+    // [RISC ZERO]: Protecció proactiva offline
+    if (isOffline) {
+      showToast("Acció no permesa sense connexió a Internet.", 'warning');
+      return false;
+    }
+
     try {
       await actions.updateTripSettings(name, new Date().toISOString(), currency);
       showToast(currency ? LITERALS.ACTIONS.UPDATE_SETTINGS_SUCCESS : LITERALS.ACTIONS.UPDATE_NAME_SUCCESS);
@@ -35,9 +42,15 @@ export function useTripMutations() {
       showToast(parseAppError(e, t), 'error'); 
       return false;
     }
-  }, [actions, showToast, t]);
+  }, [actions, showToast, t, isOffline]); // [RISC ZERO]: Afegim isOffline a les dependències
 
   const settleDebt = useCallback(async (settlement: Settlement, method: Payment['method'] = 'manual') => {
+    // [RISC ZERO]: Protecció proactiva offline
+    if (isOffline) {
+      showToast("Acció no permesa sense connexió a Internet.", 'warning');
+      return false;
+    }
+
     try {
       const titles: Record<string, string> = {
         bizum: LITERALS.MODALS.PAYMENT_TITLES.BIZUM,
@@ -73,9 +86,15 @@ export function useTripMutations() {
       showToast(parseAppError(e, t), 'error');
       return false;
     }
-  }, [actions, showToast, t]);
+  }, [actions, showToast, t, isOffline]); // [RISC ZERO]: Afegim isOffline a les dependències
 
   const deleteExpense = useCallback(async (id: string) => {
+    // [RISC ZERO]: Protecció proactiva offline
+    if (isOffline) {
+      showToast("Acció no permesa sense connexió a Internet.", 'warning');
+      return false;
+    }
+
     try {
       const res = await actions.deleteExpense(id);
       if (res.success) {
@@ -89,9 +108,15 @@ export function useTripMutations() {
       showToast(parseAppError(e, t), 'error');
       return false;
     }
-  }, [actions, showToast, t]);
+  }, [actions, showToast, t, isOffline]); // [RISC ZERO]: Afegim isOffline a les dependències
 
   const leaveTrip = useCallback(async () => {
+    // [RISC ZERO]: Protecció proactiva offline
+    if (isOffline) {
+      showToast("Acció no permesa sense connexió a Internet.", 'warning');
+      return;
+    }
+
     if (!currentUser || !tripData) return;
 
     const balances = calculateBalances(expenses, tripData.users);
@@ -124,9 +149,15 @@ export function useTripMutations() {
     } catch (e: unknown) {
       showToast(parseAppError(e, t), 'error');
     }
-  }, [actions, currentUser, tripData, expenses, navigate, showToast, t]);
+  }, [actions, currentUser, tripData, expenses, navigate, showToast, t, isOffline]); // [RISC ZERO]: Afegim isOffline a les dependències
 
   const joinTrip = useCallback(async () => {
+     // [RISC ZERO]: Protecció proactiva offline
+     if (isOffline) {
+       showToast("Acció no permesa sense connexió a Internet.", 'warning');
+       return;
+     }
+
      if(!currentUser) return;
      try {
          await actions.joinTrip(currentUser);
@@ -134,9 +165,15 @@ export function useTripMutations() {
      } catch(e: unknown) { 
          showToast(parseAppError(e, t), 'error');
      }
-  }, [actions, currentUser, showToast, t]);
+  }, [actions, currentUser, showToast, t, isOffline]); // [RISC ZERO]: Afegim isOffline a les dependències
 
   const deleteTrip = useCallback(async () => {
+    // [RISC ZERO]: Protecció proactiva offline
+    if (isOffline) {
+      showToast("Acció no permesa sense connexió a Internet.", 'warning');
+      return;
+    }
+
     if (!tripData || !currentUser) return;
 
     const isOwner = Boolean(
@@ -160,7 +197,7 @@ export function useTripMutations() {
       console.error(e);
       showToast(parseAppError(e, t), 'error'); 
     }
-  }, [actions, navigate, showToast, t, tripData, currentUser]);
+  }, [actions, navigate, showToast, t, tripData, currentUser, isOffline]); // [RISC ZERO]: Afegim isOffline a les dependències
 
   const memoizedMutations = useMemo(() => ({
     updateTripSettings,

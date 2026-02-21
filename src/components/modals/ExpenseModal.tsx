@@ -78,7 +78,10 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
   const [isDeleting, setIsDeleting] = useState(false);
 
   const { formState, setters, logic, isSubmitting, exactSplitStats } = useExpenseForm({
-    initialData: initialData || null, users, currency,
+    initialData: initialData || null, 
+    users, 
+    currency,
+    showToast, // [RISC ZERO]: Passem la funció al hook perquè pugui llançar el Toast taronja o d'error de validació elegant
     onSubmit: async (data) => {
       try {
         const expensePayload = data as unknown as Omit<Expense, 'id'>;

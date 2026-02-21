@@ -28,8 +28,11 @@ export const parseAppError = (error: unknown, t: TFunction): string => {
       case 'auth/wrong-password':
       case 'auth/invalid-credential':
         return t('ERRORS.AUTH_INVALID', 'Les credencials no són vàlides.');
+      // [RISC ZERO]: Afegim codis específics de Firestore quan cau la xarxa 'unavailable' i 'failed-precondition'
       case 'auth/network-request-failed':
-        return t('ERRORS.NETWORK', LITERALS.ACTIONS.CONNECTION_ERROR || 'Error de connexió amb el servidor.');
+      case 'unavailable':
+      case 'failed-precondition':
+        return t('ERRORS.NETWORK', LITERALS.ACTIONS.CONNECTION_ERROR || 'Error de connexió amb el servidor. Comprova la teva xarxa.');
       // [ESCALABILITAT]: Aquí es poden afegir més codis en el futur.
     }
   }

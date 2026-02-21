@@ -5,6 +5,8 @@ import { TripUser, Expense, Currency, SplitType } from '../types';
 import { SPLIT_TYPES, CATEGORIES } from '../utils/constants';
 import { ExpenseSchema } from '../utils/validation';
 import { z } from 'zod';
+import { useTripState } from '../context/TripContext'; // [RISC ZERO]: Importem l'estat global per llegir la xarxa
+import { ToastType } from '../components/Toast'; // [RISC ZERO]: Importem els tipus del Toast
 
 // Inferim el tipus de sortida directament de l'esquema Zod
 type ExpenseFormData = z.infer<typeof ExpenseSchema>;
@@ -25,11 +27,15 @@ interface UseExpenseFormProps {
   users: TripUser[];
   currency: Currency; // La mantenim a la interfície per coherència amb qui crida el hook
   onSubmit: (data: ExpenseFormData) => Promise<void>;
+  showToast?: (msg: string, type: ToastType) => void; // [RISC ZERO]: Fem que sigui opcional per no trencar cap integració existent
 }
 
 // CORRECCIÓ 1: Eliminem 'currency' de la desestructuració perquè no el fem servir dins la funció
-export function useExpenseForm({ initialData, users, onSubmit }: UseExpenseFormProps) {
+export function useExpenseForm({ initialData, users, onSubmit, showToast }: UseExpenseFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // [RISC ZERO]: Extraiem l'estat de xarxa en temps real
+  const { isOffline } = useTripState();
 
   // --- ESTAT INICIAL ---
   const initialAmount = initialData 
@@ -87,6 +93,17 @@ export function useExpenseForm({ initialData, users, onSubmit }: UseExpenseFormP
 
     handleSubmit: async (e: React.FormEvent) => {
       e.preventDefault();
+
+      // [RISC ZERO]: Lògica de bloqueig proactiva si no hi ha connexió
+      if (isOffline) {
+        if (showToast) {
+          showToast("Acció no permesa sense connexió a Internet.", 'warning');
+        } else {
+          alert("Acció no permesa sense connexió a Internet."); // Fallback temporal fins que actualitzem el component pare
+        }
+        return; // Aturem la funció en sec, no mostrem espinners ni truquem a la DB
+      }
+
       setIsSubmitting(true);
 
       try {
@@ -108,7 +125,13 @@ export function useExpenseForm({ initialData, users, onSubmit }: UseExpenseFormP
         if (error instanceof z.ZodError) {
              // CORRECCIÓ 2: Usem 'issues' en lloc de 'errors' per evitar conflictes de tipat
              const firstMsg = error.issues[0]?.message || 'Error de validació';
-             alert(firstMsg);
+             
+             // [RISC ZERO]: Fem servir el toast si existeix, sinó alert per mantenir la UI retrocompatible
+             if (showToast) {
+               showToast(firstMsg, 'error');
+             } else {
+               alert(firstMsg);
+             }
         }
       } finally {
         setIsSubmitting(false);

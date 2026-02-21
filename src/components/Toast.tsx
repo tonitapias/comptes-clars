@@ -1,7 +1,7 @@
 import { useEffect, useState, ReactNode } from 'react'; // CORRECCIÓ 1: Eliminem 'React', importem 'ReactNode' per al tipat
-import { CheckCircle2, AlertCircle, X, Info } from 'lucide-react';
+import { CheckCircle2, AlertCircle, X, Info, AlertTriangle } from 'lucide-react'; // [RISC ZERO]: Importem AlertTriangle
 
-export type ToastType = 'success' | 'error' | 'info';
+export type ToastType = 'success' | 'error' | 'info' | 'warning'; // [RISC ZERO]: Afegim la nova variant 'warning'
 
 interface ToastProps {
   message: string;
@@ -12,6 +12,9 @@ interface ToastProps {
 
 export default function Toast({ message, type, onClose, duration = 3000 }: ToastProps) {
   useEffect(() => {
+    // [RISC ZERO]: Permetem toats persistents passant Infinity (ideal per l'estat isOffline)
+    if (duration === Infinity) return;
+    
     const timer = setTimeout(onClose, duration);
     return () => clearTimeout(timer);
   }, [duration, onClose]);
@@ -21,13 +24,15 @@ export default function Toast({ message, type, onClose, duration = 3000 }: Toast
   const styles: Record<ToastType, string> = {
     success: 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800',
     error: 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-200 dark:border-rose-800',
-    info: 'bg-indigo-50 text-indigo-800 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-200 dark:border-indigo-800'
+    info: 'bg-indigo-50 text-indigo-800 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-200 dark:border-indigo-800',
+    warning: 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-800' // [RISC ZERO]: Estils per la nova variant
   };
 
   const icons: Record<ToastType, ReactNode> = {
     success: <CheckCircle2 size={20} className="text-emerald-500" />,
     error: <AlertCircle size={20} className="text-rose-500" />,
-    info: <Info size={20} className="text-indigo-500" />
+    info: <Info size={20} className="text-indigo-500" />,
+    warning: <AlertTriangle size={20} className="text-amber-500" /> // [RISC ZERO]: Icona per la nova variant
   };
 
   return (
@@ -51,10 +56,11 @@ export default function Toast({ message, type, onClose, duration = 3000 }: Toast
 
 // 2. El Hook que faltava (per fer servir "const { toast, showToast } = useToast()")
 export function useToast() {
-  const [toastConfig, setToastConfig] = useState<{ message: string; type: ToastType } | null>(null);
+  // [RISC ZERO]: Afegim "duration" a l'estat per poder customitzar-ho a cada crida
+  const [toastConfig, setToastConfig] = useState<{ message: string; type: ToastType; duration?: number } | null>(null);
 
-  const showToast = (message: string, type: ToastType = 'info') => {
-    setToastConfig({ message, type });
+  const showToast = (message: string, type: ToastType = 'info', duration?: number) => {
+    setToastConfig({ message, type, duration });
   };
 
   const closeToast = () => {
@@ -66,8 +72,10 @@ export function useToast() {
       message={toastConfig.message}
       type={toastConfig.type}
       onClose={closeToast}
+      duration={toastConfig.duration} // [RISC ZERO]: Passem el duration, o fallback a per defecte si és undefined
     />
   ) : null;
 
-  return { toast, showToast };
+  // [RISC ZERO]: Retornem closeToast també, per si una vista necessita netejar l'avís de xarxa en detectar que ja hi ha internet
+  return { toast, showToast, closeToast };
 }

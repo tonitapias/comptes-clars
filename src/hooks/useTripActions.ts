@@ -1,22 +1,28 @@
 // src/hooks/useTripActions.ts
 
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next'; // [RISC ZERO]: Importem el hook de traduccions
 import { TripService } from '../services/tripService';
 import { Settlement, Expense, Currency, TripData } from '../types';
 import { User } from 'firebase/auth';
+import { parseAppError } from '../utils/errorHandler'; // [RISC ZERO]: Importem el nostre gestor centralitzat
 
 export function useTripActions(tripId: string | undefined) {
   const [loadingAction, setLoadingAction] = useState(false);
+  const { t } = useTranslation(); // [RISC ZERO]: Instanciem les traduccions
 
   const execute = async <T>(action: () => Promise<T>): Promise<{ success: boolean; data?: T; error?: string }> => {
-    if (!tripId) return { success: false, error: "ID de viatge no trobat" };
+    // [RISC ZERO]: Donem feedback deduït del sistema multi-idioma si no hi ha ID
+    if (!tripId) return { success: false, error: t('ERRORS.NOT_FOUND', "ID de viatge no trobat") }; 
+    
     setLoadingAction(true);
     try {
       const data = await action();
       return { success: true, data };
     } catch (e: unknown) {
       console.error(e);
-      const errorMessage = e instanceof Error ? e.message : "Error inesperat";
+      // [RISC ZERO]: Passem l'error pel nostre filtre intel·ligent per interceptar caigudes de xarxa o problemes de Firebase
+      const errorMessage = parseAppError(e, t);
       return { success: false, error: errorMessage };
     } finally {
       setLoadingAction(false);

@@ -14,6 +14,7 @@ interface TripState {
   error: string | null;
   currentUser: User | null;
   isMember: boolean;
+  isOffline: boolean; // [RISC ZERO]: Afegim isOffline a la interfície de l'estat
 }
 
 type TripDispatch = ReturnType<typeof useTripActions>;
@@ -33,13 +34,15 @@ const TripMigrator = React.memo(({ tripId, tripData }: { tripId: string | undefi
 });
 
 export function TripProvider({ children, tripId, currentUser }: TripProviderProps) {
-  const { tripData, expenses, loading, error } = useTripData(tripId);
+  // [RISC ZERO]: Extraiem isOffline del nostre hook recentment actualitzat
+  const { tripData, expenses, loading, error, isOffline } = useTripData(tripId);
   const actions = useTripActions(tripId);
   const isMember = !!(currentUser && tripData?.memberUids?.includes(currentUser.uid));
 
+  // [RISC ZERO]: Afegim isOffline al value del Provider i a la llista de dependències del useMemo
   const stateValue = useMemo<TripState>(() => ({
-    tripId, tripData, expenses, loading, error, currentUser, isMember
-  }), [tripId, tripData, expenses, loading, error, currentUser, isMember]);
+    tripId, tripData, expenses, loading, error, currentUser, isMember, isOffline
+  }), [tripId, tripData, expenses, loading, error, currentUser, isMember, isOffline]);
 
   const dispatchValue = useMemo<TripDispatch>(() => actions, [actions]);
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { doc, collection, onSnapshot } from 'firebase/firestore';
+import { doc, collection, onSnapshot, FirestoreError } from 'firebase/firestore';
 import { db, appId } from '../config/firebase';
 import { TripData, Expense } from '../types';
 
@@ -8,6 +8,23 @@ export function useTripData(tripId: string | undefined) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // [RISC ZERO]: Afegim estat de xarxa natiu sense alterar la lògica existent de dades.
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+
+  useEffect(() => {
+    // [RISC ZERO]: Listeners per a la resiliència de xarxa
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   useEffect(() => {
     if (!tripId) {
@@ -41,7 +58,7 @@ export function useTripData(tripId: string | undefined) {
       }
       isTripReady = true;
       resolveLoading();
-    }, (err: any) => { 
+    }, (err: FirestoreError) => { // [RISC ZERO]: Substituït 'any' per FirestoreError
       // Si hem sortit o ens han fet fora silenciarem l'error groc a consola
       if (err?.code !== 'permission-denied') {
         console.error(err);
@@ -57,7 +74,7 @@ export function useTripData(tripId: string | undefined) {
       setExpenses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Expense[]);
       isExpensesReady = true;
       resolveLoading();
-    }, (err: any) => {
+    }, (err: FirestoreError) => { // [RISC ZERO]: Substituït 'any' per FirestoreError
       // Si estem sortint del viatge no mostrem error a consola, ja que és un comportament natural
       if (err?.code !== 'permission-denied') {
         console.error("Error carregant despeses:", err);
@@ -72,5 +89,6 @@ export function useTripData(tripId: string | undefined) {
     };
   }, [tripId]);
 
-  return { tripData, expenses, loading, error };
+  // [RISC ZERO]: Retornem l'isOffline perquè ho pugui consumir qualsevol component si ho necessita en el futur
+  return { tripData, expenses, loading, error, isOffline };
 }
