@@ -1,7 +1,6 @@
 // src/components/trip/modals/TripSettleModal.tsx
 import { useState, useMemo } from 'react';
-// [CANVI ZERO RISC]: Importem 'LucideIcon' de la llibreria d'icones
-import { CheckCircle2, Smartphone, Banknote, Building2, CreditCard, LucideIcon } from 'lucide-react';
+import { CheckCircle2, Smartphone, Banknote, Building2, CreditCard, LucideIcon, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import Modal from '../../Modal';
 import Button from '../../Button';
@@ -11,7 +10,6 @@ import { useTripState } from '../../../context/TripContext';
 import { useHapticFeedback } from '../../../hooks/useHapticFeedback';
 import { LITERALS } from '../../../constants/literals';
 
-// [CANVI ZERO RISC]: Substituïm 'icon: any' per 'icon: LucideIcon'
 const PAYMENT_METHOD_CONFIG: Array<{ id: Payment['method'], icon: LucideIcon, translationKey: string, fallback: string }> = [
   { id: 'manual', icon: Banknote, translationKey: 'MODALS.PAYMENT_METHODS.MANUAL', fallback: LITERALS.MODALS.PAYMENT_METHODS.MANUAL },
   { id: 'bizum', icon: Smartphone, translationKey: 'MODALS.PAYMENT_METHODS.BIZUM', fallback: LITERALS.MODALS.PAYMENT_METHODS.BIZUM },
@@ -31,6 +29,8 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
   const { trigger } = useHapticFeedback();
   
   const [method, setMethod] = useState<Payment['method']>('manual');
+  // [REFACTOR RISC ZERO]: Afegim estat de càrrega per evitar dobles peticions
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const { t } = useTranslation();
 
@@ -50,8 +50,14 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
   const toUser = getUser(settlement.to);
 
   const handleConfirm = async () => {
+      if (isSubmitting) return; // Bloquegem si ja s'està enviant
+      
       trigger('success');
+      setIsSubmitting(true);
+      
       await onConfirm(method); 
+      
+      setIsSubmitting(false); // Restaurem l'estat per si el modal no es desmunta a temps
   };
 
   const currentMethodLabel = translatedPaymentMethods.find(m => m.id === method)?.label || t('COMMON.PAYMENT', 'Pagament');
@@ -78,12 +84,19 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
                     return (
                         <button
                             key={pm.id}
-                            onClick={() => { trigger('selection'); setMethod(pm.id); }}
+                            onClick={() => { 
+                              if (!isSubmitting) {
+                                trigger('selection'); 
+                                setMethod(pm.id); 
+                              }
+                            }}
+                            disabled={isSubmitting} // Deshabilitem selecció durant l'enviament
                             className={`
                                 flex flex-col items-center justify-center gap-2 py-3 rounded-2xl border transition-all duration-200 relative overflow-hidden
                                 ${isSelected 
                                     ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/30 ring-2 ring-indigo-500/20' 
                                     : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400 hover:border-slate-300 dark:hover:border-slate-700'}
+                                ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}
                             `}
                         >
                             <Icon size={20} strokeWidth={2.5} />
@@ -97,10 +110,18 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
         <Button 
             onClick={handleConfirm}
             fullWidth
-            icon={CheckCircle2}
-            className="h-14 rounded-2xl text-sm font-black uppercase tracking-wider bg-slate-900 dark:bg-white text-white dark:text-black shadow-xl hover:scale-[1.02] active:scale-95 transition-transform"
+            disabled={isSubmitting} // Utilitzem disabled si el component Button ho suporta nativament
+            icon={isSubmitting ? Loader2 : CheckCircle2}
+            className={`
+              h-14 rounded-2xl text-sm font-black uppercase tracking-wider bg-slate-900 dark:bg-white text-white dark:text-black shadow-xl transition-all
+              ${isSubmitting ? 'opacity-70 cursor-not-allowed' : 'hover:scale-[1.02] active:scale-95'}
+            `}
         >
-            {t('MODALS.SETTLE.BTN_CONFIRM', LITERALS.MODALS.SETTLE.BTN_CONFIRM)} {currentMethodLabel}
+            {isSubmitting ? (
+               <span className="animate-pulse">{t('COMMON.PROCESSING', 'Processant...')}</span>
+            ) : (
+               <>{t('MODALS.SETTLE.BTN_CONFIRM', LITERALS.MODALS.SETTLE.BTN_CONFIRM)} {currentMethodLabel}</>
+            )}
         </Button>
 
       </div>

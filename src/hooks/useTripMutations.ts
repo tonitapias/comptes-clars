@@ -25,11 +25,17 @@ export function useTripMutations() {
   const showToast = useCallback((msg: string, type: ToastType = 'success') => setToast({ msg, type }), []);
   const clearToast = useCallback(() => setToast(null), []);
 
-  const updateTripSettings = useCallback(async (name: string, currency: Currency) => {
+  // [REFACTOR RISC ZERO]: Centralitzem la comprovació de xarxa (DRY Principle)
+  const ensureOnline = useCallback((): boolean => {
     if (isOffline) {
       showToast("Acció no permesa sense connexió a Internet.", 'warning');
       return false;
     }
+    return true;
+  }, [isOffline, showToast]);
+
+  const updateTripSettings = useCallback(async (name: string, currency: Currency) => {
+    if (!ensureOnline()) return false;
 
     try {
       await actions.updateTripSettings(name, new Date().toISOString(), currency);
@@ -39,17 +45,12 @@ export function useTripMutations() {
       showToast(parseAppError(e, t), 'error'); 
       return false;
     }
-  }, [actions, showToast, t, isOffline]); 
+  }, [actions, showToast, t, ensureOnline]); 
 
   const settleDebt = useCallback(async (settlement: Settlement, method: Payment['method'] = 'manual') => {
-    if (isOffline) {
-      showToast("Acció no permesa sense connexió a Internet.", 'warning');
-      return false;
-    }
+    if (!ensureOnline()) return false;
 
     try {
-      // [REFACTOR ZERO RISC]: Obtenim el títol net del mètode directament de les traduccions o fallback.
-      // Sense diccionaris hardcodejats ni manipulacions d'strings de la UI.
       const customTitle = t(`MODALS.PAYMENT_METHODS.${method.toUpperCase()}`, method);
 
       const expenseData = {
@@ -65,7 +66,6 @@ export function useTripMutations() {
       const res = await actions.addExpense(expenseData);
 
       if (res.success) {
-        // [REFACTOR ZERO RISC]: Missatge d'èxit net i traduït directament
         showToast(t('ACTIONS.SETTLE_SUCCESS', 'Deute saldat correctament'), 'success');
         return true;
       } else {
@@ -77,13 +77,10 @@ export function useTripMutations() {
       showToast(parseAppError(e, t), 'error');
       return false;
     }
-  }, [actions, showToast, t, isOffline]); 
+  }, [actions, showToast, t, ensureOnline]); 
 
   const deleteExpense = useCallback(async (id: string) => {
-    if (isOffline) {
-      showToast("Acció no permesa sense connexió a Internet.", 'warning');
-      return false;
-    }
+    if (!ensureOnline()) return false;
 
     try {
       const res = await actions.deleteExpense(id);
@@ -98,13 +95,10 @@ export function useTripMutations() {
       showToast(parseAppError(e, t), 'error');
       return false;
     }
-  }, [actions, showToast, t, isOffline]); 
+  }, [actions, showToast, t, ensureOnline]); 
 
   const leaveTrip = useCallback(async () => {
-    if (isOffline) {
-      showToast("Acció no permesa sense connexió a Internet.", 'warning');
-      return;
-    }
+    if (!ensureOnline()) return;
 
     if (!currentUser || !tripData) return;
 
@@ -136,13 +130,10 @@ export function useTripMutations() {
     } catch (e: unknown) {
       showToast(parseAppError(e, t), 'error');
     }
-  }, [actions, currentUser, tripData, expenses, navigate, showToast, t, isOffline]); 
+  }, [actions, currentUser, tripData, expenses, navigate, showToast, t, ensureOnline]); 
 
   const joinTrip = useCallback(async () => {
-     if (isOffline) {
-       showToast("Acció no permesa sense connexió a Internet.", 'warning');
-       return;
-     }
+     if (!ensureOnline()) return;
 
      if(!currentUser) return;
      try {
@@ -151,13 +142,10 @@ export function useTripMutations() {
      } catch(e: unknown) { 
          showToast(parseAppError(e, t), 'error');
      }
-  }, [actions, currentUser, showToast, t, isOffline]); 
+  }, [actions, currentUser, showToast, t, ensureOnline]); 
 
   const deleteTrip = useCallback(async () => {
-    if (isOffline) {
-      showToast("Acció no permesa sense connexió a Internet.", 'warning');
-      return;
-    }
+    if (!ensureOnline()) return;
 
     if (!tripData || !currentUser) return;
 
@@ -182,7 +170,7 @@ export function useTripMutations() {
       console.error(e);
       showToast(parseAppError(e, t), 'error'); 
     }
-  }, [actions, navigate, showToast, t, tripData, currentUser, isOffline]); 
+  }, [actions, navigate, showToast, t, tripData, currentUser, ensureOnline]); 
 
   const memoizedMutations = useMemo(() => ({
     updateTripSettings,
