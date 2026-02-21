@@ -1,10 +1,11 @@
+// src/components/trip/BalancesView.tsx
 import { useMemo } from 'react';
 import { Wallet, ArrowUpRight, ArrowDownLeft, PieChart, TrendingUp, TrendingDown, Check, ChevronRight } from 'lucide-react';
 import DonutChart from '../DonutChart';
 import Avatar from '../Avatar';
 import { Balance, CategoryStat, TripUser, toCents, unbrand } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
-import { useTrip } from '../../context/TripContext';
+import { useTripState } from '../../context/TripContext'; // <-- CANVI AQUÍ
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
 
 interface BalancesViewProps {
@@ -14,7 +15,7 @@ interface BalancesViewProps {
 }
 
 export default function BalancesView({ balances, categoryStats, onFilterCategory }: BalancesViewProps) {
-  const { tripData } = useTrip();
+  const { tripData } = useTripState(); // <-- CANVI AQUÍ
   const { trigger } = useHapticFeedback();
   
   const userMap = useMemo(() => {

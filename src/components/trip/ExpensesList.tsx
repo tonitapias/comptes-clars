@@ -1,9 +1,10 @@
+// src/components/trip/ExpensesList.tsx
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Search, Receipt, ArrowRightLeft, Paperclip, Loader2, Calendar, X, SlidersHorizontal, ArrowDownRight } from 'lucide-react'; 
 import { CATEGORIES } from '../../utils/constants';
 import { Expense, CategoryId, TripUser, Currency } from '../../types';
 import { formatCurrency, formatDateDisplay } from '../../utils/formatters';
-import { useTrip } from '../../context/TripContext';
+import { useTripState } from '../../context/TripContext'; // <-- CANVI AQUÍ
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
 
 interface ExpensesListProps {
@@ -143,7 +144,7 @@ export default function ExpensesList({
   onEdit,
   isSearching
 }: ExpensesListProps) {
-  const { tripData } = useTrip();
+  const { tripData } = useTripState(); // <-- CANVI AQUÍ
   const { trigger } = useHapticFeedback();
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const observerTarget = useRef<HTMLDivElement>(null);
@@ -171,7 +172,7 @@ export default function ExpensesList({
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-            setVisibleCount((prev) => prev + PAGE_SIZE); // Callback pattern en comptes de dependència
+            setVisibleCount((prev) => prev + PAGE_SIZE); 
         }
       },
       { threshold: 0.1, rootMargin: '400px' }
@@ -180,7 +181,7 @@ export default function ExpensesList({
     if (observerTarget.current) observer.observe(observerTarget.current);
     
     return () => observer.disconnect();
-  }, [expenses.length, isSearching]); // [SAFE-FIX]: 'visibleCount' esborrat per evitar reiniciar l'observer constantment
+  }, [expenses.length, isSearching]); 
 
   const getUserName = (id: string) => userMap[id]?.name || 'Desconegut';
   const visibleExpenses = expenses.slice(0, visibleCount);

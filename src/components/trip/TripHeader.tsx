@@ -1,6 +1,7 @@
+// src/components/trip/TripHeader.tsx
 import { Settings, Users, Share2, FileText, History, ArrowLeft, Sun, Moon, TrendingUp, TrendingDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useTrip } from '../../context/TripContext';
+import { useTripState } from '../../context/TripContext'; // <-- CANVI AQUÍ
 import { useTheme } from '../../hooks/useTheme';
 import { formatCurrency } from '../../utils/formatters';
 import { toCents } from '../../types';
@@ -25,7 +26,7 @@ export default function TripHeader({
   onOpenSettings, onOpenGroup, onExportPDF, onOpenShare, onOpenActivity
 }: TripHeaderProps) {
   
-  const { tripData } = useTrip();
+  const { tripData } = useTripState(); // <-- CANVI AQUÍ
   const { theme, toggleTheme } = useTheme();
   
   if (!tripData) return null;

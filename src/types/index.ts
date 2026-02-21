@@ -77,22 +77,7 @@ export interface LogEntry {
   timestamp: ISODateString;
 }
 
-// --- ESTRUCTURA PRINCIPAL (DOCUMENT) ---
-export interface TripData {
-  id: string;
-  name: string;
-  users: TripUser[];
-  expenses: Expense[];
-  currency: Currency;
-  createdAt: ISODateString;
-  memberUids?: string[];   
-  ownerId?: string; // <--- NOVA PROPIETAT (Opcional per compatibilitat)
-  logs?: LogEntry[];
-  isDeleted?: boolean; 
-  isSettled?: boolean; 
-}
-
-// --- RESULTATS DE CÀLCULS ---
+// --- RESULTATS DE CÀLCULS I NOUS PAGAMENTS (REFACTOR) ---
 export interface Balance {
   userId: UserId;
   amount: MoneyCents;
@@ -104,7 +89,33 @@ export interface Settlement {
   amount: MoneyCents;
 }
 
+// [NOU] Entitat de pagament aïllada per al futur refactor (RISC ZERO)
+export interface Payment {
+  id: string;
+  from: UserId;
+  to: UserId;
+  amount: MoneyCents;
+  date: ISODateString;
+  method: 'manual' | 'bizum' | 'transfer' | 'card';
+}
+
 export interface CategoryStat extends Category {
   amount: MoneyCents;
   percentage: number;
+}
+
+// --- ESTRUCTURA PRINCIPAL (DOCUMENT) ---
+export interface TripData {
+  id: string;
+  name: string;
+  users: TripUser[];
+  expenses: Expense[];
+  payments?: Payment[]; // <--- [NOU] Preparat per a la migració sense trencar l'app
+  currency: Currency;
+  createdAt: ISODateString;
+  memberUids?: string[];   
+  ownerId?: string; // <--- NOVA PROPIETAT (Opcional per compatibilitat)
+  logs?: LogEntry[];
+  isDeleted?: boolean; 
+  isSettled?: boolean; 
 }
