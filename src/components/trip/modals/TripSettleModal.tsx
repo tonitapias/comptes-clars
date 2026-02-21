@@ -5,30 +5,34 @@ import { useTranslation } from 'react-i18next';
 import Modal from '../../Modal';
 import Button from '../../Button';
 import HolographicTicket from '../HolographicTicket'; 
-import { Settlement, TripUser } from '../../../types';
-import { useTripState } from '../../../context/TripContext'; // <-- CANVI AQUÍ (Substituïm useTrip per useTripState)
+// [RISC ZERO]: Importem 'Payment' per utilitzar el seu tipatge estricte de mètodes
+import { Settlement, TripUser, Payment } from '../../../types';
+import { useTripState } from '../../../context/TripContext'; 
 import { useHapticFeedback } from '../../../hooks/useHapticFeedback';
 import { LITERALS } from '../../../constants/literals';
 
-const PAYMENT_METHOD_CONFIG = [
+// [RISC ZERO]: Forcem que l'ID sigui exactament un dels tipus permesos a Payment['method']
+const PAYMENT_METHOD_CONFIG: Array<{ id: Payment['method'], icon: any, translationKey: string, fallback: string }> = [
   { id: 'manual', icon: Banknote, translationKey: 'MODALS.PAYMENT_METHODS.MANUAL', fallback: LITERALS.MODALS.PAYMENT_METHODS.MANUAL },
   { id: 'bizum', icon: Smartphone, translationKey: 'MODALS.PAYMENT_METHODS.BIZUM', fallback: LITERALS.MODALS.PAYMENT_METHODS.BIZUM },
   { id: 'transfer', icon: Building2, translationKey: 'MODALS.PAYMENT_METHODS.TRANSFER', fallback: LITERALS.MODALS.PAYMENT_METHODS.TRANSFER },
   { id: 'card', icon: CreditCard, translationKey: 'MODALS.PAYMENT_METHODS.CARD', fallback: LITERALS.MODALS.PAYMENT_METHODS.CARD },
-] as const;
+];
 
 interface TripSettleModalProps {
   isOpen: boolean;
   onClose: () => void;
   settlement: Settlement | null;
-  onConfirm: (method: string) => Promise<boolean>;
+  // [RISC ZERO]: Ara onConfirm només accepta un mètode vàlid
+  onConfirm: (method: Payment['method']) => Promise<boolean>;
 }
 
 export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm }: TripSettleModalProps) {
-  // [RISC ZERO]: Només demanem l'estat, reduint la dependència i els re-renders
   const { tripData } = useTripState(); 
   const { trigger } = useHapticFeedback();
-  const [method, setMethod] = useState<string>('manual');
+  
+  // [RISC ZERO]: L'estat ara està protegit
+  const [method, setMethod] = useState<Payment['method']>('manual');
   
   const { t } = useTranslation();
 

@@ -295,3 +295,25 @@ export const calculateTotalSpending = (expenses: Expense[]): MoneyCents => {
     
   return toCents(total);
 };
+
+// ============================================================================
+// FUNCIONS D'AJUDA (DOMAIN HELPERS) 
+// [NOU RISC ZERO]: Aïllem la lògica per no embrutar els components de React
+// ============================================================================
+
+/**
+ * Obté el balanç exacte d'un usuari, retornant sempre un MoneyCents de forma segura.
+ */
+export const getUserBalance = (userId: string | undefined, balances: Balance[]): MoneyCents => {
+  if (!userId) return toCents(0);
+  const userBalance = balances.find(b => b.userId === userId);
+  return userBalance ? userBalance.amount : toCents(0);
+};
+
+/**
+ * Comprova si un usuari pot abandonar el viatge segons els seus deutes i el marge permès.
+ */
+export const canUserLeaveTrip = (userId: string | undefined, balances: Balance[], maxMarginCents: number): boolean => {
+  const balanceCents = unbrand(getUserBalance(userId, balances));
+  return Math.abs(balanceCents) <= maxMarginCents;
+};

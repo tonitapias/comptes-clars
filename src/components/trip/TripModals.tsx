@@ -16,9 +16,20 @@ import { useTripMutations } from '../../hooks/useTripMutations';
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
 import { ToastType } from '../Toast';
 import { LITERALS } from '../../constants/literals';
+import { Payment } from '../../types'; // <-- [NOU]: Importem el tipus Payment
+
+// [CORRECCIÓ]: Ara 'trigger' agafa el tipus exacte directament del hook
+interface ConfirmActionModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title?: string;
+  message?: string;
+  trigger: ReturnType<typeof useHapticFeedback>['trigger'];
+}
 
 // --- SUB-COMPONENT EXTRETA (Clean Code) ---
-const ConfirmActionModal = ({ isOpen, onClose, onConfirm, title, message, trigger }: any) => {
+const ConfirmActionModal = ({ isOpen, onClose, onConfirm, title, message, trigger }: ConfirmActionModalProps) => {
     return (
       <Modal isOpen={isOpen} onClose={onClose} title="">
           <div className="flex flex-col items-center text-center pt-4 pb-2 animate-fade-in">
@@ -77,7 +88,8 @@ export default function TripModals({ modals, mutations, showToast }: TripModalsP
     modals.closeExpenseModal();
   };
 
-  const handleSettleConfirm = async (method: string) => {
+  // <-- [CORRECCIÓ]: Ara aquesta funció exigeix exactament un Payment['method'] i no un string qualsevol
+  const handleSettleConfirm = async (method: Payment['method']) => {
     if (!modals.settleModalData) return false;
     const success = await mutations.settleDebt(modals.settleModalData, method);
     if (success) { modals.setSettleModalData(null); }
