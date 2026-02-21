@@ -1,18 +1,18 @@
 // src/components/trip/modals/TripSettleModal.tsx
 import { useState, useMemo } from 'react';
-import { CheckCircle2, Smartphone, Banknote, Building2, CreditCard } from 'lucide-react';
+// [CANVI ZERO RISC]: Importem 'LucideIcon' de la llibreria d'icones
+import { CheckCircle2, Smartphone, Banknote, Building2, CreditCard, LucideIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import Modal from '../../Modal';
 import Button from '../../Button';
 import HolographicTicket from '../HolographicTicket'; 
-// [RISC ZERO]: Importem 'Payment' per utilitzar el seu tipatge estricte de mètodes
 import { Settlement, TripUser, Payment } from '../../../types';
 import { useTripState } from '../../../context/TripContext'; 
 import { useHapticFeedback } from '../../../hooks/useHapticFeedback';
 import { LITERALS } from '../../../constants/literals';
 
-// [RISC ZERO]: Forcem que l'ID sigui exactament un dels tipus permesos a Payment['method']
-const PAYMENT_METHOD_CONFIG: Array<{ id: Payment['method'], icon: any, translationKey: string, fallback: string }> = [
+// [CANVI ZERO RISC]: Substituïm 'icon: any' per 'icon: LucideIcon'
+const PAYMENT_METHOD_CONFIG: Array<{ id: Payment['method'], icon: LucideIcon, translationKey: string, fallback: string }> = [
   { id: 'manual', icon: Banknote, translationKey: 'MODALS.PAYMENT_METHODS.MANUAL', fallback: LITERALS.MODALS.PAYMENT_METHODS.MANUAL },
   { id: 'bizum', icon: Smartphone, translationKey: 'MODALS.PAYMENT_METHODS.BIZUM', fallback: LITERALS.MODALS.PAYMENT_METHODS.BIZUM },
   { id: 'transfer', icon: Building2, translationKey: 'MODALS.PAYMENT_METHODS.TRANSFER', fallback: LITERALS.MODALS.PAYMENT_METHODS.TRANSFER },
@@ -23,7 +23,6 @@ interface TripSettleModalProps {
   isOpen: boolean;
   onClose: () => void;
   settlement: Settlement | null;
-  // [RISC ZERO]: Ara onConfirm només accepta un mètode vàlid
   onConfirm: (method: Payment['method']) => Promise<boolean>;
 }
 
@@ -31,7 +30,6 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
   const { tripData } = useTripState(); 
   const { trigger } = useHapticFeedback();
   
-  // [RISC ZERO]: L'estat ara està protegit
   const [method, setMethod] = useState<Payment['method']>('manual');
   
   const { t } = useTranslation();

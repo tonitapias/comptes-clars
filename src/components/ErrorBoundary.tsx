@@ -1,5 +1,7 @@
 // src/components/ErrorBoundary.tsx
 import { Component, ErrorInfo, ReactNode } from 'react';
+// [CANVI]: Importem el nostre nou logger
+import { logAppError } from '../utils/errorHandler';
 
 interface Props {
   children: ReactNode;
@@ -17,13 +19,12 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   public static getDerivedStateFromError(error: Error): State {
-    // Actualitza l'estat perquè el següent renderitzi la UI alternativa
     return { hasError: true, error };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Error no controlat:', error, errorInfo);
-    // Aquí podries enviar l'error a un servei de log com Sentry
+    // [CANVI]: Substituïm el console.error estàndard per l'adaptador centralitzat
+    logAppError(error, errorInfo, 'ErrorBoundary (React Tree Crash)');
   }
 
   private handleReload = () => {
@@ -33,25 +34,24 @@ class ErrorBoundary extends Component<Props, State> {
   public render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-          <div className="max-w-md w-full bg-white rounded-lg shadow-xl p-8 text-center">
-            <h2 className="text-2xl font-bold text-red-600 mb-4">
-              Vaja! Alguna cosa ha anat malament.
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+          <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center border border-slate-100">
+            <h2 className="text-2xl font-black text-rose-600 mb-4 tracking-tight">
+              Vaja! Alguna cosa ha fallat.
             </h2>
-            <p className="text-gray-600 mb-6">
-              L'aplicació ha trobat un error inesperat. No pateixis, les teves dades estan segures.
+            <p className="text-slate-500 mb-6 text-sm leading-relaxed">
+              L'aplicació ha trobat un error inesperat. No pateixis, les teves dades al servidor estan segures i monitoritzades.
             </p>
             
-            {/* Opcional: Mostra l'error en desenvolupament */}
             {import.meta.env.DEV && this.state.error && (
-              <pre className="bg-gray-100 p-2 rounded text-xs text-left overflow-auto mb-6 max-h-32 text-red-800">
+              <pre className="bg-slate-900 p-4 rounded-xl text-[10px] text-left overflow-auto mb-6 max-h-40 text-rose-400 font-mono shadow-inner">
                 {this.state.error.toString()}
               </pre>
             )}
 
             <button
               onClick={this.handleReload}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded transition-colors"
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-4 rounded-xl transition-all shadow-lg shadow-slate-900/20 active:scale-95"
             >
               Recarregar l'aplicació
             </button>

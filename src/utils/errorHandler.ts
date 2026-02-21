@@ -46,3 +46,22 @@ export const parseAppError = (error: unknown, t: TFunction): string => {
 
   return t('ERRORS.UNEXPECTED', LITERALS.ACTIONS.UNEXPECTED_ERROR || 'S\'ha produït un error inesperat');
 };
+
+// --- NOU CODI: ADAPTADOR DE TELEMETRIA ---
+export const logAppError = (error: Error, errorInfo?: React.ErrorInfo | Record<string, unknown>, context?: string) => {
+  // [FUTUR]: Aquí és on connectarem Sentry o Datadog.
+  // if (import.meta.env.PROD) { Sentry.captureException(error, { extra: { errorInfo, context } }); }
+  
+  const errorPayload = {
+    timestamp: new Date().toISOString(),
+    message: error.message,
+    stack: error.stack,
+    info: errorInfo,
+    context: context || 'Error Global No Controlat',
+    url: typeof window !== 'undefined' ? window.location.href : 'Desconeguda',
+    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Desconegut',
+  };
+
+  // En lloc d'un simple console.error, fem un log estructurat preparat per ser indexat
+  console.error('[MONITORITZACIÓ CRÍTICA] 🔴 App Crash:', JSON.stringify(errorPayload, null, 2));
+};
