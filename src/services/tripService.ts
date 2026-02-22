@@ -5,10 +5,11 @@ import {
   FirestoreDataConverter, QueryDocumentSnapshot, SnapshotOptions, UpdateData 
 } from 'firebase/firestore'; 
 import { User } from 'firebase/auth';
-import { db, auth, app } from '../config/firebase';
+import { db, auth } from '../config/firebase';
 import { DB_PATHS, TRIP_DOC_PREFIX } from '../config/dbPaths';
 import { Expense, TripData, Settlement, TripUser, LogEntry, Currency } from '../types';
 import { ExpenseSchema } from '../utils/validation';
+import { calculateBalances } from './billingService'; // <-- [AFEGIT]: Importem la funció per recalcular balanços
 
 // --- HELPER: SANITIZE DATA ---
 const sanitizeData = <T>(data: T): T => {
@@ -69,8 +70,6 @@ const getExpenseRef = (tripId: string, expenseId: string) =>
 
 const generateId = () => crypto.randomUUID();
 
-// [RISC ZERO]: Eliminada la funció recalculateTripSettledStatus per estalviar milers de lectures a Firestore.
-
 const logAction = async (tripId: string, message: string, action: LogEntry['action']) => {
   try {
     const currentUser = auth.currentUser;
@@ -103,7 +102,40 @@ const logAction = async (tripId: string, message: string, action: LogEntry['acti
   }
 };
 
+// --- [AFEGIT]: MOTOR DE SINCRONITZACIÓ DE SALDOS ---
+const syncTripSettledState = async (tripId: string) => {
+  try {
+    const tripSnap = await getDoc(getTripRef(tripId));
+    if (!tripSnap.exists()) return;
+    
+    const tripData = tripSnap.data();
+    const expensesSnap = await getDocs(getExpensesCol(tripId));
+    const expenses = expensesSnap.docs.map(d => ({ ...d.data(), id: d.id })) as Expense[];
+    
+    const balances = calculateBalances(expenses, tripData.users);
+    
+    // Considerem que està saldat si el balanç de tothom està entre -1 i 1 cèntim (marge d'arrodoniments)
+    const isSettledNow = balances.every(b => Math.abs(Number(b.amount)) < 2);
+    
+    if (tripData.isSettled !== isSettledNow) {
+      await updateDoc(getTripRef(tripId), { isSettled: isSettledNow });
+    }
+  } catch (error) {
+    console.error("Error sincronitzant l'estat Saldat:", error);
+  }
+};
+
 export const TripService = {
+  getTrip: async (tripId: string): Promise<TripData | null> => {
+    try {
+      const snap = await getDoc(getTripRef(tripId));
+      return snap.exists() ? snap.data() : null;
+    } catch (error) {
+      console.error("Error obtenint el viatge:", error);
+      return null;
+    }
+  },
+
   getUserTrips: async (uid: string): Promise<TripData[]> => {
     try {
       const q = query(tripsCol, where('memberUids', 'array-contains', uid));
@@ -143,7 +175,7 @@ export const TripService = {
     await logAction(tripId, `ha actualitzat la configuració`, 'settings');
   },
 
-  // [NOU]: Funció silenciosa per actualitzar només l'estat sense disparar logs
+  // Funció silenciosa per actualitzar només l'estat sense disparar logs
   updateTripSettledState: async (tripId: string, isSettled: boolean) => {
     await updateDoc(getTripRef(tripId), { isSettled });
   },
@@ -161,6 +193,8 @@ export const TripService = {
     const formattedAmount = (expense.amount / 100).toFixed(2).replace('.', ',');
     await logAction(tripId, `ha afegit la despesa "${expense.title}" de ${formattedAmount} €`, 'create');
     
+    await syncTripSettledState(tripId); // <-- [AFEGIT]
+    
     return docRef.id;
   },
 
@@ -173,6 +207,8 @@ export const TripService = {
     }
     
     await logAction(tripId, `ha modificat la despesa "${expense.title || 'sense nom'}"${detail}`, 'update');
+    
+    await syncTripSettledState(tripId); // <-- [AFEGIT]
   },
 
   deleteExpense: async (tripId: string, expenseId: string) => {
@@ -190,6 +226,8 @@ export const TripService = {
     
     await deleteDoc(getExpenseRef(tripId, expenseId));
     await logAction(tripId, `ha eliminat la despesa "${title}"${amountDetail}`, 'delete');
+    
+    await syncTripSettledState(tripId); // <-- [AFEGIT]
   },
 
   settleDebt: async (tripId: string, settlement: Settlement, method: string) => {
@@ -206,40 +244,63 @@ export const TripService = {
     
     const formattedAmount = (settlement.amount / 100).toFixed(2).replace('.', ',');
     await logAction(tripId, `ha liquidat un deute de ${formattedAmount} € via ${method}`, 'settle');
+    
+    await syncTripSettledState(tripId); // <-- [AFEGIT]
   },
 
   joinTripViaLink: async (tripId: string, user: User) => {
-    const tripRef = getTripRef(tripId);
-    const tripSnap = await getDoc(tripRef);
-    if (!tripSnap.exists()) return;
-
-    const data = tripSnap.data();
-    if (data.isDeleted) return;
-
-    const currentUsers = data.users || [];
-    const alreadyExists = currentUsers.some(u => u.linkedUid === user.uid);
-
-    if (alreadyExists) {
-      if (data.memberUids && !data.memberUids.includes(user.uid)) {
-        await updateDoc(tripRef, { memberUids: arrayUnion(user.uid) });
+    try {
+      const tripRef = getTripRef(tripId);
+      const tripSnap = await getDoc(tripRef);
+      
+      // 1. Validació estricta: Si no existeix, LLANCEM error en lloc de marxar en silenci
+      if (!tripSnap.exists()) {
+        throw new Error("El codi no és vàlid o el projecte no existeix.");
       }
-      return;
+
+      const data = tripSnap.data();
+      
+      // 2. Validació estricta: Si està eliminat
+      if (data.isDeleted) {
+        throw new Error("Aquest projecte ha estat eliminat per l'administrador.");
+      }
+
+      const currentUsers = data.users || [];
+      const alreadyExists = currentUsers.some(u => u.linkedUid === user.uid);
+
+      if (alreadyExists) {
+        if (data.memberUids && !data.memberUids.includes(user.uid)) {
+          await updateDoc(tripRef, { memberUids: arrayUnion(user.uid) });
+        }
+        return; // Retornem si ja hi era (no cal crear l'usuari de nou)
+      }
+
+      const newUser: TripUser = {
+        id: generateId(),
+        name: user.displayName || user.email?.split('@')[0] || 'Usuari',
+        linkedUid: user.uid,
+        isAuth: true,
+        isDeleted: false,
+        photoUrl: user.photoURL || null
+      };
+
+      await updateDoc(tripRef, {
+        users: arrayUnion(sanitizeData(newUser)),
+        memberUids: arrayUnion(user.uid)
+      });
+      
+      await logAction(tripId, `s'ha unit al grup`, 'join');
+      
+    } catch (error: any) {
+      console.error("Error en unir-se al viatge:", error);
+      
+      // Si l'error és de Firebase per permisos, ho traduïm a humà:
+      if (error.code === 'permission-denied') {
+        throw new Error("No tens permisos per unir-te a aquest projecte.");
+      }
+      
+      throw new Error(error.message || "No s'ha pogut unir al viatge. Comprova el codi.");
     }
-
-    const newUser: TripUser = {
-      id: generateId(),
-      name: user.displayName || user.email?.split('@')[0] || 'Usuari',
-      linkedUid: user.uid,
-      isAuth: true,
-      isDeleted: false,
-      photoUrl: user.photoURL || null
-    };
-
-    await updateDoc(tripRef, {
-      users: arrayUnion(sanitizeData(newUser)),
-      memberUids: arrayUnion(user.uid)
-    });
-    await logAction(tripId, `s'ha unit al grup`, 'join');
   },
 
   updateTripUserName: async (tripId: string, userId: string, newName: string) => {
@@ -262,17 +323,39 @@ export const TripService = {
     await logAction(tripId, `ha canviat el nom d'un participant`, 'settings');
   },
 
-  leaveTrip: async (tripId: string, _internalUserId: string) => {
+  // --- SOLUCIÓ "RISC ZERO" FRONT-END PER SORTIR DEL GRUP ---
+  leaveTrip: async (tripId: string, internalUserId: string) => {
     try {
-      // Importem la llibreria dinàmicament només quan l'usuari fa clic a "Sortir"
-      const { getFunctions, httpsCallable } = await import('firebase/functions');
+      const tripRef = getTripRef(tripId);
+      const tripSnap = await getDoc(tripRef);
       
-      // Inicialitzem indicant la nostra App i la regió explícita
-      const functions = getFunctions(app, 'us-central1');
-      const leaveTripCloudFn = httpsCallable<{ tripId: string }, { success: boolean }>(functions, 'leaveTrip');
+      if (!tripSnap.exists()) throw new Error("El projecte no existeix");
       
-      await leaveTripCloudFn({ tripId });
+      const tripData = tripSnap.data();
+      const currentUser = auth.currentUser;
       
+      if (!currentUser) throw new Error("No estàs autenticat");
+
+      // FIX: 1. Deixem el registre PRIMER, mentre l'usuari encara té permisos!
+      await logAction(tripId, `ha abandonat el projecte`, 'settings');
+
+      // 2. Desvinculem l'usuari (utilitzant null per evitar l'error de undefined)
+      const updatedUsers = tripData.users.map(u => {
+        if (u.id === internalUserId) {
+          return { ...u, linkedUid: null, isAuth: false };
+        }
+        return u;
+      });
+
+      // 3. L'eliminem de la llista d'accessos reals a Firestore
+      const updatedMemberUids = tripData.memberUids?.filter(uid => uid !== currentUser.uid) || [];
+
+      // 4. Escriptura a base de dades (Tanquem la porta de permisos definitivament)
+      await updateDoc(tripRef, {
+        users: updatedUsers,
+        memberUids: updatedMemberUids
+      });
+
     } catch (error: any) {
       console.error("Error en sortir del viatge:", error);
       throw new Error(error.message || "No s'ha pogut sortir del grup. Torna-ho a provar.");

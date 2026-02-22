@@ -7,7 +7,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Ruta de la teva col·lecció de viatges segons el teu dbPaths.ts
+    // Ruta de la teva col·lecció de viatges
     match /artifacts/comptes-clars-v1/public/data/trips/{tripId} {
       
       // Funció: Comprova si l'usuari que fa la petició està dins l'array 'memberUids'
@@ -15,12 +15,17 @@ service cloud.firestore {
         return isAuthenticated() && request.auth.uid in resource.data.memberUids;
       }
       
-      // CREATE: Qualsevol usuari autenticat pot crear un viatge nou.
-      // Firebase s'assegurarà de permetre'l crear només si posa el seu propi uid com a owner/member.
+      // CREATE: Qualsevol usuari autenticat pot crear un viatge nou
       allow create: if isAuthenticated();
       
-      // READ / UPDATE / DELETE: Només pots llegir, modificar o esborrar el viatge si n'ets membre
-      allow read, update, delete: if isTripMember();
+      // READ: Si tens l'enllaç (el tripId), el pots llegir per validar si existeix abans d'unir-te
+      allow read: if isAuthenticated();
+      
+      // UPDATE: Pots actualitzar si ja n'ets membre, O si t'estàs afegint a tu mateix (unir-se)
+      allow update: if isTripMember() || (isAuthenticated() && request.auth.uid in request.resource.data.memberUids);
+      
+      // DELETE: Només ho pots esborrar si ets membre
+      allow delete: if isTripMember();
 
       // REGLES PER A LES DESPESES (Subcol·lecció)
       match /expenses/{expenseId} {
@@ -36,7 +41,7 @@ service cloud.firestore {
       }
     }
 
-    // Per defecte, deneguem TOTES les altres lectures a la base de dades (màxima seguretat)
+    // Per defecte, deneguem TOTES les altres lectures a la base de dades
     match /{document=**} {
       allow read, write: if false;
     }

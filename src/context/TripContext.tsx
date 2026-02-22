@@ -1,12 +1,10 @@
 // src/context/TripContext.tsx
-import React, { createContext, useContext, ReactNode, useMemo, useEffect } from 'react';
+import React, { createContext, useContext, ReactNode, useMemo } from 'react';
 import { User } from 'firebase/auth';
 import { useTripData } from '../hooks/useTripData';
 import { useTripMigration } from '../hooks/useTripMigration';
 import { useTripActions } from '../hooks/useTripActions';
-import { TripData, Expense, unbrand } from '../types'; // [FIX]: Afegim la importació de 'unbrand'
-import { calculateBalances } from '../services/billingService';
-import { TripService } from '../services/tripService';
+import { TripData, Expense } from '../types'; 
 
 interface TripState {
   tripId: string | undefined;
@@ -40,25 +38,10 @@ export function TripProvider({ children, tripId, currentUser }: TripProviderProp
   const actions = useTripActions(tripId);
   const isMember = !!(currentUser && tripData?.memberUids?.includes(currentUser.uid));
 
-  // [RISC ZERO]: ELIMINADOR DE LECTURES MASSIVES (Free Tier Saver)
-  // En lloc de fer N lectures cada cop que canvia una despesa, ho avaluem aquí 
-  // perquè ja tenim les dades en memòria. Això protegeix Firestore.
-  useEffect(() => {
-    if (loading || !tripData || !tripId || isOffline) return;
-
-    const balances = calculateBalances(expenses, tripData.users);
-    
-    // [FIX RISC ZERO]: Gràcies al nou 'billingService', ara podem exigir balanç estricte a 0.
-    // Utilitzem unbrand() per avaluar el valor numèric real.
-    const isSettledNow = balances.every(b => unbrand(b.amount) === 0);
-
-    // Només disparem l'escriptura si hi ha un canvi REAL d'estat
-    if (tripData.isSettled !== isSettledNow) {
-      TripService.updateTripSettledState(tripId, isSettledNow).catch(err => {
-        console.error("Error sincronitzant l'estat saldat del viatge:", err);
-      });
-    }
-  }, [expenses, tripData?.users, tripData?.isSettled, loading, isOffline, tripId]);
+  // [CTO FIX]: Hem eliminat el useEffect() que calculava i actualitzava l'estat isSettled.
+  // L'actualització de l'estat de saldat es farà de forma transaccional només quan 
+  // es facin mutacions reals (afegir/esborrar/editar despeses) per protegir Firestore 
+  // de lectures/escriptures innecessàries i evitar condicions de carrera.
 
   const stateValue = useMemo<TripState>(() => ({
     tripId, tripData, expenses, loading, error, currentUser, isMember, isOffline

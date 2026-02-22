@@ -6,9 +6,10 @@ import { useNavigate } from 'react-router-dom';
 import { useTripState, useTripDispatch } from '../context/TripContext';
 import { ToastType } from '../components/Toast';
 import { calculateBalances, canUserLeaveTrip, getUserBalance } from '../services/billingService'; 
-import { Currency, CategoryId, SplitType, Settlement, Payment } from '../types'; 
+import { Currency, CategoryId, SplitType, Settlement, Payment, Expense, Balance, unbrand } from '../types'; 
 import { LITERALS } from '../constants/literals';
 import { BUSINESS_RULES } from '../config/businessRules';
+import { TripService } from '../services/tripService'; 
 
 const SETTLEMENT_CATEGORY: CategoryId = 'transfer';
 const SETTLEMENT_SPLIT_TYPE: SplitType = 'equal';
@@ -25,7 +26,6 @@ export function useTripMutations() {
   const showToast = useCallback((msg: string, type: ToastType = 'success') => setToast({ msg, type }), []);
   const clearToast = useCallback(() => setToast(null), []);
 
-  // [REFACTOR RISC ZERO]: Centralitzem la comprovació de xarxa (DRY Principle)
   const ensureOnline = useCallback((): boolean => {
     if (isOffline) {
       showToast("Acció no permesa sense connexió a Internet.", 'warning');
@@ -48,7 +48,7 @@ export function useTripMutations() {
   }, [actions, showToast, t, ensureOnline]); 
 
   const settleDebt = useCallback(async (settlement: Settlement, method: Payment['method'] = 'manual') => {
-    if (!ensureOnline()) return false;
+    if (!ensureOnline() || !tripData) return false;
 
     try {
       const customTitle = t(`MODALS.PAYMENT_METHODS.${method.toUpperCase()}`, method);
@@ -65,7 +65,16 @@ export function useTripMutations() {
 
       const res = await actions.addExpense(expenseData);
 
-      if (res.success) {
+      if (res.success && res.data) {
+        // Recalculem l'estat isSettled predictivament amb el nou pagament
+        const newExpenses = [...expenses, { ...expenseData, id: res.data as string }];
+        const newBalances = calculateBalances(newExpenses as Expense[], tripData.users);
+        const isSettledNow = newBalances.every(b => unbrand(b.amount) === 0);
+        
+        if (tripData.isSettled !== isSettledNow) {
+          await TripService.updateTripSettledState(tripData.id, isSettledNow).catch(console.error);
+        }
+
         showToast(t('ACTIONS.SETTLE_SUCCESS', 'Deute saldat correctament'), 'success');
         return true;
       } else {
@@ -77,14 +86,23 @@ export function useTripMutations() {
       showToast(parseAppError(e, t), 'error');
       return false;
     }
-  }, [actions, showToast, t, ensureOnline]); 
+  }, [actions, showToast, t, ensureOnline, expenses, tripData]); 
 
   const deleteExpense = useCallback(async (id: string) => {
-    if (!ensureOnline()) return false;
+    if (!ensureOnline() || !tripData) return false;
 
     try {
       const res = await actions.deleteExpense(id);
       if (res.success) {
+        // Reavaluar isSettled després de suprimir una despesa
+        const newExpenses = expenses.filter(e => e.id !== id);
+        const newBalances = calculateBalances(newExpenses, tripData.users);
+        const isSettledNow = newBalances.every(b => unbrand(b.amount) === 0);
+        
+        if (tripData.isSettled !== isSettledNow) {
+          await TripService.updateTripSettledState(tripData.id, isSettledNow).catch(console.error);
+        }
+
         showToast(LITERALS.ACTIONS.DELETE_EXPENSE_SUCCESS, 'success');
         return true;
       } else {
@@ -95,23 +113,40 @@ export function useTripMutations() {
       showToast(parseAppError(e, t), 'error');
       return false;
     }
-  }, [actions, showToast, t, ensureOnline]); 
+  }, [actions, showToast, t, ensureOnline, expenses, tripData]); 
 
-  const leaveTrip = useCallback(async () => {
-    if (!ensureOnline()) return;
+  const leaveTrip = useCallback(async (targetTripId?: string) => {
+    if (!ensureOnline() || !currentUser) return;
 
-    if (!currentUser || !tripData) return;
-
-    const balances = calculateBalances(expenses, tripData.users);
-    const myUser = tripData.users.find(u => u.linkedUid === currentUser.uid);
-
-    if (!canUserLeaveTrip(myUser?.id, balances, BUSINESS_RULES.MAX_LEAVE_BALANCE_MARGIN)) {
-      showToast("No pots sortir del viatge fins que no saldis els teus deutes o et paguin el que et deuen.", "error");
-      return;
-    }
+    const idToLeave = targetTripId || tripData?.id;
+    if (!idToLeave) return;
 
     try {
-      const myBalanceAmount = getUserBalance(myUser?.id, balances); 
+      let currentTripUsers = tripData?.users || [];
+      let currentBalances: Balance[] = [];
+
+      // Validació: Estem marxant del viatge que tenim en context o d'un altre (Landing)?
+      if (tripData && tripData.id === idToLeave) {
+        currentBalances = calculateBalances(expenses, currentTripUsers);
+      } else {
+        const fetchedTrip = await TripService.getTrip(idToLeave);
+        if (!fetchedTrip) {
+           showToast("No s'ha trobat el viatge", "error");
+           return;
+        }
+        const fetchedExpenses = await TripService.getTripExpenses(idToLeave);
+        currentTripUsers = fetchedTrip.users;
+        currentBalances = calculateBalances(fetchedExpenses, currentTripUsers);
+      }
+
+      const myUser = currentTripUsers.find(u => u.linkedUid === currentUser.uid);
+
+      if (!canUserLeaveTrip(myUser?.id, currentBalances, BUSINESS_RULES.MAX_LEAVE_BALANCE_MARGIN)) {
+        showToast("No pots sortir del viatge fins que no saldis els teus deutes o et paguin el que et deuen.", "error");
+        return;
+      }
+
+      const myBalanceAmount = getUserBalance(myUser?.id, currentBalances); 
 
       const res = await actions.leaveTrip(
         myUser ? myUser.id : currentUser.uid,
@@ -122,8 +157,10 @@ export function useTripMutations() {
 
       if (res.success) {
         showToast("Has abandonat el viatge correctament.", "success");
-        localStorage.removeItem('cc-last-trip-id');
-        navigate('/');
+        if (tripData?.id === idToLeave) {
+          localStorage.removeItem('cc-last-trip-id');
+          navigate('/');
+        }
       } else {
         showToast(res.error || "No s'ha pogut sortir del viatge", 'error');
       }
