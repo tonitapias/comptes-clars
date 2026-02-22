@@ -2,12 +2,14 @@
 
 import { Expense, TripUser, Balance, Settlement, CategoryStat, MoneyCents, toCents, unbrand, Payment } from '../types';
 import { CATEGORIES, SPLIT_TYPES } from '../utils/constants';
+import { BUSINESS_RULES } from '../config/businessRules'; // [NOU]
 
 export const SPECIAL_CATEGORIES = {
   TRANSFER: 'transfer',
   OTHER: 'other',
 } as const;
 
+// Mantenim aquesta variable com a constant local perquè defineix l'entitat mínima de moneda (1 cèntim)
 const MIN_SETTLEMENT_CENTS = toCents(1);
 
 interface SplitResult {
@@ -161,7 +163,6 @@ const calculateSharesSplit = (
   return { allocations };
 };
 
-// REFACTOR: Nou paràmetre opcional payments
 export const calculateBalances = (expenses: Expense[], users: TripUser[], payments: Payment[] = []): Balance[] => {
   const balanceMap: Record<string, MoneyCents> = {};
   
@@ -208,9 +209,6 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[], paymen
     });
   });
 
-  // APLIQUEM ELS PAGAMENTS: 
-  // El que fa la transferència (payer) rep += deute (puja el seu balanç). 
-  // El que rep els diners (receiver) rep -= deute (baixa el seu balanç).
   payments.forEach(payment => {
     const payerId = getCanonicalId(payment.from);
     const receiverId = getCanonicalId(payment.to);
@@ -231,7 +229,8 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[], paymen
 export const calculateSettlements = (balances: Balance[]): Settlement[] => {
   const totalBalance = balances.reduce((acc, b) => acc + unbrand(b.amount), 0);
   
-  if (Math.abs(totalBalance) > 1) { 
+  // [MILLORA]: Utilitzem la tolerància de negoci en lloc d'un > 1 hardcodejat
+  if (Math.abs(totalBalance) >= BUSINESS_RULES.SETTLED_TOLERANCE_MARGIN) { 
     console.warn(`[Audit Warning] Balanços desquadrats (${totalBalance} cèntims).`);
   }
 
@@ -268,8 +267,9 @@ export const calculateSettlements = (balances: Balance[]): Settlement[] => {
     debtor.amount = toCents(unbrand(debtor.amount) + unbrand(amount));
     creditor.amount = toCents(unbrand(creditor.amount) - unbrand(amount));
 
-    if (Math.abs(unbrand(debtor.amount)) < 1) i++;
-    if (Math.abs(unbrand(creditor.amount)) < 1) j++;
+    // [MILLORA]: Aplicada la tolerància dinàmica aquí també
+    if (Math.abs(unbrand(debtor.amount)) < BUSINESS_RULES.SETTLED_TOLERANCE_MARGIN) i++;
+    if (Math.abs(unbrand(creditor.amount)) < BUSINESS_RULES.SETTLED_TOLERANCE_MARGIN) j++;
   }
 
   return debts;

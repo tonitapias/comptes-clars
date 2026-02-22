@@ -33,7 +33,6 @@ export const app = initializeApp(firebaseConfig);
 // ============================================================================
 try {
   if (typeof window !== "undefined" && import.meta.env.VITE_RECAPTCHA_SITE_KEY) {
-    // [FIX CTO]: Només activem reCAPTCHA en producció per evitar errors 400 a localhost
     if (import.meta.env.PROD) {
       initializeAppCheck(app, {
         provider: new ReCaptchaEnterpriseProvider(import.meta.env.VITE_RECAPTCHA_SITE_KEY),
@@ -68,19 +67,21 @@ export const signInWithGoogle = async () => {
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
   } catch (error) {
-    console.error("Error Google Login:", error);
-    throw error;
+    console.error("[Auth] Error en login de Google:", error);
+    throw error; // L'error seguirà pujant perquè la UI el mostri, però ara tenim traçabilitat
   }
 };
 
+// [MILLORA]: Hem netejat l'anti-patró del try/catch buit i gestionat millor el nom d'usuari
 export const registerWithEmail = async (email: string, pass: string, name: string) => {
   try {
     const result = await createUserWithEmailAndPassword(auth, email, pass);
-    if (name) {
+    if (name && result.user) {
       await updateProfile(result.user, { displayName: name });
     }
     return result.user;
   } catch (error) {
+    console.error("[Auth] Error en el registre:", error);
     throw error;
   }
 };
@@ -90,6 +91,7 @@ export const loginWithEmail = async (email: string, pass: string) => {
     const result = await signInWithEmailAndPassword(auth, email, pass);
     return result.user;
   } catch (error) {
+    console.error("[Auth] Error en login d'email:", error);
     throw error;
   }
 };

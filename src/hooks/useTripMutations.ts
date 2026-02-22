@@ -41,12 +41,13 @@ export function useTripMutations() {
     }
   }, [isOffline, showToast]);
 
-  // [MILLORA CLEAN CODE]: Centralitzem el càlcul pesat per saber si el projecte està saldat.
-  // Així evitem repetir aquestes 6 línies a cada funció.
+  // [MILLORA CLEAN CODE]: Utilitzem BUSINESS_RULES per evitar els "Magic numbers"
   const evaluateSettledState = useCallback(async (updatedExpenses: Expense[], updatedPayments: Payment[]) => {
     if (!tripData) return;
     const newBalances = calculateBalances(updatedExpenses, tripData.users, updatedPayments);
-    const isSettledNow = newBalances.every(b => Math.abs(unbrand(b.amount)) < 2);
+    
+    // Fem servir la constant de negoci per comprovar si tots els balanços estan a prop de zero
+    const isSettledNow = newBalances.every(b => Math.abs(unbrand(b.amount)) < BUSINESS_RULES.SETTLED_TOLERANCE_MARGIN);
     
     if (tripData.isSettled !== isSettledNow) {
       await TripService.updateTripSettledState(tripData.id, isSettledNow);

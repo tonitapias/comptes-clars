@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next'; 
 import { TripService } from '../services/tripService';
-import { Settlement, Expense, Currency, TripData, unbrand } from '../types'; // [FIX]: Importem unbrand
+import { Settlement, Expense, Currency, TripData, unbrand } from '../types'; 
 import { User } from 'firebase/auth';
 import { parseAppError } from '../utils/errorHandler'; 
+import { BUSINESS_RULES } from '../config/businessRules'; // [NOU] Importem les regles de negoci
 
 export function useTripActions(tripId: string | undefined) {
   const [loadingAction, setLoadingAction] = useState(false);
@@ -70,10 +71,11 @@ export function useTripActions(tripId: string | undefined) {
     leaveTrip: async (userId: string, _currentBalance: number, isAuthUser: boolean, userUid?: string) => {
         return execute(async () => {
             if (isAuthUser && userUid) {
-               // [FIX CRÍTIC]: Desempaquetem el valor per garantir que és un número pur i Math.abs() pugui operar
-               const numericBalance = unbrand ? unbrand(_currentBalance as any) : Number(_currentBalance);
+               // Desempaquetem el valor amb seguretat
+               const numericBalance = typeof unbrand === 'function' ? unbrand(_currentBalance as any) : Number(_currentBalance);
                
-               if (Math.abs(numericBalance) > 10) {
+               // [FIX CRÍTIC]: Utilitzem la constant centralitzada per avaluar la tolerància
+               if (Math.abs(numericBalance) > BUSINESS_RULES.MAX_LEAVE_BALANCE_MARGIN) {
                  const tipusDeute = numericBalance > 0 ? "tens diners per recuperar" : "tens deutes pendents";
                  throw new Error(`No pots sortir del grup: ${tipusDeute}. Primer has de liquidar el teu saldo (Balanç actual: ${(numericBalance/100).toFixed(2)}€).`);
                }
