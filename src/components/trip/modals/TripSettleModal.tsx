@@ -74,10 +74,19 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
         />
 
         <div className="space-y-3">
-            <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-2">
+            <label 
+              id="payment-method-label"
+              className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-2"
+            >
                 {t('MODALS.SETTLE.METHOD_LABEL', LITERALS.MODALS.SETTLE.METHOD_LABEL)}
             </label>
-            <div className="grid grid-cols-4 gap-2">
+            
+            {/* [MILLORA A11Y]: Afegit role group per a lectors de pantalla */}
+            <div 
+              className="grid grid-cols-4 gap-2" 
+              role="group" 
+              aria-labelledby="payment-method-label"
+            >
                 {translatedPaymentMethods.map((pm) => {
                     const isSelected = method === pm.id;
                     const Icon = pm.icon;
@@ -91,6 +100,9 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
                               }
                             }}
                             disabled={isSubmitting} // Deshabilitem selecció durant l'enviament
+                            // [MILLORA A11Y]: Atributs d'accessibilitat afegits
+                            aria-pressed={isSelected}
+                            aria-label={`Seleccionar mètode de pagament: ${pm.label}`}
                             className={`
                                 flex flex-col items-center justify-center gap-2 py-3 rounded-2xl border transition-all duration-200 relative overflow-hidden
                                 ${isSelected 
@@ -99,7 +111,7 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
                                 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}
                             `}
                         >
-                            <Icon size={20} strokeWidth={2.5} />
+                            <Icon size={20} strokeWidth={2.5} aria-hidden="true" />
                             <span className="text-[9px] font-bold uppercase">{pm.label}</span>
                         </button>
                     );
@@ -112,6 +124,8 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
             fullWidth
             disabled={isSubmitting} // Utilitzem disabled si el component Button ho suporta nativament
             icon={isSubmitting ? Loader2 : CheckCircle2}
+            // [MILLORA A11Y]: Informem que el botó està treballant
+            aria-busy={isSubmitting}
             className={`
               h-14 rounded-2xl text-sm font-black uppercase tracking-wider bg-slate-900 dark:bg-white text-white dark:text-black shadow-xl transition-all
               ${isSubmitting ? 'opacity-70 cursor-not-allowed' : 'hover:scale-[1.02] active:scale-95'}

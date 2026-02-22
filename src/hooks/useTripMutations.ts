@@ -51,7 +51,9 @@ export function useTripMutations() {
       const res = await actions.settleDebt(settlement, method);
 
       if (res.success) {
-        const optimisticPayment: Payment = {
+        // [MILLORA RISC ZERO]: Calculem l'estat i fem l'await de la BBDD ABANS
+        // de mostrar l'èxit a la UI per evitar inconsistències d'estat.
+        const simulatedPayment: Payment = {
           id: `temp-${Date.now()}`,
           from: settlement.from,
           to: settlement.to,
@@ -60,12 +62,13 @@ export function useTripMutations() {
           method
         };
         
-        const newPayments = [...(tripData.payments || []), optimisticPayment];
+        const newPayments = [...(tripData.payments || []), simulatedPayment];
         const newBalances = calculateBalances(expenses, tripData.users, newPayments);
         const isSettledNow = newBalances.every(b => Math.abs(unbrand(b.amount)) < 2);
         
         if (tripData.isSettled !== isSettledNow) {
-          await TripService.updateTripSettledState(tripData.id, isSettledNow).catch(console.error);
+          // Si aquesta crida falla, anirà al catch principal directament
+          await TripService.updateTripSettledState(tripData.id, isSettledNow);
         }
 
         showToast(t('ACTIONS.SETTLE_SUCCESS', 'Deute saldat correctament'), 'success');
@@ -75,7 +78,8 @@ export function useTripMutations() {
         return false;
       }
     } catch (e: unknown) { 
-      console.error(e);
+      console.error("[SettleDebt Error]:", e);
+      // [MILLORA RISC ZERO]: Ara capturem realment qualsevol error asíncron
       showToast(parseAppError(e, t), 'error');
       return false;
     }
@@ -95,7 +99,8 @@ export function useTripMutations() {
         const isSettledNow = newBalances.every(b => Math.abs(unbrand(b.amount)) < 2);
         
         if (tripData.isSettled !== isSettledNow) {
-          await TripService.updateTripSettledState(tripData.id, isSettledNow).catch(console.error);
+          // [MILLORA RISC ZERO]: Await robust sense catch intern silenciós
+          await TripService.updateTripSettledState(tripData.id, isSettledNow);
         }
 
         showToast('Liquidació anul·lada correctament', 'success');
@@ -109,7 +114,8 @@ export function useTripMutations() {
         const isSettledNow = newBalances.every(b => Math.abs(unbrand(b.amount)) < 2);
         
         if (tripData.isSettled !== isSettledNow) {
-          await TripService.updateTripSettledState(tripData.id, isSettledNow).catch(console.error);
+          // [MILLORA RISC ZERO]: Await robust sense catch intern silenciós
+          await TripService.updateTripSettledState(tripData.id, isSettledNow);
         }
 
         showToast(LITERALS.ACTIONS.DELETE_EXPENSE_SUCCESS, 'success');
@@ -119,6 +125,7 @@ export function useTripMutations() {
         return false;
       }
     } catch (e: unknown) { 
+      console.error("[DeleteExpense Error]:", e);
       showToast(parseAppError(e, t), 'error');
       return false;
     }
@@ -152,7 +159,6 @@ export function useTripMutations() {
 
       const myUser = currentTripUsers.find(u => u.linkedUid === currentUser.uid);
 
-      // [FIX]: Evitem que el propietari abandoni el grup si és l'últim, ha d'esborrar-lo.
       if (isOwner && currentTripUsers.filter(u => !u.isDeleted).length <= 1) {
           showToast("Ets l'últim membre actiu. Elimina el projecte sencer a 'Configuració'.", "warning");
           return;
@@ -163,7 +169,6 @@ export function useTripMutations() {
         return;
       }
 
-      // [FIX CRÍTIC]: Assegurem que enviem el número net (number) i no l'objecte MoneyCents
       const myBalanceAmount = unbrand(getUserBalance(myUser?.id, currentBalances)); 
 
       const res = await actions.leaveTrip(
