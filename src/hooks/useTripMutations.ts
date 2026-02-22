@@ -88,7 +88,6 @@ export function useTripMutations() {
       const isPayment = tripData.payments?.some(p => p.id === id);
 
       if (isPayment) {
-        // [FIX CRÍTIC]: Cridem la nova funció que guarda el log correcte
         await TripService.deletePayment(tripData.id, id, tripData.payments!);
 
         const newPayments = tripData.payments!.filter(p => p.id !== id);
@@ -103,7 +102,6 @@ export function useTripMutations() {
         return true;
       }
 
-      // El flux original per esborrar despeses
       const res = await actions.deleteExpense(id);
       if (res.success) {
         const newExpenses = expenses.filter(e => e.id !== id);
@@ -135,9 +133,11 @@ export function useTripMutations() {
     try {
       let currentTripUsers = tripData?.users || [];
       let currentBalances: Balance[] = [];
+      let isOwner = false;
 
       if (tripData && tripData.id === idToLeave) {
         currentBalances = calculateBalances(expenses, currentTripUsers, tripData.payments || []);
+        isOwner = tripData.ownerId === currentUser.uid;
       } else {
         const fetchedTrip = await TripService.getTrip(idToLeave);
         if (!fetchedTrip) {
@@ -147,16 +147,24 @@ export function useTripMutations() {
         const fetchedExpenses = await TripService.getTripExpenses(idToLeave);
         currentTripUsers = fetchedTrip.users;
         currentBalances = calculateBalances(fetchedExpenses, currentTripUsers, fetchedTrip.payments || []);
+        isOwner = fetchedTrip.ownerId === currentUser.uid;
       }
 
       const myUser = currentTripUsers.find(u => u.linkedUid === currentUser.uid);
+
+      // [FIX]: Evitem que el propietari abandoni el grup si és l'últim, ha d'esborrar-lo.
+      if (isOwner && currentTripUsers.filter(u => !u.isDeleted).length <= 1) {
+          showToast("Ets l'últim membre actiu. Elimina el projecte sencer a 'Configuració'.", "warning");
+          return;
+      }
 
       if (!canUserLeaveTrip(myUser?.id, currentBalances, BUSINESS_RULES.MAX_LEAVE_BALANCE_MARGIN)) {
         showToast("No pots sortir del viatge fins que no saldis els teus deutes o et paguin el que et deuen.", "error");
         return;
       }
 
-      const myBalanceAmount = getUserBalance(myUser?.id, currentBalances); 
+      // [FIX CRÍTIC]: Assegurem que enviem el número net (number) i no l'objecte MoneyCents
+      const myBalanceAmount = unbrand(getUserBalance(myUser?.id, currentBalances)); 
 
       const res = await actions.leaveTrip(
         myUser ? myUser.id : currentUser.uid,

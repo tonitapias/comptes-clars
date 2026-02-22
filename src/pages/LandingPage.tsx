@@ -11,7 +11,7 @@ import { signOut, User } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { TripService } from '../services/tripService';
 import { CURRENCIES } from '../utils/constants';
-import { TripData, TripUser } from '../types'; 
+import { TripData, TripUser, unbrand } from '../types'; // [FIX]: Importem unbrand
 import Modal from '../components/Modal';
 import Button from '../components/Button';
 import { useToast } from '../components/Toast';
@@ -194,27 +194,40 @@ export default function LandingPage({ user }: LandingPageProps) {
   const confirmLeaveTrip = async () => {
     if (!confirmModal.tripId || !user) return;
     
-    setIsLeaving(true); // Posem el botó de sortida en càrrega
+    setIsLeaving(true); 
 
     try {
         const targetTrip = myTrips.find(t => t.id === confirmModal.tripId);
         if (targetTrip) {
-            // [CLAU DEL RISC ZERO]: Obtenim les despeses REALS de la base de dades
+            
+            // [FIX]: Evitem que el propietari abandoni el grup si és l'últim, ha d'esborrar-lo entrant dins.
+            const isOwner = targetTrip.ownerId === user.uid;
+            const activeUsers = targetTrip.users.filter(u => !u.isDeleted).length;
+
+            if (isOwner && activeUsers <= 1) {
+                showToast("Ets l'últim membre actiu. Entra al projecte i elimina'l des de la configuració.", "warning");
+                setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                setIsLeaving(false);
+                return;
+            }
+
             const realExpenses = await TripService.getTripExpenses(confirmModal.tripId);
             
-            // Fem el càlcul amb les dades actualitzades
-            const balances = calculateBalances(realExpenses, targetTrip.users);
+            // [FIX CRÍTIC 1]: Passem targetTrip.payments || [] perquè els càlculs comptin que està saldat
+            const balances = calculateBalances(realExpenses, targetTrip.users, targetTrip.payments || []);
             const myBalance = balances.find(b => b.userId === confirmModal.internalUserId)?.amount || 0;
             
-            if (Math.abs(myBalance) > 1) { 
+            // [FIX CRÍTIC 2]: Desempaquetem el MoneyCents per poder calcular amb Math.abs sense fallar
+            const numericBalance = unbrand ? unbrand(myBalance as any) : Number(myBalance);
+
+            if (Math.abs(numericBalance) > 10) { 
                 showToast("No pots sortir d'un viatge si tens deutes pendents o et deuen diners.", "error");
                 setConfirmModal(prev => ({ ...prev, isOpen: false }));
                 setIsLeaving(false);
-                return; // Bloquegem l'eliminació immediatament
+                return; 
             }
         }
 
-        // Si arribem aquí, vol dir que realment té el deute a 0.
         if (confirmModal.internalUserId) {
             await TripService.leaveTrip(confirmModal.tripId, confirmModal.internalUserId);
         }
