@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTripState, useTripDispatch } from '../context/TripContext';
 import { ToastType } from '../components/Toast';
 import { calculateBalances, canUserLeaveTrip, getUserBalance } from '../services/billingService'; 
-import { Currency, Settlement, Payment, Balance, unbrand } from '../types'; 
+import { Currency, Settlement, Payment, Balance, unbrand, Expense } from '../types'; 
 import { LITERALS } from '../constants/literals';
 import { BUSINESS_RULES } from '../config/businessRules';
 import { TripService } from '../services/tripService'; 
@@ -23,36 +23,54 @@ export function useTripMutations() {
   const showToast = useCallback((msg: string, type: ToastType = 'success') => setToast({ msg, type }), []);
   const clearToast = useCallback(() => setToast(null), []);
 
-  const ensureOnline = useCallback((): boolean => {
+  // [MILLORA PWA]: Restaurem el comportament offline-first. 
+  // Només bloquegem accions destructives crítiques (esborrar viatge, sortir-ne).
+  const requireOnlineForCritical = useCallback((): boolean => {
     if (isOffline) {
-      showToast("Acció no permesa sense connexió a Internet.", 'warning');
+      showToast(t('COMMON.OFFLINE_CRITICAL_ERROR', "Acció denegada: Necessites connexió per a canvis crítics."), 'error');
       return false;
     }
     return true;
+  }, [isOffline, showToast, t]);
+
+  const notifySuccess = useCallback((msg: string) => {
+    if (isOffline) {
+      showToast(`${msg} (Pendent de xarxa)`, 'warning');
+    } else {
+      showToast(msg, 'success');
+    }
   }, [isOffline, showToast]);
 
-  const updateTripSettings = useCallback(async (name: string, currency: Currency) => {
-    if (!ensureOnline()) return false;
+  // [MILLORA CLEAN CODE]: Centralitzem el càlcul pesat per saber si el projecte està saldat.
+  // Així evitem repetir aquestes 6 línies a cada funció.
+  const evaluateSettledState = useCallback(async (updatedExpenses: Expense[], updatedPayments: Payment[]) => {
+    if (!tripData) return;
+    const newBalances = calculateBalances(updatedExpenses, tripData.users, updatedPayments);
+    const isSettledNow = newBalances.every(b => Math.abs(unbrand(b.amount)) < 2);
+    
+    if (tripData.isSettled !== isSettledNow) {
+      await TripService.updateTripSettledState(tripData.id, isSettledNow);
+    }
+  }, [tripData]);
 
+  const updateTripSettings = useCallback(async (name: string, currency: Currency) => {
     try {
       await actions.updateTripSettings(name, new Date().toISOString(), currency);
-      showToast(currency ? LITERALS.ACTIONS.UPDATE_SETTINGS_SUCCESS : LITERALS.ACTIONS.UPDATE_NAME_SUCCESS);
+      notifySuccess(currency ? LITERALS.ACTIONS.UPDATE_SETTINGS_SUCCESS : LITERALS.ACTIONS.UPDATE_NAME_SUCCESS);
       return true;
     } catch (e: unknown) { 
       showToast(parseAppError(e, t), 'error'); 
       return false;
     }
-  }, [actions, showToast, t, ensureOnline]); 
+  }, [actions, showToast, t, notifySuccess]); 
 
   const settleDebt = useCallback(async (settlement: Settlement, method: Payment['method'] = 'manual') => {
-    if (!ensureOnline() || !tripData) return false;
+    if (!tripData) return false;
 
     try {
       const res = await actions.settleDebt(settlement, method);
 
       if (res.success) {
-        // [MILLORA RISC ZERO]: Calculem l'estat i fem l'await de la BBDD ABANS
-        // de mostrar l'èxit a la UI per evitar inconsistències d'estat.
         const simulatedPayment: Payment = {
           id: `temp-${Date.now()}`,
           from: settlement.from,
@@ -63,15 +81,9 @@ export function useTripMutations() {
         };
         
         const newPayments = [...(tripData.payments || []), simulatedPayment];
-        const newBalances = calculateBalances(expenses, tripData.users, newPayments);
-        const isSettledNow = newBalances.every(b => Math.abs(unbrand(b.amount)) < 2);
-        
-        if (tripData.isSettled !== isSettledNow) {
-          // Si aquesta crida falla, anirà al catch principal directament
-          await TripService.updateTripSettledState(tripData.id, isSettledNow);
-        }
+        await evaluateSettledState(expenses, newPayments);
 
-        showToast(t('ACTIONS.SETTLE_SUCCESS', 'Deute saldat correctament'), 'success');
+        notifySuccess(t('ACTIONS.SETTLE_SUCCESS', 'Deute saldat correctament'));
         return true;
       } else {
         showToast(res.error || LITERALS.ACTIONS.SETTLE_ERROR, 'error');
@@ -79,46 +91,32 @@ export function useTripMutations() {
       }
     } catch (e: unknown) { 
       console.error("[SettleDebt Error]:", e);
-      // [MILLORA RISC ZERO]: Ara capturem realment qualsevol error asíncron
       showToast(parseAppError(e, t), 'error');
       return false;
     }
-  }, [actions, showToast, t, ensureOnline, expenses, tripData]); 
+  }, [actions, showToast, t, expenses, tripData, notifySuccess, evaluateSettledState]); 
 
   const deleteExpense = useCallback(async (id: string) => {
-    if (!ensureOnline() || !tripData) return false;
+    if (!tripData) return false;
 
     try {
       const isPayment = tripData.payments?.some(p => p.id === id);
 
       if (isPayment) {
         await TripService.deletePayment(tripData.id, id, tripData.payments!);
-
         const newPayments = tripData.payments!.filter(p => p.id !== id);
-        const newBalances = calculateBalances(expenses, tripData.users, newPayments);
-        const isSettledNow = newBalances.every(b => Math.abs(unbrand(b.amount)) < 2);
-        
-        if (tripData.isSettled !== isSettledNow) {
-          // [MILLORA RISC ZERO]: Await robust sense catch intern silenciós
-          await TripService.updateTripSettledState(tripData.id, isSettledNow);
-        }
+        await evaluateSettledState(expenses, newPayments);
 
-        showToast('Liquidació anul·lada correctament', 'success');
+        notifySuccess('Liquidació anul·lada correctament');
         return true;
       }
 
       const res = await actions.deleteExpense(id);
       if (res.success) {
         const newExpenses = expenses.filter(e => e.id !== id);
-        const newBalances = calculateBalances(newExpenses, tripData.users, tripData.payments || []);
-        const isSettledNow = newBalances.every(b => Math.abs(unbrand(b.amount)) < 2);
-        
-        if (tripData.isSettled !== isSettledNow) {
-          // [MILLORA RISC ZERO]: Await robust sense catch intern silenciós
-          await TripService.updateTripSettledState(tripData.id, isSettledNow);
-        }
+        await evaluateSettledState(newExpenses, tripData.payments || []);
 
-        showToast(LITERALS.ACTIONS.DELETE_EXPENSE_SUCCESS, 'success');
+        notifySuccess(LITERALS.ACTIONS.DELETE_EXPENSE_SUCCESS);
         return true;
       } else {
         showToast(res.error || LITERALS.ACTIONS.DELETE_EXPENSE_ERROR, 'error');
@@ -129,10 +127,10 @@ export function useTripMutations() {
       showToast(parseAppError(e, t), 'error');
       return false;
     }
-  }, [actions, showToast, t, ensureOnline, expenses, tripData]); 
+  }, [actions, showToast, t, expenses, tripData, notifySuccess, evaluateSettledState]); 
 
   const leaveTrip = useCallback(async (targetTripId?: string) => {
-    if (!ensureOnline() || !currentUser) return;
+    if (!requireOnlineForCritical() || !currentUser) return;
 
     const idToLeave = targetTripId || tripData?.id;
     if (!idToLeave) return;
@@ -190,10 +188,10 @@ export function useTripMutations() {
     } catch (e: unknown) {
       showToast(parseAppError(e, t), 'error');
     }
-  }, [actions, currentUser, tripData, expenses, navigate, showToast, t, ensureOnline]); 
+  }, [actions, currentUser, tripData, expenses, navigate, showToast, t, requireOnlineForCritical]); 
 
   const joinTrip = useCallback(async () => {
-     if (!ensureOnline()) return;
+     if (!requireOnlineForCritical()) return;
 
      if(!currentUser) return;
      try {
@@ -202,10 +200,10 @@ export function useTripMutations() {
      } catch(e: unknown) { 
          showToast(parseAppError(e, t), 'error');
      }
-  }, [actions, currentUser, showToast, t, ensureOnline]); 
+  }, [actions, currentUser, showToast, t, requireOnlineForCritical]); 
 
   const deleteTrip = useCallback(async () => {
-    if (!ensureOnline()) return;
+    if (!requireOnlineForCritical()) return;
 
     if (!tripData || !currentUser) return;
 
@@ -230,7 +228,7 @@ export function useTripMutations() {
       console.error(e);
       showToast(parseAppError(e, t), 'error'); 
     }
-  }, [actions, navigate, showToast, t, tripData, currentUser, ensureOnline]); 
+  }, [actions, navigate, showToast, t, tripData, currentUser, requireOnlineForCritical]); 
 
   const memoizedMutations = useMemo(() => ({
     updateTripSettings,

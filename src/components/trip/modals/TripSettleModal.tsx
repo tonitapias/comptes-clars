@@ -27,12 +27,20 @@ interface TripSettleModalProps {
 export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm }: TripSettleModalProps) {
   const { tripData } = useTripState(); 
   const { trigger } = useHapticFeedback();
+  const { t } = useTranslation();
   
   const [method, setMethod] = useState<Payment['method']>('manual');
-  // [REFACTOR RISC ZERO]: Afegim estat de càrrega per evitar dobles peticions
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const { t } = useTranslation();
+  // [MILLORA CLEAN CODE]: Extraiem els textos a dalt per mantenir el JSX net com una patena
+  const texts = useMemo(() => ({
+    title: t('MODALS.SETTLE.TITLE', LITERALS.MODALS.SETTLE.TITLE),
+    methodLabel: t('MODALS.SETTLE.METHOD_LABEL', LITERALS.MODALS.SETTLE.METHOD_LABEL),
+    processing: t('COMMON.PROCESSING', 'Processant...'),
+    confirm: t('MODALS.SETTLE.BTN_CONFIRM', LITERALS.MODALS.SETTLE.BTN_CONFIRM),
+    payment: t('COMMON.PAYMENT', 'Pagament'),
+    unknownUser: t('COMMON.UNKNOWN_USER', LITERALS.COMMON.UNKNOWN_USER)
+  }), [t]);
 
   const translatedPaymentMethods = useMemo(() => {
     return PAYMENT_METHOD_CONFIG.map(config => ({
@@ -43,27 +51,26 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
 
   if (!tripData || !settlement) return null;
 
-  const unknownUserText = t('COMMON.UNKNOWN_USER', LITERALS.COMMON.UNKNOWN_USER);
-  const getUser = (id: string) => tripData.users.find(u => u.id === id) || { name: unknownUserText, photoUrl: null } as TripUser;
+  const getUser = (id: string) => tripData.users.find(u => u.id === id) || { name: texts.unknownUser, photoUrl: null } as TripUser;
   
   const fromUser = getUser(settlement.from);
   const toUser = getUser(settlement.to);
 
   const handleConfirm = async () => {
-      if (isSubmitting) return; // Bloquegem si ja s'està enviant
+      if (isSubmitting) return; 
       
       trigger('success');
       setIsSubmitting(true);
       
       await onConfirm(method); 
       
-      setIsSubmitting(false); // Restaurem l'estat per si el modal no es desmunta a temps
+      setIsSubmitting(false); 
   };
 
-  const currentMethodLabel = translatedPaymentMethods.find(m => m.id === method)?.label || t('COMMON.PAYMENT', 'Pagament');
+  const currentMethodLabel = translatedPaymentMethods.find(m => m.id === method)?.label || texts.payment;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={t('MODALS.SETTLE.TITLE', LITERALS.MODALS.SETTLE.TITLE)}>
+    <Modal isOpen={isOpen} onClose={onClose} title={texts.title}>
       <div className="pt-2 pb-2 space-y-6">
         
         <HolographicTicket 
@@ -78,10 +85,9 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
               id="payment-method-label"
               className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-2"
             >
-                {t('MODALS.SETTLE.METHOD_LABEL', LITERALS.MODALS.SETTLE.METHOD_LABEL)}
+                {texts.methodLabel}
             </label>
             
-            {/* [MILLORA A11Y]: Afegit role group per a lectors de pantalla */}
             <div 
               className="grid grid-cols-4 gap-2" 
               role="group" 
@@ -99,8 +105,7 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
                                 setMethod(pm.id); 
                               }
                             }}
-                            disabled={isSubmitting} // Deshabilitem selecció durant l'enviament
-                            // [MILLORA A11Y]: Atributs d'accessibilitat afegits
+                            disabled={isSubmitting} 
                             aria-pressed={isSelected}
                             aria-label={`Seleccionar mètode de pagament: ${pm.label}`}
                             className={`
@@ -122,9 +127,8 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
         <Button 
             onClick={handleConfirm}
             fullWidth
-            disabled={isSubmitting} // Utilitzem disabled si el component Button ho suporta nativament
+            disabled={isSubmitting}
             icon={isSubmitting ? Loader2 : CheckCircle2}
-            // [MILLORA A11Y]: Informem que el botó està treballant
             aria-busy={isSubmitting}
             className={`
               h-14 rounded-2xl text-sm font-black uppercase tracking-wider bg-slate-900 dark:bg-white text-white dark:text-black shadow-xl transition-all
@@ -132,9 +136,9 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
             `}
         >
             {isSubmitting ? (
-               <span className="animate-pulse">{t('COMMON.PROCESSING', 'Processant...')}</span>
+               <span className="animate-pulse">{texts.processing}</span>
             ) : (
-               <>{t('MODALS.SETTLE.BTN_CONFIRM', LITERALS.MODALS.SETTLE.BTN_CONFIRM)} {currentMethodLabel}</>
+               <>{texts.confirm} {currentMethodLabel}</>
             )}
         </Button>
 

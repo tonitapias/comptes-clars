@@ -1,8 +1,8 @@
 // src/services/tripService.ts
 
 import { 
-  collection, doc, addDoc, updateDoc, deleteDoc, getDocs, getDoc, setDoc, query, where, arrayUnion,
-  FirestoreDataConverter, QueryDocumentSnapshot, SnapshotOptions, UpdateData 
+  collection, doc, updateDoc, getDocs, getDoc, setDoc, query, where, arrayUnion,
+  FirestoreDataConverter, QueryDocumentSnapshot, SnapshotOptions, UpdateData, writeBatch 
 } from 'firebase/firestore'; 
 import { User } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
@@ -66,24 +66,20 @@ const getExpenseRef = (tripId: string, expenseId: string) => doc(db, DB_PATHS.ge
 
 const generateId = () => crypto.randomUUID();
 
-const logAction = async (tripId: string, message: string, action: LogEntry['action']) => {
-  try {
-    const currentUser = auth.currentUser;
-    const finalUserName = currentUser?.displayName || 'Algú';
+// [MILLORA ARQUITECTURA]: En lloc de fer una escriptura per cada log, generem l'objecte 
+// i l'adjuntem a la transacció principal. Estalvia costos i prevé errors de consistència.
+const createLogEntry = (message: string, action: LogEntry['action']): LogEntry => {
+  const currentUser = auth.currentUser;
+  const finalUserName = currentUser?.displayName || 'Algú';
 
-    const log: LogEntry = {
-      id: generateId(),
-      action,
-      message,
-      userId: currentUser?.uid || 'anonymous',
-      userName: finalUserName,
-      timestamp: new Date().toISOString()
-    };
-    
-    await updateDoc(getTripRef(tripId), { logs: arrayUnion(sanitizeData(log)) });
-  } catch (e) { 
-      console.error("Error guardant log:", e); 
-  }
+  return {
+    id: generateId(),
+    action,
+    message,
+    userId: currentUser?.uid || 'anonymous',
+    userName: finalUserName,
+    timestamp: new Date().toISOString()
+  };
 };
 
 export const TripService = {
@@ -133,8 +129,12 @@ export const TripService = {
   },
 
   updateTrip: async (tripId: string, data: Partial<TripData>) => {
-    await updateDoc(getTripRef(tripId), sanitizeData(data) as UpdateData<TripData>);
-    await logAction(tripId, `ha actualitzat la configuració`, 'settings');
+    const log = createLogEntry(`ha actualitzat la configuració`, 'settings');
+    
+    await updateDoc(getTripRef(tripId), {
+      ...sanitizeData(data),
+      logs: arrayUnion(sanitizeData(log))
+    } as UpdateData<TripData>);
   },
 
   updateTripSettledState: async (tripId: string, isSettled: boolean) => {
@@ -142,35 +142,55 @@ export const TripService = {
   },
 
   deleteTrip: async (tripId: string) => {
-    await updateDoc(getTripRef(tripId), { isDeleted: true });
-    await logAction(tripId, `ha arxivat el projecte`, 'settings');
+    const log = createLogEntry(`ha arxivat el projecte`, 'settings');
+    await updateDoc(getTripRef(tripId), { 
+      isDeleted: true,
+      logs: arrayUnion(sanitizeData(log))
+    });
   },
 
   addExpense: async (tripId: string, expense: Omit<Expense, 'id'>) => {
     ExpenseSchema.parse(expense); 
     const cleanExpense = sanitizeData(expense);
-    const docRef = await addDoc(getExpensesCol(tripId), cleanExpense);
+    
+    // Generem la referència sense fer l'escriptura a Firebase encara
+    const newExpenseRef = doc(getExpensesCol(tripId)); 
     
     const formattedAmount = (expense.amount / 100).toFixed(2).replace('.', ',');
-    await logAction(tripId, `ha afegit la despesa "${expense.title}" de ${formattedAmount} €`, 'create');
-    await updateDoc(getTripRef(tripId), { isSettled: false });
+    const log = createLogEntry(`ha afegit la despesa "${expense.title}" de ${formattedAmount} €`, 'create');
     
-    return docRef.id;
+    // Agrupem la creació i l'actualització del viatge en una sola transacció atòmica
+    const batch = writeBatch(db);
+    batch.set(newExpenseRef, cleanExpense);
+    batch.update(getTripRef(tripId), { 
+      isSettled: false,
+      logs: arrayUnion(sanitizeData(log))
+    });
+    
+    await batch.commit();
+    return newExpenseRef.id;
   },
 
   updateExpense: async (tripId: string, expenseId: string, expense: Partial<Expense>) => {
-    await updateDoc(getExpenseRef(tripId, expenseId), sanitizeData(expense));
-    
     let detail = '';
     if (expense.amount) {
         detail = ` (nou import: ${(expense.amount / 100).toFixed(2).replace('.', ',')} €)`;
     }
-    
-    await logAction(tripId, `ha modificat la despesa "${expense.title || 'sense nom'}"${detail}`, 'update');
-    await updateDoc(getTripRef(tripId), { isSettled: false });
+    const log = createLogEntry(`ha modificat la despesa "${expense.title || 'sense nom'}"${detail}`, 'update');
+
+    // Agrupem en batch
+    const batch = writeBatch(db);
+    batch.update(getExpenseRef(tripId, expenseId), sanitizeData(expense));
+    batch.update(getTripRef(tripId), { 
+      isSettled: false,
+      logs: arrayUnion(sanitizeData(log))
+    });
+
+    await batch.commit();
   },
 
   deleteExpense: async (tripId: string, expenseId: string) => {
+    // Aquesta lectura prèvia és necessària per saber què estem esborrant per a l'historial
     const snap = await getDoc(getExpenseRef(tripId, expenseId));
     let title = 'una despesa';
     let amountDetail = '';
@@ -183,11 +203,15 @@ export const TripService = {
         }
     }
     
-    await deleteDoc(getExpenseRef(tripId, expenseId));
-    await logAction(tripId, `ha eliminat la despesa "${title}"${amountDetail}`, 'delete');
+    const log = createLogEntry(`ha eliminat la despesa "${title}"${amountDetail}`, 'delete');
+
+    const batch = writeBatch(db);
+    batch.delete(getExpenseRef(tripId, expenseId));
+    batch.update(getTripRef(tripId), { logs: arrayUnion(sanitizeData(log)) });
+    
+    await batch.commit();
   },
 
-  // FIX 1: Millorem la traducció del tipus de pagament per al Log
   settleDebt: async (tripId: string, settlement: Settlement, method: string) => {
     const payment: Payment = {
       id: generateId(),
@@ -198,8 +222,6 @@ export const TripService = {
       method: method as Payment['method']
     };
 
-    await updateDoc(getTripRef(tripId), { payments: arrayUnion(sanitizeData(payment)) });
-    
     const getMethodText = (m: string) => {
         switch(m) {
             case 'manual': return 'en efectiu';
@@ -211,21 +233,31 @@ export const TripService = {
     };
     
     const formattedAmount = (settlement.amount / 100).toFixed(2).replace('.', ',');
-    await logAction(tripId, `ha liquidat un deute de ${formattedAmount} € ${getMethodText(method)}`, 'settle');
+    const log = createLogEntry(`ha liquidat un deute de ${formattedAmount} € ${getMethodText(method)}`, 'settle');
+
+    // Combinem el pagament i el log en una sola escriptura
+    await updateDoc(getTripRef(tripId), { 
+      payments: arrayUnion(sanitizeData(payment)),
+      logs: arrayUnion(sanitizeData(log))
+    });
   },
 
-  // FIX 2: Nova funció exclusiva per esborrar pagaments i generar un Log net
   deletePayment: async (tripId: string, paymentId: string, currentPayments: Payment[]) => {
     const paymentToDelete = currentPayments.find(p => p.id === paymentId);
     const newPayments = currentPayments.filter(p => p.id !== paymentId);
-    
-    await updateDoc(getTripRef(tripId), { payments: newPayments });
     
     let amountDetail = '';
     if (paymentToDelete) {
        amountDetail = ` de ${(paymentToDelete.amount / 100).toFixed(2).replace('.', ',')} €`;
     }
-    await logAction(tripId, `ha anul·lat una liquidació${amountDetail}`, 'delete');
+    
+    const log = createLogEntry(`ha anul·lat una liquidació${amountDetail}`, 'delete');
+
+    // Combinem en una sola escriptura
+    await updateDoc(getTripRef(tripId), { 
+      payments: newPayments,
+      logs: arrayUnion(sanitizeData(log))
+    });
   },
 
   joinTripViaLink: async (tripId: string, user: User) => {
@@ -256,12 +288,14 @@ export const TripService = {
         photoUrl: user.photoURL || null
       };
 
+      const log = createLogEntry(`s'ha unit al grup`, 'join');
+
       await updateDoc(tripRef, {
         users: arrayUnion(sanitizeData(newUser)),
-        memberUids: arrayUnion(user.uid)
+        memberUids: arrayUnion(user.uid),
+        logs: arrayUnion(sanitizeData(log))
       });
       
-      await logAction(tripId, `s'ha unit al grup`, 'join');
     } catch (error: unknown) {
       console.error("Error en unir-se al viatge:", error);
       if (error && typeof error === 'object' && 'code' in error) {
@@ -285,8 +319,12 @@ export const TripService = {
       return u;
     });
 
-    await updateDoc(tripRef, { users: updatedUsers });
-    await logAction(tripId, `ha canviat el nom d'un participant`, 'settings');
+    const log = createLogEntry(`ha canviat el nom d'un participant`, 'settings');
+
+    await updateDoc(tripRef, { 
+      users: updatedUsers,
+      logs: arrayUnion(sanitizeData(log))
+    });
   },
 
   leaveTrip: async (tripId: string, internalUserId: string) => {
@@ -300,7 +338,7 @@ export const TripService = {
       
       if (!currentUser) throw new Error("No estàs autenticat");
 
-      await logAction(tripId, `ha abandonat el projecte`, 'settings');
+      const log = createLogEntry(`ha abandonat el projecte`, 'settings');
 
       const updatedUsers = tripData.users.map(u => {
         if (u.id === internalUserId) return { ...u, linkedUid: null, isAuth: false };
@@ -309,7 +347,11 @@ export const TripService = {
 
       const updatedMemberUids = tripData.memberUids?.filter(uid => uid !== currentUser.uid) || [];
 
-      await updateDoc(tripRef, { users: updatedUsers, memberUids: updatedMemberUids });
+      await updateDoc(tripRef, { 
+        users: updatedUsers, 
+        memberUids: updatedMemberUids,
+        logs: arrayUnion(sanitizeData(log))
+      });
     } catch (error: unknown) {
       console.error("Error en sortir del viatge:", error);
       if (error instanceof Error) throw new Error(error.message);
@@ -328,7 +370,12 @@ export const TripService = {
       return u;
     });
 
-    await updateDoc(tripRef, { users: updatedUsers, memberUids: arrayUnion(user.uid) });
-    await logAction(tripId, `ha reclamat un perfil`, 'join');
+    const log = createLogEntry(`ha reclamat un perfil`, 'join');
+
+    await updateDoc(tripRef, { 
+      users: updatedUsers, 
+      memberUids: arrayUnion(user.uid),
+      logs: arrayUnion(sanitizeData(log))
+    });
   }
 };
