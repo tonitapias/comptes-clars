@@ -443,6 +443,8 @@ export default function LandingPage({ user }: LandingPageProps) {
                 >
                     Sí, vull sortir
                 </Button>
+
+            
             </div>
         </div>
       </Modal>

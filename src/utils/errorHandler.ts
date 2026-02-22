@@ -1,5 +1,7 @@
+import React from 'react';
 import { TFunction } from 'i18next';
 import { LITERALS } from '../constants/literals';
+import * as Sentry from "@sentry/react"; // [NOU]: Importem Sentry per a la telemetria
 
 // [RISC ZERO]: Interfície local per detectar objectes de Firebase sense importar la llibreria.
 interface FirebaseError extends Error {
@@ -49,8 +51,16 @@ export const parseAppError = (error: unknown, t: TFunction): string => {
 
 // --- NOU CODI: ADAPTADOR DE TELEMETRIA ---
 export const logAppError = (error: Error, errorInfo?: React.ErrorInfo | Record<string, unknown>, context?: string) => {
-  // [FUTUR]: Aquí és on connectarem Sentry o Datadog.
-  // if (import.meta.env.PROD) { Sentry.captureException(error, { extra: { errorInfo, context } }); }
+  
+  // [TELEMETRIA ACTIVA]: Enviem l'error a Sentry si estem a Producció
+  if (import.meta.env.PROD) { 
+    Sentry.captureException(error, { 
+      extra: { 
+        errorInfo, 
+        context: context || 'Error Global No Controlat' 
+      } 
+    }); 
+  }
   
   const errorPayload = {
     timestamp: new Date().toISOString(),
@@ -62,6 +72,6 @@ export const logAppError = (error: Error, errorInfo?: React.ErrorInfo | Record<s
     userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Desconegut',
   };
 
-  // En lloc d'un simple console.error, fem un log estructurat preparat per ser indexat
+  // En lloc d'un simple console.error, fem un log estructurat preparat per ser indexat a la consola
   console.error('[MONITORITZACIÓ CRÍTICA] 🔴 App Crash:', JSON.stringify(errorPayload, null, 2));
 };
