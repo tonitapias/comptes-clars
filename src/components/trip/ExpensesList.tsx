@@ -1,10 +1,10 @@
 // src/components/trip/ExpensesList.tsx
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Receipt, ArrowRightLeft, Paperclip, Loader2, Calendar, X, SlidersHorizontal, ArrowDownRight } from 'lucide-react'; 
 import { CATEGORIES } from '../../utils/constants';
 import { Expense, CategoryId, TripUser, Currency } from '../../types';
 import { formatCurrency, formatDateDisplay } from '../../utils/formatters';
-import { useTripState } from '../../context/TripContext'; // <-- CANVI AQUÍ
+import { useTripState } from '../../context/TripContext'; 
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
 
 interface ExpensesListProps {
@@ -29,7 +29,6 @@ const ExpenseSkeleton = () => (
   </div>
 );
 
-// [SAFE-FIX]: Definim els props de forma estricta (Sense 'any').
 interface MemoizedExpenseItemProps {
   expense: Expense;
   showDateHeader: boolean;
@@ -45,8 +44,6 @@ interface MemoizedExpenseItemProps {
   trigger: (type: string) => void;
 }
 
-// [SAFE-FIX]: Extraiem el component i l'embolcallem amb React.memo.
-// Això impedeix el "re-render" dels tiquets vells quan només s'està carregant més llista pel final.
 const MemoizedExpenseItem = React.memo(({
   expense,
   showDateHeader,
@@ -144,7 +141,7 @@ export default function ExpensesList({
   onEdit,
   isSearching
 }: ExpensesListProps) {
-  const { tripData } = useTripState(); // <-- CANVI AQUÍ
+  const { tripData } = useTripState(); 
   const { trigger } = useHapticFeedback();
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const observerTarget = useRef<HTMLDivElement>(null);
@@ -157,16 +154,53 @@ export default function ExpensesList({
     }, {} as Record<string, TripUser>);
   }, [tripData?.users]);
 
-  // [SAFE-FIX]: Diccionari O(1) per a les categories, evitem fer iteracions per cada tiquet.
+  const getUserName = useCallback((id: string) => userMap[id]?.name || 'Desconegut', [userMap]);
+
   const categoryMap = useMemo(() => {
     const map = new Map<CategoryId | string, typeof CATEGORIES[0]>();
     CATEGORIES.forEach(c => map.set(c.id, c));
     return map;
   }, []);
 
+  // [RISC ZERO]: Fusionem les despeses normals amb els pagaments disfressats de despeses
+  const mergedExpenses = useMemo(() => {
+    const mappedPayments: Expense[] = (tripData?.payments || []).map(p => {
+        const methodLabel = p.method === 'bizum' ? 'Bizum' : p.method === 'transfer' ? 'Transferència' : p.method === 'card' ? 'Targeta' : 'Efectiu';
+        return {
+            id: p.id,
+            title: `Liquidació (${methodLabel})`,
+            amount: p.amount,
+            payer: p.from,
+            involved: [p.to],
+            category: 'transfer',
+            date: p.date,
+            splitType: 'equal'
+        } as unknown as Expense;
+    });
+
+    const q = searchQuery.toLowerCase().trim();
+    const cat = filterCategory;
+
+    const filteredPayments = mappedPayments.filter(e => {
+        if (cat !== 'all' && e.category !== cat) return false;
+        if (q) {
+            const searchStr = `${e.title} ${getUserName(e.payer)} ${e.involved.map(uid => getUserName(uid)).join(' ')}`.toLowerCase();
+            if (!searchStr.includes(q)) return false;
+        }
+        return true;
+    });
+
+    return [...expenses, ...filteredPayments].sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        if (dateA !== dateB) return dateB - dateA;
+        return String(b.id).localeCompare(String(a.id));
+    });
+  }, [expenses, tripData?.payments, searchQuery, filterCategory, getUserName]);
+
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [searchQuery, filterCategory, expenses]);
+  }, [searchQuery, filterCategory, mergedExpenses]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -181,11 +215,10 @@ export default function ExpensesList({
     if (observerTarget.current) observer.observe(observerTarget.current);
     
     return () => observer.disconnect();
-  }, [expenses.length, isSearching]); 
+  }, [mergedExpenses.length, isSearching]); 
 
-  const getUserName = (id: string) => userMap[id]?.name || 'Desconegut';
-  const visibleExpenses = expenses.slice(0, visibleCount);
-  const hasMore = visibleCount < expenses.length;
+  const visibleExpenses = mergedExpenses.slice(0, visibleCount);
+  const hasMore = visibleCount < mergedExpenses.length;
 
   if (!tripData) return null;
   const { currency } = tripData;
@@ -261,11 +294,11 @@ export default function ExpensesList({
       <main className="flex-1 pt-4 relative">
         <div className="absolute left-[27px] top-0 bottom-0 w-px bg-gradient-to-b from-slate-200 via-slate-200 to-transparent dark:from-slate-800 dark:via-slate-800 z-0" />
 
-        {isSearching && expenses.length === 0 ? (
+        {isSearching && mergedExpenses.length === 0 ? (
            <div className="space-y-4 pt-4 pl-14 pr-4">
              {Array.from({ length: 3 }).map((_, i) => <ExpenseSkeleton key={i} />)}
            </div>
-        ) : expenses.length === 0 ? (
+        ) : mergedExpenses.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 text-center animate-fade-in pl-0">
                 <div className="w-20 h-20 bg-slate-50 dark:bg-slate-900 rounded-full flex items-center justify-center mb-4 border border-slate-100 dark:border-slate-800">
                     <Receipt className="w-8 h-8 text-slate-300 dark:text-slate-600" strokeWidth={1.5} />

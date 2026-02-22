@@ -1,6 +1,6 @@
 // src/services/billingService.ts
 
-import { Expense, TripUser, Balance, Settlement, CategoryStat, MoneyCents, toCents, unbrand } from '../types';
+import { Expense, TripUser, Balance, Settlement, CategoryStat, MoneyCents, toCents, unbrand, Payment } from '../types';
 import { CATEGORIES, SPLIT_TYPES } from '../utils/constants';
 
 export const SPECIAL_CATEGORIES = {
@@ -41,15 +41,13 @@ const getStableDistributionOffset = (seed: string | number | undefined, modulus:
 
 const calculateEqualSplit = (
   exp: Expense, 
-  payerId: string, // [FIX]: Passem el payerId per si hem de fer un fallback
+  payerId: string, 
   validUserIds: Set<string>, 
   getCanonicalId: (id: string) => string | undefined,
   allUserIds: string[]
 ): SplitResult => {
   const allocations: Record<string, MoneyCents> = {};
-  
   const rawInvolved = (exp.involved && exp.involved.length > 0) ? exp.involved : allUserIds;
-  
   const receiversIds = Array.from(new Set(
     rawInvolved
       .map(id => getCanonicalId(id))
@@ -59,8 +57,6 @@ const calculateEqualSplit = (
   const count = receiversIds.length;
   const totalCents = unbrand(exp.amount);
 
-  // [RISC ZERO FIX]: Si cap receptor és vàlid (ex: tots els implicats han sortit del grup), 
-  // el pagador assumeix la despesa completa per evitar la creació de "diners fantasma".
   if (count === 0) {
     allocations[payerId] = toCents(-totalCents);
     return { allocations };
@@ -68,7 +64,6 @@ const calculateEqualSplit = (
 
   const absTotal = Math.abs(totalCents);
   const isNegative = totalCents < 0;
-
   const baseAmount = Math.floor(absTotal / count); 
   const remainder = absTotal % count; 
   const offset = getStableDistributionOffset(exp.id, count);
@@ -77,7 +72,6 @@ const calculateEqualSplit = (
     const rotatedIndex = (i - offset + count) % count;
     const paysExtraCent = rotatedIndex < remainder;
     const amountToPay = baseAmount + (paysExtraCent ? 1 : 0);
-    
     allocations[uid] = toCents(isNegative ? amountToPay : -amountToPay);
   });
 
@@ -99,15 +93,12 @@ const calculateExactSplit = (
     if (uid && validUserIds.has(uid)) {
       const currentDebt = unbrand(allocations[uid] || toCents(0));
       const amountVal = unbrand(amount);
-      
       allocations[uid] = toCents(currentDebt - amountVal);
       totalAllocated += amountVal;
     }
   });
 
   const remainder = unbrand(exp.amount) - totalAllocated;
-  
-  // [RISC ZERO FIX]: Assignació incondicional al payer de qualsevol desajust de cèntims o quantitats
   if (remainder !== 0) {
     const currentPayerDebt = unbrand(allocations[payerId] || toCents(0));
     allocations[payerId] = toCents(currentPayerDebt - remainder);
@@ -118,7 +109,7 @@ const calculateExactSplit = (
 
 const calculateSharesSplit = (
   exp: Expense,
-  payerId: string, // [FIX]: Passem el payerId
+  payerId: string, 
   validUserIds: Set<string>,
   getCanonicalId: (id: string) => string | undefined
 ): SplitResult => {
@@ -136,7 +127,6 @@ const calculateSharesSplit = (
 
   const totalShares = entries.reduce((acc, curr) => acc + curr.shares, 0);
 
-  // [RISC ZERO FIX]: Si no hi ha "parts" vàlides, el pagador s'ho empassa
   if (totalShares <= 0) {
     allocations[payerId] = toCents(-totalCents);
     return { allocations };
@@ -156,7 +146,6 @@ const calculateSharesSplit = (
   });
 
   const remainder = absTotal - totalBaseAllocated;
-  
   const offset = getStableDistributionOffset(exp.id, distributionList.length);
   const count = distributionList.length;
 
@@ -172,7 +161,8 @@ const calculateSharesSplit = (
   return { allocations };
 };
 
-export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balance[] => {
+// REFACTOR: Nou paràmetre opcional payments
+export const calculateBalances = (expenses: Expense[], users: TripUser[], payments: Payment[] = []): Balance[] => {
   const balanceMap: Record<string, MoneyCents> = {};
   
   users.forEach(u => balanceMap[u.id] = toCents(0));
@@ -184,7 +174,6 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
 
   expenses.forEach(exp => {
     const payerId = getCanonicalId(exp.payer);
-    // Si el pagador no és vàlid, directament ignorem la despesa sencera per evitar inestabilitats
     if (!payerId) return;
 
     const splitType = exp.splitType || SPLIT_TYPES.EQUAL;
@@ -217,6 +206,21 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
         balanceMap[uid] = toCents(current + debt);
       }
     });
+  });
+
+  // APLIQUEM ELS PAGAMENTS: 
+  // El que fa la transferència (payer) rep += deute (puja el seu balanç). 
+  // El que rep els diners (receiver) rep -= deute (baixa el seu balanç).
+  payments.forEach(payment => {
+    const payerId = getCanonicalId(payment.from);
+    const receiverId = getCanonicalId(payment.to);
+
+    if (payerId && balanceMap[payerId] !== undefined) {
+       balanceMap[payerId] = toCents(unbrand(balanceMap[payerId]) + unbrand(payment.amount));
+    }
+    if (receiverId && balanceMap[receiverId] !== undefined) {
+       balanceMap[receiverId] = toCents(unbrand(balanceMap[receiverId]) - unbrand(payment.amount));
+    }
   });
 
   return Object.entries(balanceMap)

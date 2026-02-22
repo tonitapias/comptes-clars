@@ -1,18 +1,17 @@
 // src/hooks/useTripActions.ts
 
 import { useState } from 'react';
-import { useTranslation } from 'react-i18next'; // [RISC ZERO]: Importem el hook de traduccions
+import { useTranslation } from 'react-i18next'; 
 import { TripService } from '../services/tripService';
 import { Settlement, Expense, Currency, TripData } from '../types';
 import { User } from 'firebase/auth';
-import { parseAppError } from '../utils/errorHandler'; // [RISC ZERO]: Importem el nostre gestor centralitzat
+import { parseAppError } from '../utils/errorHandler'; 
 
 export function useTripActions(tripId: string | undefined) {
   const [loadingAction, setLoadingAction] = useState(false);
-  const { t } = useTranslation(); // [RISC ZERO]: Instanciem les traduccions
+  const { t } = useTranslation(); 
 
   const execute = async <T>(action: () => Promise<T>): Promise<{ success: boolean; data?: T; error?: string }> => {
-    // [RISC ZERO]: Donem feedback deduït del sistema multi-idioma si no hi ha ID
     if (!tripId) return { success: false, error: t('ERRORS.NOT_FOUND', "ID de viatge no trobat") }; 
     
     setLoadingAction(true);
@@ -21,7 +20,6 @@ export function useTripActions(tripId: string | undefined) {
       return { success: true, data };
     } catch (e: unknown) {
       console.error(e);
-      // [RISC ZERO]: Passem l'error pel nostre filtre intel·ligent per interceptar caigudes de xarxa o problemes de Firebase
       const errorMessage = parseAppError(e, t);
       return { success: false, error: errorMessage };
     } finally {
@@ -61,8 +59,6 @@ export function useTripActions(tripId: string | undefined) {
         await TripService.updateTrip(tripId!, updateData);
       }),
 
-    // --- ACCIÓ "SOFT DELETE" ---
-    // Aquesta acció marca el viatge com a isDeleted: true
     deleteTrip: () => 
       execute(async () => {
          await TripService.deleteTrip(tripId!);
@@ -71,16 +67,12 @@ export function useTripActions(tripId: string | undefined) {
     joinTrip: (user: User) => 
       execute(() => TripService.joinTripViaLink(tripId!, user)),
     
-    // --- LÒGICA PROTECCIÓ CONTRA DEUTES ---
-    leaveTrip: async (userId: string, currentBalance: number, isAuthUser: boolean, userUid?: string) => {
+    leaveTrip: async (userId: string, _currentBalance: number, isAuthUser: boolean, userUid?: string) => {
         return execute(async () => {
             if (isAuthUser && userUid) {
-               // VALIDACIÓ: Protecció estricta de deutes.
-               // Utilitzem 10 cèntims com a marge d'error per arrodoniments.
-               // Si l'usuari deu diners O li deuen diners, no pot marxar.
-               if (Math.abs(currentBalance) > 10) {
-                 const tipusDeute = currentBalance > 0 ? "tens diners per recuperar" : "tens deutes pendents";
-                 throw new Error(`No pots sortir del grup: ${tipusDeute}. Primer has de liquidar el teu saldo (Balanç actual: ${(currentBalance/100).toFixed(2)}€).`);
+               if (Math.abs(_currentBalance) > 10) {
+                 const tipusDeute = _currentBalance > 0 ? "tens diners per recuperar" : "tens deutes pendents";
+                 throw new Error(`No pots sortir del grup: ${tipusDeute}. Primer has de liquidar el teu saldo (Balanç actual: ${(_currentBalance/100).toFixed(2)}€).`);
                }
 
                await TripService.leaveTrip(tripId!, userId);

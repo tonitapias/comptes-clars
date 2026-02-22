@@ -1,7 +1,7 @@
 // src/hooks/useTripCalculations.ts
 
 import { useState, useEffect, useMemo } from 'react';
-import type { Expense, TripUser, MoneyCents } from '../types';
+import type { Expense, TripUser, MoneyCents, Payment } from '../types';
 import * as billingService from '../services/billingService';
 
 interface CalculationsResult {
@@ -18,11 +18,12 @@ interface CalculationsResult {
 export function useTripCalculations(
   expenses: Expense[], 
   users: TripUser[], 
+  payments: Payment[], 
   searchQuery: string, 
   filterCategory: string
 ): CalculationsResult {
   
-  const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
+  const [debouncedQuery, setDebouncedQuery] = useState(searchQuery || ''); // FIX: Fallback inicial
   const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
@@ -61,7 +62,10 @@ export function useTripCalculations(
   }, [expenses, userSearchIndex]);
 
   const filteredExpenses = useMemo(() => {
-    const q = debouncedQuery.toLowerCase().trim();
+    // FIX CRÍTIC: Ens assegurem que sempre és un string abans de fer toLowerCase()
+    const safeQuery = debouncedQuery || '';
+    const q = safeQuery.toLowerCase().trim();
+    
     const isCategoryFilterActive = filterCategory !== 'all';
 
     const sorted = [...expenses].sort((a, b) => {
@@ -88,14 +92,11 @@ export function useTripCalculations(
     billingService.calculateTotalSpending(filteredExpenses), 
   [filteredExpenses]);
 
-  // [RISC ZERO]: Eliminem el useState i useEffect asíncron que causaven el bucle.
-  // Utilitzem useMemo per calcular les dades derivades de forma síncrona, segura i òptima.
-  const balances = useMemo(() => billingService.calculateBalances(expenses, users), [expenses, users]);
+  const balances = useMemo(() => billingService.calculateBalances(expenses, users, payments), [expenses, users, payments]);
   const categoryStats = useMemo(() => billingService.calculateCategoryStats(expenses), [expenses]);
   const settlements = useMemo(() => billingService.calculateSettlements(balances), [balances]);
   const totalGroupSpending = useMemo(() => billingService.calculateTotalSpending(expenses), [expenses]);
 
-  // Retornem l'objecte amb la mateixa signatura que l'antic Hook
   return { 
     filteredExpenses,
     balances, 
@@ -104,6 +105,6 @@ export function useTripCalculations(
     totalGroupSpending, 
     displayedTotal,
     isSearching,
-    isCalculating: false // Ja no hi ha timeout asíncron, els càlculs són immediats
+    isCalculating: false 
   };
 }

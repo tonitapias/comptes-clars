@@ -7,11 +7,9 @@ import {
 import { User } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
 import { DB_PATHS, TRIP_DOC_PREFIX } from '../config/dbPaths';
-import { Expense, TripData, Settlement, TripUser, LogEntry, Currency } from '../types';
+import { Expense, TripData, Settlement, TripUser, LogEntry, Currency, Payment } from '../types';
 import { ExpenseSchema } from '../utils/validation';
-import { calculateBalances } from './billingService'; // <-- [AFEGIT]: Importem la funció per recalcular balanços
 
-// --- HELPER: SANITIZE DATA ---
 const sanitizeData = <T>(data: T): T => {
   if (data === null || typeof data !== 'object') return data;
   if (data instanceof Date) return data.toISOString() as unknown as T;
@@ -26,7 +24,6 @@ const sanitizeData = <T>(data: T): T => {
   return sanitized as T;
 };
 
-// --- CONVERTIDOR DE DADES ---
 const tripConverter: FirestoreDataConverter<TripData> = {
   toFirestore: (trip: TripData) => {
     const sanitized = sanitizeData(trip);
@@ -34,7 +31,8 @@ const tripConverter: FirestoreDataConverter<TripData> = {
       ...sanitized,
       logs: sanitized.logs || [],
       memberUids: sanitized.memberUids || [],
-      ownerId: sanitized.ownerId || null
+      ownerId: sanitized.ownerId || null,
+      payments: sanitized.payments || []
     };
   },
   fromFirestore: (snapshot: QueryDocumentSnapshot, options: SnapshotOptions): TripData => {
@@ -44,6 +42,7 @@ const tripConverter: FirestoreDataConverter<TripData> = {
       name: data.name || 'Viatge sense nom',
       users: data.users || [],
       expenses: data.expenses || [],
+      payments: data.payments || [],
       currency: data.currency || { code: 'EUR', symbol: '€', locale: 'ca-ES', name: 'Euro' } as Currency,
       createdAt: data.createdAt || new Date().toISOString(),
       memberUids: data.memberUids || [],
@@ -62,29 +61,15 @@ const getTripRef = (tripId: string) => {
   return doc(db, DB_PATHS.getTripDocPath(tripId)).withConverter(tripConverter);
 }
 
-const getExpensesCol = (tripId: string) => 
-  collection(db, DB_PATHS.getExpensesCollectionPath(tripId));
-
-const getExpenseRef = (tripId: string, expenseId: string) => 
-  doc(db, DB_PATHS.getExpenseDocPath(tripId, expenseId));
+const getExpensesCol = (tripId: string) => collection(db, DB_PATHS.getExpensesCollectionPath(tripId));
+const getExpenseRef = (tripId: string, expenseId: string) => doc(db, DB_PATHS.getExpenseDocPath(tripId, expenseId));
 
 const generateId = () => crypto.randomUUID();
 
 const logAction = async (tripId: string, message: string, action: LogEntry['action']) => {
   try {
     const currentUser = auth.currentUser;
-    let finalUserName = currentUser?.displayName || 'Algú';
-
-    if (currentUser) {
-        const tripSnap = await getDoc(getTripRef(tripId));
-        if (tripSnap.exists()) {
-            const tripData = tripSnap.data();
-            const matchedUser = tripData.users.find((u: TripUser) => u.linkedUid === currentUser.uid);
-            if (matchedUser && matchedUser.name) {
-                finalUserName = matchedUser.name;
-            }
-        }
-    }
+    const finalUserName = currentUser?.displayName || 'Algú';
 
     const log: LogEntry = {
       id: generateId(),
@@ -95,33 +80,9 @@ const logAction = async (tripId: string, message: string, action: LogEntry['acti
       timestamp: new Date().toISOString()
     };
     
-    const updatePayload: UpdateData<TripData> = { logs: arrayUnion(sanitizeData(log)) };
-    await updateDoc(getTripRef(tripId), updatePayload);
+    await updateDoc(getTripRef(tripId), { logs: arrayUnion(sanitizeData(log)) });
   } catch (e) { 
       console.error("Error guardant log:", e); 
-  }
-};
-
-// --- [AFEGIT]: MOTOR DE SINCRONITZACIÓ DE SALDOS ---
-const syncTripSettledState = async (tripId: string) => {
-  try {
-    const tripSnap = await getDoc(getTripRef(tripId));
-    if (!tripSnap.exists()) return;
-    
-    const tripData = tripSnap.data();
-    const expensesSnap = await getDocs(getExpensesCol(tripId));
-    const expenses = expensesSnap.docs.map(d => ({ ...d.data(), id: d.id })) as Expense[];
-    
-    const balances = calculateBalances(expenses, tripData.users);
-    
-    // Considerem que està saldat si el balanç de tothom està entre -1 i 1 cèntim (marge d'arrodoniments)
-    const isSettledNow = balances.every(b => Math.abs(Number(b.amount)) < 2);
-    
-    if (tripData.isSettled !== isSettledNow) {
-      await updateDoc(getTripRef(tripId), { isSettled: isSettledNow });
-    }
-  } catch (error) {
-    console.error("Error sincronitzant l'estat Saldat:", error);
   }
 };
 
@@ -164,6 +125,7 @@ export const TripService = {
       memberUids: initialMemberUids,
       ownerId: auth.currentUser?.uid, 
       logs: [],
+      payments: [],
       isDeleted: false,
       isSettled: true 
     };
@@ -175,7 +137,6 @@ export const TripService = {
     await logAction(tripId, `ha actualitzat la configuració`, 'settings');
   },
 
-  // Funció silenciosa per actualitzar només l'estat sense disparar logs
   updateTripSettledState: async (tripId: string, isSettled: boolean) => {
     await updateDoc(getTripRef(tripId), { isSettled });
   },
@@ -192,8 +153,7 @@ export const TripService = {
     
     const formattedAmount = (expense.amount / 100).toFixed(2).replace('.', ',');
     await logAction(tripId, `ha afegit la despesa "${expense.title}" de ${formattedAmount} €`, 'create');
-    
-    await syncTripSettledState(tripId); // <-- [AFEGIT]
+    await updateDoc(getTripRef(tripId), { isSettled: false });
     
     return docRef.id;
   },
@@ -207,8 +167,7 @@ export const TripService = {
     }
     
     await logAction(tripId, `ha modificat la despesa "${expense.title || 'sense nom'}"${detail}`, 'update');
-    
-    await syncTripSettledState(tripId); // <-- [AFEGIT]
+    await updateDoc(getTripRef(tripId), { isSettled: false });
   },
 
   deleteExpense: async (tripId: string, expenseId: string) => {
@@ -226,26 +185,47 @@ export const TripService = {
     
     await deleteDoc(getExpenseRef(tripId, expenseId));
     await logAction(tripId, `ha eliminat la despesa "${title}"${amountDetail}`, 'delete');
-    
-    await syncTripSettledState(tripId); // <-- [AFEGIT]
   },
 
+  // FIX 1: Millorem la traducció del tipus de pagament per al Log
   settleDebt: async (tripId: string, settlement: Settlement, method: string) => {
-    const repayment = {
-      title: `Pagament deute (${method})`, 
-      amount: settlement.amount, 
-      payer: settlement.from,
-      category: 'transfer' as const, 
-      involved: [settlement.to], 
-      date: new Date().toISOString(), 
-      splitType: 'equal' as const
+    const payment: Payment = {
+      id: generateId(),
+      from: settlement.from,
+      to: settlement.to,
+      amount: settlement.amount,
+      date: new Date().toISOString(),
+      method: method as Payment['method']
     };
-    await addDoc(getExpensesCol(tripId), sanitizeData(repayment));
+
+    await updateDoc(getTripRef(tripId), { payments: arrayUnion(sanitizeData(payment)) });
+    
+    const getMethodText = (m: string) => {
+        switch(m) {
+            case 'manual': return 'en efectiu';
+            case 'bizum': return 'per Bizum';
+            case 'transfer': return 'per transferència bancària';
+            case 'card': return 'amb targeta';
+            default: return `via ${m}`;
+        }
+    };
     
     const formattedAmount = (settlement.amount / 100).toFixed(2).replace('.', ',');
-    await logAction(tripId, `ha liquidat un deute de ${formattedAmount} € via ${method}`, 'settle');
+    await logAction(tripId, `ha liquidat un deute de ${formattedAmount} € ${getMethodText(method)}`, 'settle');
+  },
+
+  // FIX 2: Nova funció exclusiva per esborrar pagaments i generar un Log net
+  deletePayment: async (tripId: string, paymentId: string, currentPayments: Payment[]) => {
+    const paymentToDelete = currentPayments.find(p => p.id === paymentId);
+    const newPayments = currentPayments.filter(p => p.id !== paymentId);
     
-    await syncTripSettledState(tripId); // <-- [AFEGIT]
+    await updateDoc(getTripRef(tripId), { payments: newPayments });
+    
+    let amountDetail = '';
+    if (paymentToDelete) {
+       amountDetail = ` de ${(paymentToDelete.amount / 100).toFixed(2).replace('.', ',')} €`;
+    }
+    await logAction(tripId, `ha anul·lat una liquidació${amountDetail}`, 'delete');
   },
 
   joinTripViaLink: async (tripId: string, user: User) => {
@@ -253,17 +233,9 @@ export const TripService = {
       const tripRef = getTripRef(tripId);
       const tripSnap = await getDoc(tripRef);
       
-      // 1. Validació estricta: Si no existeix, LLANCEM error en lloc de marxar en silenci
-      if (!tripSnap.exists()) {
-        throw new Error("El codi no és vàlid o el projecte no existeix.");
-      }
-
+      if (!tripSnap.exists()) throw new Error("El codi no és vàlid o el projecte no existeix.");
       const data = tripSnap.data();
-      
-      // 2. Validació estricta: Si està eliminat
-      if (data.isDeleted) {
-        throw new Error("Aquest projecte ha estat eliminat per l'administrador.");
-      }
+      if (data.isDeleted) throw new Error("Aquest projecte ha estat eliminat per l'administrador.");
 
       const currentUsers = data.users || [];
       const alreadyExists = currentUsers.some(u => u.linkedUid === user.uid);
@@ -272,7 +244,7 @@ export const TripService = {
         if (data.memberUids && !data.memberUids.includes(user.uid)) {
           await updateDoc(tripRef, { memberUids: arrayUnion(user.uid) });
         }
-        return; // Retornem si ja hi era (no cal crear l'usuari de nou)
+        return; 
       }
 
       const newUser: TripUser = {
@@ -290,16 +262,13 @@ export const TripService = {
       });
       
       await logAction(tripId, `s'ha unit al grup`, 'join');
-      
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error en unir-se al viatge:", error);
-      
-      // Si l'error és de Firebase per permisos, ho traduïm a humà:
-      if (error.code === 'permission-denied') {
-        throw new Error("No tens permisos per unir-te a aquest projecte.");
+      if (error && typeof error === 'object' && 'code' in error) {
+        if ((error as { code: string }).code === 'permission-denied') throw new Error("No tens permisos per unir-te a aquest projecte.");
       }
-      
-      throw new Error(error.message || "No s'ha pogut unir al viatge. Comprova el codi.");
+      if (error instanceof Error) throw new Error(error.message);
+      throw new Error("No s'ha pogut unir al viatge. Comprova el codi.");
     }
   },
 
@@ -309,13 +278,10 @@ export const TripService = {
     const tripSnap = await getDoc(tripRef);
 
     if (!tripSnap.exists()) throw new Error("El viatge no existeix");
-
     const tripData = tripSnap.data(); 
 
     const updatedUsers = tripData.users.map(u => {
-      if (u.id === userId) {
-        return { ...u, name: newName, photoUrl: null };
-      }
+      if (u.id === userId) return { ...u, name: newName, photoUrl: null };
       return u;
     });
 
@@ -323,42 +289,31 @@ export const TripService = {
     await logAction(tripId, `ha canviat el nom d'un participant`, 'settings');
   },
 
-  // --- SOLUCIÓ "RISC ZERO" FRONT-END PER SORTIR DEL GRUP ---
   leaveTrip: async (tripId: string, internalUserId: string) => {
     try {
       const tripRef = getTripRef(tripId);
       const tripSnap = await getDoc(tripRef);
       
       if (!tripSnap.exists()) throw new Error("El projecte no existeix");
-      
       const tripData = tripSnap.data();
       const currentUser = auth.currentUser;
       
       if (!currentUser) throw new Error("No estàs autenticat");
 
-      // FIX: 1. Deixem el registre PRIMER, mentre l'usuari encara té permisos!
       await logAction(tripId, `ha abandonat el projecte`, 'settings');
 
-      // 2. Desvinculem l'usuari (utilitzant null per evitar l'error de undefined)
       const updatedUsers = tripData.users.map(u => {
-        if (u.id === internalUserId) {
-          return { ...u, linkedUid: null, isAuth: false };
-        }
+        if (u.id === internalUserId) return { ...u, linkedUid: null, isAuth: false };
         return u;
       });
 
-      // 3. L'eliminem de la llista d'accessos reals a Firestore
       const updatedMemberUids = tripData.memberUids?.filter(uid => uid !== currentUser.uid) || [];
 
-      // 4. Escriptura a base de dades (Tanquem la porta de permisos definitivament)
-      await updateDoc(tripRef, {
-        users: updatedUsers,
-        memberUids: updatedMemberUids
-      });
-
-    } catch (error: any) {
+      await updateDoc(tripRef, { users: updatedUsers, memberUids: updatedMemberUids });
+    } catch (error: unknown) {
       console.error("Error en sortir del viatge:", error);
-      throw new Error(error.message || "No s'ha pogut sortir del grup. Torna-ho a provar.");
+      if (error instanceof Error) throw new Error(error.message);
+      throw new Error("No s'ha pogut sortir del grup. Torna-ho a provar.");
     }
   },
 
@@ -369,16 +324,11 @@ export const TripService = {
 
     const data = tripSnap.data();
     const updatedUsers = data.users.map(u => {
-      if (u.id === tripUserId) {
-        return { ...u, linkedUid: user.uid, photoUrl: user.photoURL || null, isAuth: true };
-      }
+      if (u.id === tripUserId) return { ...u, linkedUid: user.uid, photoUrl: user.photoURL || null, isAuth: true };
       return u;
     });
 
-    await updateDoc(tripRef, {
-      users: updatedUsers,
-      memberUids: arrayUnion(user.uid)
-    });
+    await updateDoc(tripRef, { users: updatedUsers, memberUids: arrayUnion(user.uid) });
     await logAction(tripId, `ha reclamat un perfil`, 'join');
   }
 };

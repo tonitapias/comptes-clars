@@ -1,5 +1,5 @@
 // src/pages/TripPage.tsx
-import { useEffect, useRef } from 'react'; // [RISC ZERO]: Importem els hooks necessaris
+import { useEffect, useRef } from 'react'; 
 import { useParams } from 'react-router-dom';
 import { Plus, Loader2, AlertTriangle, UserPlus, Wallet, Receipt, CheckCircle2 } from 'lucide-react'; 
 import { User } from 'firebase/auth';
@@ -12,7 +12,7 @@ import BalancesView from '../components/trip/BalancesView';
 import SettlementsView from '../components/trip/SettlementsView';
 import TripModals from '../components/trip/TripModals'; 
 
-import { TripProvider, useTripState } from '../context/TripContext'; // <-- CANVI
+import { TripProvider, useTripState } from '../context/TripContext'; 
 import { useTripCalculations } from '../hooks/useTripCalculations';
 import { useTripModals } from '../hooks/useTripModals';
 import { useTripFilters } from '../hooks/useTripFilters';
@@ -37,32 +37,34 @@ export default function TripPageWrapper({ user }: TripPageProps) {
 }
 
 function TripView() {
-  // [RISC ZERO]: Extraiem el nou estat `isOffline` del nostre context
   const { tripData, expenses, loading, error, currentUser, isMember, isOffline } = useTripState(); 
 
   const modals = useTripModals();
   const filters = useTripFilters();
   const { toast, clearToast, showToast, mutations } = useTripMutations();
 
+  // FIX: Afegim tripData?.payments || [] com a tercer argument
   const { 
     filteredExpenses, balances, categoryStats, settlements, 
     totalGroupSpending, displayedTotal, isSearching 
-  } = useTripCalculations(expenses, tripData?.users || [], filters.searchQuery, filters.filterCategory);
+  } = useTripCalculations(
+    expenses, 
+    tripData?.users || [], 
+    tripData?.payments || [], // <--- AFEGIT PERQUÈ ELS CÀLCULS RECONEGUIN LES LIQUIDACIONS
+    filters.searchQuery, 
+    filters.filterCategory
+  );
 
-  // [RISC ZERO]: Afegim el cicle de vida per avisar a l'usuari amb Toasts segons la xarxa
   const wasOffline = useRef(isOffline);
   
   useEffect(() => {
     if (isOffline) {
-      // Ignorem l'avís si només estem carregant per primer cop sense dades
       if (!loading) {
-        // Mode offline detectat
-        // @ts-ignore - Per si el showToast de useTripMutations no té el 3r argument tipat
+        // @ts-ignore
         showToast('Sense connexió a Internet. Mode lectura.', 'warning', Infinity);
         wasOffline.current = true;
       }
     } else if (wasOffline.current) {
-      // Hem recuperat la connexió
       clearToast(); 
       showToast('Connexió recuperada', 'success');
       wasOffline.current = false;
@@ -93,7 +95,8 @@ function TripView() {
   const handleExportPDF = () => {
     if (!tripData) return;
     const { currency = CURRENCIES[0] } = tripData;
-    generatePDF(tripData.name, expenses, balances, settlements, tripData.users, currency.symbol);
+    // Fixem que li passem `tripData.payments` just abans de `balances`
+    generatePDF(tripData.name, expenses, tripData.payments || [], balances, settlements, tripData.users, currency.symbol);
   };
 
   const renderExpenses = () => {
@@ -145,7 +148,6 @@ function TripView() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 transition-colors duration-500">
-      {/* [RISC ZERO]: Afegim la propietat duration al Toast per suportar l'Infinity (si ho proveeix el mutator) */}
       {toast && <Toast message={toast.msg} type={toast.type} duration={(toast as any).duration} onClose={clearToast} />}
       
       <TripHeader 

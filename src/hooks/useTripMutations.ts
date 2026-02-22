@@ -6,13 +6,10 @@ import { useNavigate } from 'react-router-dom';
 import { useTripState, useTripDispatch } from '../context/TripContext';
 import { ToastType } from '../components/Toast';
 import { calculateBalances, canUserLeaveTrip, getUserBalance } from '../services/billingService'; 
-import { Currency, CategoryId, SplitType, Settlement, Payment, Expense, Balance, unbrand } from '../types'; 
+import { Currency, Settlement, Payment, Balance, unbrand } from '../types'; 
 import { LITERALS } from '../constants/literals';
 import { BUSINESS_RULES } from '../config/businessRules';
 import { TripService } from '../services/tripService'; 
-
-const SETTLEMENT_CATEGORY: CategoryId = 'transfer';
-const SETTLEMENT_SPLIT_TYPE: SplitType = 'equal';
 
 export function useTripMutations() {
   const navigate = useNavigate();
@@ -51,25 +48,21 @@ export function useTripMutations() {
     if (!ensureOnline() || !tripData) return false;
 
     try {
-      const customTitle = t(`MODALS.PAYMENT_METHODS.${method.toUpperCase()}`, method);
+      const res = await actions.settleDebt(settlement, method);
 
-      const expenseData = {
-        title: customTitle,
-        amount: settlement.amount, 
-        payer: settlement.from,    
-        involved: [settlement.to], 
-        category: SETTLEMENT_CATEGORY,
-        date: new Date().toISOString(),
-        splitType: SETTLEMENT_SPLIT_TYPE
-      };
-
-      const res = await actions.addExpense(expenseData);
-
-      if (res.success && res.data) {
-        // Recalculem l'estat isSettled predictivament amb el nou pagament
-        const newExpenses = [...expenses, { ...expenseData, id: res.data as string }];
-        const newBalances = calculateBalances(newExpenses as Expense[], tripData.users);
-        const isSettledNow = newBalances.every(b => unbrand(b.amount) === 0);
+      if (res.success) {
+        const optimisticPayment: Payment = {
+          id: `temp-${Date.now()}`,
+          from: settlement.from,
+          to: settlement.to,
+          amount: settlement.amount,
+          date: new Date().toISOString(),
+          method
+        };
+        
+        const newPayments = [...(tripData.payments || []), optimisticPayment];
+        const newBalances = calculateBalances(expenses, tripData.users, newPayments);
+        const isSettledNow = newBalances.every(b => Math.abs(unbrand(b.amount)) < 2);
         
         if (tripData.isSettled !== isSettledNow) {
           await TripService.updateTripSettledState(tripData.id, isSettledNow).catch(console.error);
@@ -78,7 +71,7 @@ export function useTripMutations() {
         showToast(t('ACTIONS.SETTLE_SUCCESS', 'Deute saldat correctament'), 'success');
         return true;
       } else {
-        showToast(LITERALS.ACTIONS.SETTLE_ERROR, 'error');
+        showToast(res.error || LITERALS.ACTIONS.SETTLE_ERROR, 'error');
         return false;
       }
     } catch (e: unknown) { 
@@ -92,12 +85,30 @@ export function useTripMutations() {
     if (!ensureOnline() || !tripData) return false;
 
     try {
+      const isPayment = tripData.payments?.some(p => p.id === id);
+
+      if (isPayment) {
+        // [FIX CRÍTIC]: Cridem la nova funció que guarda el log correcte
+        await TripService.deletePayment(tripData.id, id, tripData.payments!);
+
+        const newPayments = tripData.payments!.filter(p => p.id !== id);
+        const newBalances = calculateBalances(expenses, tripData.users, newPayments);
+        const isSettledNow = newBalances.every(b => Math.abs(unbrand(b.amount)) < 2);
+        
+        if (tripData.isSettled !== isSettledNow) {
+          await TripService.updateTripSettledState(tripData.id, isSettledNow).catch(console.error);
+        }
+
+        showToast('Liquidació anul·lada correctament', 'success');
+        return true;
+      }
+
+      // El flux original per esborrar despeses
       const res = await actions.deleteExpense(id);
       if (res.success) {
-        // Reavaluar isSettled després de suprimir una despesa
         const newExpenses = expenses.filter(e => e.id !== id);
-        const newBalances = calculateBalances(newExpenses, tripData.users);
-        const isSettledNow = newBalances.every(b => unbrand(b.amount) === 0);
+        const newBalances = calculateBalances(newExpenses, tripData.users, tripData.payments || []);
+        const isSettledNow = newBalances.every(b => Math.abs(unbrand(b.amount)) < 2);
         
         if (tripData.isSettled !== isSettledNow) {
           await TripService.updateTripSettledState(tripData.id, isSettledNow).catch(console.error);
@@ -125,9 +136,8 @@ export function useTripMutations() {
       let currentTripUsers = tripData?.users || [];
       let currentBalances: Balance[] = [];
 
-      // Validació: Estem marxant del viatge que tenim en context o d'un altre (Landing)?
       if (tripData && tripData.id === idToLeave) {
-        currentBalances = calculateBalances(expenses, currentTripUsers);
+        currentBalances = calculateBalances(expenses, currentTripUsers, tripData.payments || []);
       } else {
         const fetchedTrip = await TripService.getTrip(idToLeave);
         if (!fetchedTrip) {
@@ -136,7 +146,7 @@ export function useTripMutations() {
         }
         const fetchedExpenses = await TripService.getTripExpenses(idToLeave);
         currentTripUsers = fetchedTrip.users;
-        currentBalances = calculateBalances(fetchedExpenses, currentTripUsers);
+        currentBalances = calculateBalances(fetchedExpenses, currentTripUsers, fetchedTrip.payments || []);
       }
 
       const myUser = currentTripUsers.find(u => u.linkedUid === currentUser.uid);

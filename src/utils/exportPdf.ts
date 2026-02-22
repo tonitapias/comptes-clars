@@ -1,7 +1,7 @@
 // src/utils/exportPdf.ts
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable'; // CORRECCIÓ: Eliminat UserOptions
-import { Expense, Settlement, Balance, TripUser } from '../types';
+import autoTable from 'jspdf-autotable';
+import { Expense, Settlement, Balance, TripUser, Payment } from '../types';
 import { CATEGORIES } from './constants';
 
 // Extensió de tipus per evitar 'as any'
@@ -31,12 +31,12 @@ const getName = (idOrName: string, users: TripUser[]) => {
 export const generatePDF = (
   tripName: string, 
   expenses: Expense[], 
+  payments: Payment[], // [NOU]: Afegim l'array de pagaments purs
   balances: Balance[], 
   settlements: Settlement[],
   users: TripUser[], 
   currencySymbol: string
 ) => {
-  // Cast inicial per fer servir les propietats del plugin
   const doc = new jsPDF() as jsPDFWithPlugin;
   
   // Colors Corporatius (Indigo / Slate / Emerald / Rose)
@@ -100,7 +100,7 @@ export const generatePDF = (
     .map(([catId, amount]) => {
       const catInfo = CATEGORIES.find(c => c.id === catId);
       const label = catInfo ? catInfo.label : catId;
-      const pct = ((amount / totalSpending) * 100).toFixed(1) + '%';
+      const pct = totalSpending > 0 ? ((amount / totalSpending) * 100).toFixed(1) + '%' : '0%';
       return [label, formatMoney(amount, currencySymbol), pct];
     });
 
@@ -189,26 +189,54 @@ export const generatePDF = (
     finalY = (doc.lastAutoTable?.finalY || finalY) + 15;
   }
 
-  // 6. DETALL DE DESPESES
+  // 6. DETALL DE DESPESES (Amb liquidacions incloses)
   if (finalY > 240) { doc.addPage(); finalY = 20; }
   
   doc.setFontSize(14);
   doc.setTextColor(...COLORS.primary);
   doc.text("Registre Detallat de Moviments", 14, finalY);
 
-  const expenseData = expenses
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .map(e => [
-      new Date(e.date).toLocaleDateString('ca-ES', { day: '2-digit', month: '2-digit' }),
-      e.title,
-      getName(e.payer, users),
-      formatMoney(e.amount, currencySymbol),
-      e.category === 'transfer' ? 'PAGAMENT' : (CATEGORIES.find(c => c.id === e.category)?.label || e.category)
-    ]);
+  // [RISC ZERO]: Disfressem els pagaments de despesa per poder-los unificar al llistat
+  const mappedPayments: Expense[] = payments.map(p => {
+    const methodLabel = p.method === 'bizum' ? 'Bizum' : p.method === 'transfer' ? 'Transferència' : p.method === 'card' ? 'Targeta' : 'Efectiu';
+    return {
+        id: p.id,
+        title: `Liquidació (${methodLabel})`,
+        amount: p.amount,
+        payer: p.from,
+        involved: [p.to],
+        category: 'transfer',
+        date: p.date,
+        splitType: 'equal'
+    } as unknown as Expense;
+  });
+
+  // Juntem tot i ordenem per data
+  const mergedExpenses = [...expenses, ...mappedPayments].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const expenseData = mergedExpenses.map(e => {
+      const isTransfer = e.category === 'transfer';
+      const payerName = getName(e.payer, users);
+      
+      // [FIX MÀGIC]: Si és un pagament, posem "Pagador -> Receptor"
+      let involvedText = payerName;
+      if (isTransfer && e.involved && e.involved.length > 0) {
+          const receiverName = getName(e.involved[0], users);
+          involvedText = `${payerName} -> ${receiverName}`;
+      }
+
+      return [
+        new Date(e.date).toLocaleDateString('ca-ES', { day: '2-digit', month: '2-digit' }),
+        e.title,
+        involvedText,
+        formatMoney(e.amount, currencySymbol),
+        isTransfer ? 'PAGAMENT' : (CATEGORIES.find(c => c.id === e.category)?.label || e.category)
+      ];
+  });
 
   autoTable(doc, {
     startY: finalY + 5,
-    head: [['Data', 'Concepte', 'Pagat per', 'Import', 'Categoria']],
+    head: [['Data', 'Concepte', 'Implicats', 'Import', 'Categoria']],
     body: expenseData,
     theme: 'plain',
     headStyles: { 
