@@ -1,5 +1,6 @@
 // src/config/firebase.ts
 import { initializeApp } from "firebase/app";
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-check";
 import { 
   getAuth, 
   setPersistence, 
@@ -25,8 +26,27 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-// [CANVI CLAU]: Exportem l'app perquè tripService.ts la pugui fer servir
 export const app = initializeApp(firebaseConfig);
+
+// ============================================================================
+// [RISC ZERO]: FIREBASE APP CHECK
+// ============================================================================
+try {
+  if (typeof window !== "undefined" && import.meta.env.VITE_RECAPTCHA_SITE_KEY) {
+    // [FIX CTO]: Només activem reCAPTCHA en producció per evitar errors 400 a localhost
+    if (import.meta.env.PROD) {
+      initializeAppCheck(app, {
+        provider: new ReCaptchaEnterpriseProvider(import.meta.env.VITE_RECAPTCHA_SITE_KEY),
+        isTokenAutoRefreshEnabled: true
+      });
+      console.log("🛡️ App Check inicialitzat (Mode Producció).");
+    } else {
+      console.log("🛠️ App Check en pausa (Mode Local) per evitar bloquejos de reCAPTCHA.");
+    }
+  }
+} catch (error) {
+  console.warn("⚠️ No s'ha pogut inicialitzar App Check:", error);
+}
 
 // --- AUTENTICACIÓ ---
 export const auth = getAuth(app);

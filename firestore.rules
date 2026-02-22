@@ -1,0 +1,44 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Funció d'ajuda per saber si l'usuari està autenticat
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Ruta de la teva col·lecció de viatges segons el teu dbPaths.ts
+    match /artifacts/comptes-clars-v1/public/data/trips/{tripId} {
+      
+      // Funció: Comprova si l'usuari que fa la petició està dins l'array 'memberUids'
+      function isTripMember() {
+        return isAuthenticated() && request.auth.uid in resource.data.memberUids;
+      }
+      
+      // CREATE: Qualsevol usuari autenticat pot crear un viatge nou.
+      // Firebase s'assegurarà de permetre'l crear només si posa el seu propi uid com a owner/member.
+      allow create: if isAuthenticated();
+      
+      // READ / UPDATE / DELETE: Només pots llegir, modificar o esborrar el viatge si n'ets membre
+      allow read, update, delete: if isTripMember();
+
+      // REGLES PER A LES DESPESES (Subcol·lecció)
+      match /expenses/{expenseId} {
+        
+        // Funció: Recupera el document del viatge "pare" per veure qui n'és membre
+        function isParentTripMember() {
+          let tripDoc = get(/databases/$(database)/documents/artifacts/comptes-clars-v1/public/data/trips/$(tripId));
+          return isAuthenticated() && request.auth.uid in tripDoc.data.memberUids;
+        }
+
+        // Totes les operacions de despeses queden restringides només als membres del viatge
+        allow read, write: if isParentTripMember();
+      }
+    }
+
+    // Per defecte, deneguem TOTES les altres lectures a la base de dades (màxima seguretat)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -41,6 +41,7 @@ const getStableDistributionOffset = (seed: string | number | undefined, modulus:
 
 const calculateEqualSplit = (
   exp: Expense, 
+  payerId: string, // [FIX]: Passem el payerId per si hem de fer un fallback
   validUserIds: Set<string>, 
   getCanonicalId: (id: string) => string | undefined,
   allUserIds: string[]
@@ -56,10 +57,15 @@ const calculateEqualSplit = (
   )).sort(); 
 
   const count = receiversIds.length;
-  if (count === 0) return { allocations };
-
-  // [REFACTOR RISC ZERO]: Extracció de l'absolut per evitar fallades amb imports negatius (reemborsaments)
   const totalCents = unbrand(exp.amount);
+
+  // [RISC ZERO FIX]: Si cap receptor és vàlid (ex: tots els implicats han sortit del grup), 
+  // el pagador assumeix la despesa completa per evitar la creació de "diners fantasma".
+  if (count === 0) {
+    allocations[payerId] = toCents(-totalCents);
+    return { allocations };
+  }
+
   const absTotal = Math.abs(totalCents);
   const isNegative = totalCents < 0;
 
@@ -72,7 +78,6 @@ const calculateEqualSplit = (
     const paysExtraCent = rotatedIndex < remainder;
     const amountToPay = baseAmount + (paysExtraCent ? 1 : 0);
     
-    // Si és negatiu (ingrés), la lògica de deute s'inverteix perfectament
     allocations[uid] = toCents(isNegative ? amountToPay : -amountToPay);
   });
 
@@ -101,9 +106,9 @@ const calculateExactSplit = (
   });
 
   const remainder = unbrand(exp.amount) - totalAllocated;
-  // [SAFE-FIX]: Canviat 'remainder > 0' per 'remainder !== 0'. Si els imports exactes sumen 
-  // més o menys que el total, el desajust va al pagador per mantenir la balança global a zero.
-  if (remainder !== 0 && validUserIds.has(payerId)) {
+  
+  // [RISC ZERO FIX]: Assignació incondicional al payer de qualsevol desajust de cèntims o quantitats
+  if (remainder !== 0) {
     const currentPayerDebt = unbrand(allocations[payerId] || toCents(0));
     allocations[payerId] = toCents(currentPayerDebt - remainder);
   }
@@ -113,29 +118,33 @@ const calculateExactSplit = (
 
 const calculateSharesSplit = (
   exp: Expense,
+  payerId: string, // [FIX]: Passem el payerId
   validUserIds: Set<string>,
   getCanonicalId: (id: string) => string | undefined
 ): SplitResult => {
   const allocations: Record<string, MoneyCents> = {};
   const details = exp.splitDetails || {};
   
-  // [REFACTOR RISC ZERO]: Protecció de seguretat absoluta als imports negatius i shares
   const totalCents = unbrand(exp.amount);
   const absTotal = Math.abs(totalCents);
   const isNegative = totalCents < 0;
 
   const entries = Object.entries(details)
-    .map(([key, shares]) => ({ uid: getCanonicalId(key), shares: Math.max(0, Number(shares)) })) // Bloquem parts negatives
+    .map(([key, shares]) => ({ uid: getCanonicalId(key), shares: Math.max(0, Number(shares)) })) 
     .filter((entry): entry is { uid: string, shares: number } => !!entry.uid && validUserIds.has(entry.uid) && entry.shares > 0)
     .sort((a, b) => a.uid.localeCompare(b.uid));
 
   const totalShares = entries.reduce((acc, curr) => acc + curr.shares, 0);
 
-  if (totalShares <= 0) return { allocations };
+  // [RISC ZERO FIX]: Si no hi ha "parts" vàlides, el pagador s'ho empassa
+  if (totalShares <= 0) {
+    allocations[payerId] = toCents(-totalCents);
+    return { allocations };
+  }
 
   let totalBaseAllocated = 0;
   const distributionList = entries.map(entry => {
-    const safeAmount = BigInt(absTotal); // Calculem sempre captius en positiu
+    const safeAmount = BigInt(absTotal); 
     const safeShares = BigInt(Math.round(entry.shares)); 
     const safeTotal = BigInt(Math.round(totalShares));
     
@@ -175,6 +184,7 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
 
   expenses.forEach(exp => {
     const payerId = getCanonicalId(exp.payer);
+    // Si el pagador no és vàlid, directament ignorem la despesa sencera per evitar inestabilitats
     if (!payerId) return;
 
     const splitType = exp.splitType || SPLIT_TYPES.EQUAL;
@@ -182,16 +192,16 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[]): Balan
 
     switch (splitType) {
       case SPLIT_TYPES.EQUAL:
-        result = calculateEqualSplit(exp, validUserIds, getCanonicalId, allUserIds);
+        result = calculateEqualSplit(exp, payerId, validUserIds, getCanonicalId, allUserIds);
         break;
       case SPLIT_TYPES.EXACT:
         result = calculateExactSplit(exp, payerId, validUserIds, getCanonicalId);
         break;
       case SPLIT_TYPES.SHARES:
-        result = calculateSharesSplit(exp, validUserIds, getCanonicalId);
+        result = calculateSharesSplit(exp, payerId, validUserIds, getCanonicalId);
         break;
       default:
-        result = calculateEqualSplit(exp, validUserIds, getCanonicalId, allUserIds);
+        result = calculateEqualSplit(exp, payerId, validUserIds, getCanonicalId, allUserIds);
         break;
     }
 
@@ -296,23 +306,12 @@ export const calculateTotalSpending = (expenses: Expense[]): MoneyCents => {
   return toCents(total);
 };
 
-// ============================================================================
-// FUNCIONS D'AJUDA (DOMAIN HELPERS) 
-// [NOU RISC ZERO]: Aïllem la lògica per no embrutar els components de React
-// ============================================================================
-
-/**
- * Obté el balanç exacte d'un usuari, retornant sempre un MoneyCents de forma segura.
- */
 export const getUserBalance = (userId: string | undefined, balances: Balance[]): MoneyCents => {
   if (!userId) return toCents(0);
   const userBalance = balances.find(b => b.userId === userId);
   return userBalance ? userBalance.amount : toCents(0);
 };
 
-/**
- * Comprova si un usuari pot abandonar el viatge segons els seus deutes i el marge permès.
- */
 export const canUserLeaveTrip = (userId: string | undefined, balances: Balance[], maxMarginCents: number): boolean => {
   const balanceCents = unbrand(getUserBalance(userId, balances));
   return Math.abs(balanceCents) <= maxMarginCents;

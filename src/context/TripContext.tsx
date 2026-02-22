@@ -4,7 +4,7 @@ import { User } from 'firebase/auth';
 import { useTripData } from '../hooks/useTripData';
 import { useTripMigration } from '../hooks/useTripMigration';
 import { useTripActions } from '../hooks/useTripActions';
-import { TripData, Expense } from '../types';
+import { TripData, Expense, unbrand } from '../types'; // [FIX]: Afegim la importació de 'unbrand'
 import { calculateBalances } from '../services/billingService';
 import { TripService } from '../services/tripService';
 
@@ -47,8 +47,10 @@ export function TripProvider({ children, tripId, currentUser }: TripProviderProp
     if (loading || !tripData || !tripId || isOffline) return;
 
     const balances = calculateBalances(expenses, tripData.users);
-    // Utilitzem un marge de 10 cèntims per evitar comportaments anòmals per arrodoniments
-    const isSettledNow = balances.every(b => Math.abs(b.amount) < 10);
+    
+    // [FIX RISC ZERO]: Gràcies al nou 'billingService', ara podem exigir balanç estricte a 0.
+    // Utilitzem unbrand() per avaluar el valor numèric real.
+    const isSettledNow = balances.every(b => unbrand(b.amount) === 0);
 
     // Només disparem l'escriptura si hi ha un canvi REAL d'estat
     if (tripData.isSettled !== isSettledNow) {
