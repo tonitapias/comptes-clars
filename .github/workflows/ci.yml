@@ -1,0 +1,35 @@
+name: CI Comptes Clars
+
+# Aquest workflow s'executarà cada vegada que facis push a la branca principal
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  validate:
+    name: Validació i Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Descarregar el codi
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # Utilitzem una versió LTS estable
+          cache: 'npm'      # Això fa que les següents execucions siguin molt més ràpides
+
+      - name: 📦 Instal·lar dependències
+        run: npm ci
+
+      - name: 🕵️‍♂️ Comprovar TypeScript (Sense compilar)
+        run: npx tsc --noEmit
+
+      - name: 🏗️ Comprovar que el Build de Vite funciona
+        run: npm run build
+
+      - name: 🧪 Executar Tests Unitaris
+        run: npm run test -- --run

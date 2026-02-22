@@ -1,10 +1,12 @@
 // src/context/TripContext.tsx
-import React, { createContext, useContext, ReactNode, useMemo } from 'react';
+import React, { createContext, useContext, ReactNode, useMemo, useEffect } from 'react';
 import { User } from 'firebase/auth';
 import { useTripData } from '../hooks/useTripData';
 import { useTripMigration } from '../hooks/useTripMigration';
 import { useTripActions } from '../hooks/useTripActions';
 import { TripData, Expense } from '../types';
+import { calculateBalances } from '../services/billingService';
+import { TripService } from '../services/tripService';
 
 interface TripState {
   tripId: string | undefined;
@@ -14,7 +16,7 @@ interface TripState {
   error: string | null;
   currentUser: User | null;
   isMember: boolean;
-  isOffline: boolean; // [RISC ZERO]: Afegim isOffline a la interfície de l'estat
+  isOffline: boolean; 
 }
 
 type TripDispatch = ReturnType<typeof useTripActions>;
@@ -34,12 +36,28 @@ const TripMigrator = React.memo(({ tripId, tripData }: { tripId: string | undefi
 });
 
 export function TripProvider({ children, tripId, currentUser }: TripProviderProps) {
-  // [RISC ZERO]: Extraiem isOffline del nostre hook recentment actualitzat
   const { tripData, expenses, loading, error, isOffline } = useTripData(tripId);
   const actions = useTripActions(tripId);
   const isMember = !!(currentUser && tripData?.memberUids?.includes(currentUser.uid));
 
-  // [RISC ZERO]: Afegim isOffline al value del Provider i a la llista de dependències del useMemo
+  // [RISC ZERO]: ELIMINADOR DE LECTURES MASSIVES (Free Tier Saver)
+  // En lloc de fer N lectures cada cop que canvia una despesa, ho avaluem aquí 
+  // perquè ja tenim les dades en memòria. Això protegeix Firestore.
+  useEffect(() => {
+    if (loading || !tripData || !tripId || isOffline) return;
+
+    const balances = calculateBalances(expenses, tripData.users);
+    // Utilitzem un marge de 10 cèntims per evitar comportaments anòmals per arrodoniments
+    const isSettledNow = balances.every(b => Math.abs(b.amount) < 10);
+
+    // Només disparem l'escriptura si hi ha un canvi REAL d'estat
+    if (tripData.isSettled !== isSettledNow) {
+      TripService.updateTripSettledState(tripId, isSettledNow).catch(err => {
+        console.error("Error sincronitzant l'estat saldat del viatge:", err);
+      });
+    }
+  }, [expenses, tripData?.users, tripData?.isSettled, loading, isOffline, tripId]);
+
   const stateValue = useMemo<TripState>(() => ({
     tripId, tripData, expenses, loading, error, currentUser, isMember, isOffline
   }), [tripId, tripData, expenses, loading, error, currentUser, isMember, isOffline]);
@@ -59,7 +77,6 @@ export function TripProvider({ children, tripId, currentUser }: TripProviderProp
 // ============================================================================
 // HOOKS CONSUMIDORS OPTIMITZATS
 // ============================================================================
-// [REFACTOR]: Eliminat el 'useTrip' legacy complint l'auditoria.
 
 export function useTripState() {
   const context = useContext(TripStateContext);

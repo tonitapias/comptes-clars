@@ -1,3 +1,4 @@
+// src/config/firebase.ts
 import { initializeApp } from "firebase/app";
 import { 
   getAuth, 
@@ -14,8 +15,6 @@ import {
   persistentLocalCache, 
   persistentMultipleTabManager 
 } from "firebase/firestore";
-// [NOU] Importem getFunctions
-import { getFunctions } from "firebase/functions";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -26,7 +25,8 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-const app = initializeApp(firebaseConfig);
+// [CANVI CLAU]: Exportem l'app perquè tripService.ts la pugui fer servir
+export const app = initializeApp(firebaseConfig);
 
 // --- AUTENTICACIÓ ---
 export const auth = getAuth(app);
@@ -74,15 +74,11 @@ export const loginWithEmail = async (email: string, pass: string) => {
   }
 };
 
-// --- FIRESTORE (TASCA 2: Offline Persistance ja actiu nativament) ---
+// --- FIRESTORE ---
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager() 
   })
 });
-
-// --- [NOU] CLOUD FUNCTIONS ---
-// Configurat per a la regió d'Europa (ajusta segons la teva necessitat)
-export const functions = getFunctions(app, 'us-central1');
 
 export const appId = "comptes-clars-v1";
