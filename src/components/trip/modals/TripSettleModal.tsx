@@ -5,12 +5,13 @@ import { useTranslation } from 'react-i18next';
 import Modal from '../../Modal';
 import Button from '../../Button';
 import HolographicTicket from '../HolographicTicket'; 
-import { Settlement, TripUser, Payment } from '../../../types';
+import { Settlement, TripUser, PaymentMethodId } from '../../../types';
 import { useTripState } from '../../../context/TripContext'; 
 import { useHapticFeedback } from '../../../hooks/useHapticFeedback';
 import { LITERALS } from '../../../constants/literals';
 
-const PAYMENT_METHOD_CONFIG: Array<{ id: Payment['method'], icon: LucideIcon, translationKey: string, fallback: string }> = [
+// [MILLORA RISC ZERO]: Ara utilitza el tipus PaymentMethodId global i és fàcilment ampliable
+const PAYMENT_METHOD_CONFIG: Array<{ id: PaymentMethodId, icon: LucideIcon, translationKey: string, fallback: string }> = [
   { id: 'manual', icon: Banknote, translationKey: 'MODALS.PAYMENT_METHODS.MANUAL', fallback: LITERALS.MODALS.PAYMENT_METHODS.MANUAL },
   { id: 'bizum', icon: Smartphone, translationKey: 'MODALS.PAYMENT_METHODS.BIZUM', fallback: LITERALS.MODALS.PAYMENT_METHODS.BIZUM },
   { id: 'transfer', icon: Building2, translationKey: 'MODALS.PAYMENT_METHODS.TRANSFER', fallback: LITERALS.MODALS.PAYMENT_METHODS.TRANSFER },
@@ -21,16 +22,15 @@ interface TripSettleModalProps {
   isOpen: boolean;
   onClose: () => void;
   settlement: Settlement | null;
-  onConfirm: (method: Payment['method']) => Promise<boolean>;
+  onConfirm: (method: PaymentMethodId) => Promise<boolean>;
 }
 
-// [MILLORA RISC ZERO]: Blindem el modal per evitar repaints complets quan el context global muta
 const TripSettleModal = React.memo(function TripSettleModal({ isOpen, onClose, settlement, onConfirm }: TripSettleModalProps) {
   const { tripData } = useTripState(); 
   const { trigger } = useHapticFeedback();
   const { t } = useTranslation();
   
-  const [method, setMethod] = useState<Payment['method']>('manual');
+  const [method, setMethod] = useState<PaymentMethodId>('manual');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const texts = useMemo(() => ({
@@ -49,8 +49,6 @@ const TripSettleModal = React.memo(function TripSettleModal({ isOpen, onClose, s
     }));
   }, [t]);
 
-  // [MILLORA RISC ZERO]: Creem un "Diccionari" (Hash Map) per a cerques de cost O(1).
-  // Ara, en lloc de fer un .find() que recorre tot l'array cada cop, anem directes a l'ID.
   const usersById = useMemo(() => {
     if (!tripData?.users) return {};
     return tripData.users.reduce((acc, user) => {
@@ -59,7 +57,6 @@ const TripSettleModal = React.memo(function TripSettleModal({ isOpen, onClose, s
     }, {} as Record<string, TripUser>);
   }, [tripData?.users]);
 
-  // [MILLORA RISC ZERO]: Utilitzem el diccionari per assignar usuaris instantàniament
   const { fromUser, toUser } = useMemo(() => {
     const fallbackUser = { name: texts.unknownUser, photoUrl: null } as TripUser;
     if (!settlement) return { fromUser: fallbackUser, toUser: fallbackUser };

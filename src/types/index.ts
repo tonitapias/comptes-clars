@@ -22,7 +22,7 @@ export interface Currency {
   code: CurrencyCode;
   symbol: string;
   locale: string;
-  name: string; // <--- NOVA PROPIETAT
+  name: string; 
 }
 
 // --- CATEGORIES ---
@@ -69,7 +69,6 @@ export interface Expense {
 // --- LOGS ---
 export interface LogEntry {
   id: string;
-  // [NOU] AFEGIM 'leave' al final de la llista
   action: 'create' | 'update' | 'delete' | 'join' | 'settle' | 'settings' | 'leave';
   message: string;
   userId: UserId;
@@ -77,7 +76,7 @@ export interface LogEntry {
   timestamp: ISODateString;
 }
 
-// --- RESULTATS DE CÀLCULS I NOUS PAGAMENTS (REFACTOR) ---
+// --- RESULTATS DE CÀLCULS I PAGAMENTS ---
 export interface Balance {
   userId: UserId;
   amount: MoneyCents;
@@ -89,14 +88,16 @@ export interface Settlement {
   amount: MoneyCents;
 }
 
-// [NOU] Entitat de pagament aïllada per al futur refactor (RISC ZERO)
+// [MILLORA RISC ZERO]: Centralitzem els mètodes de pagament en un tipus independent
+export type PaymentMethodId = 'manual' | 'bizum' | 'transfer' | 'card';
+
 export interface Payment {
   id: string;
   from: UserId;
   to: UserId;
   amount: MoneyCents;
   date: ISODateString;
-  method: 'manual' | 'bizum' | 'transfer' | 'card';
+  method: PaymentMethodId;
 }
 
 export interface CategoryStat extends Category {
@@ -110,11 +111,11 @@ export interface TripData {
   name: string;
   users: TripUser[];
   expenses: Expense[];
-  payments?: Payment[]; // <--- [NOU] Preparat per a la migració sense trencar l'app
+  payments?: Payment[]; 
   currency: Currency;
   createdAt: ISODateString;
   memberUids?: string[];   
-  ownerId?: string; // <--- NOVA PROPIETAT (Opcional per compatibilitat)
+  ownerId?: string; 
   logs?: LogEntry[];
   isDeleted?: boolean; 
   isSettled?: boolean; 

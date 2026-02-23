@@ -1,12 +1,12 @@
 // src/components/trip/TripModals.tsx
-import React, { Suspense, useCallback } from 'react';
+import React, { Suspense, useCallback, useMemo } from 'react';
 import { useTripState } from '../../context/TripContext'; 
 import { useTripModals } from '../../hooks/useTripModals';
 import { useTripMutations } from '../../hooks/useTripMutations';
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
 import { ToastType } from '../Toast';
 import { LITERALS } from '../../constants/literals';
-import { Payment } from '../../types';
+import { PaymentMethodId } from '../../types'; // <-- [MILLORA] Nou tipus importat
 
 // Carregues asíncrones optimitzades
 const ExpenseModal = React.lazy(() => import('../modals/ExpenseModal'));
@@ -22,13 +22,10 @@ interface TripModalsProps {
   showToast: (msg: string, type?: ToastType) => void;
 }
 
-// [MILLORA RISC ZERO]: Emboliquem amb React.memo per evitar re-renders si el pare s'actualitza
 const TripModals = React.memo(function TripModals({ modals, mutations, showToast }: TripModalsProps) {
   const { trigger } = useHapticFeedback();
   const { tripData, expenses } = useTripState();
 
-  // [MILLORA RISC ZERO]: Desestruturem funcions i estats específics abans dels useCallback.
-  // Així evitem que un canvi aliè a 'modals' o 'mutations' trenqui la memoització.
   const { 
     confirmAction, closeConfirmAction, closeExpenseModal, 
     settleModalData, setSettleModalData,
@@ -38,9 +35,9 @@ const TripModals = React.memo(function TripModals({ modals, mutations, showToast
 
   const { deleteExpense, settleDebt, updateTripSettings, leaveTrip, deleteTrip } = mutations;
 
-  const canChangeCurrency = expenses?.length === 0;
+  // [MILLORA RISC ZERO]: Memoitzem el càlcul basat només en la longitud de l'array
+  const canChangeCurrency = useMemo(() => expenses?.length === 0, [expenses?.length]);
   
-  // Ara les dependències són valors primitius o referències a funcions estables
   const handleDeleteExpense = useCallback(async () => {
     trigger('medium');
     if (confirmAction?.id) {
@@ -50,10 +47,13 @@ const TripModals = React.memo(function TripModals({ modals, mutations, showToast
     closeExpenseModal();
   }, [trigger, confirmAction?.id, deleteExpense, closeConfirmAction, closeExpenseModal]);
 
-  const handleSettleConfirm = useCallback(async (method: Payment['method']) => {
+  // [MILLORA RISC ZERO]: Tipatge fort amb PaymentMethodId
+  const handleSettleConfirm = useCallback(async (method: PaymentMethodId) => {
     if (!settleModalData) return false;
     const success = await settleDebt(settleModalData, method);
-    if (success) { setSettleModalData(null); }
+    if (success) { 
+        setSettleModalData(null); 
+    }
     return success;
   }, [settleModalData, settleDebt, setSettleModalData]);
 

@@ -1,12 +1,12 @@
 // src/hooks/useTripMutations.ts
-import { useTranslation } from 'react-i18next';
-import { parseAppError } from '../utils/errorHandler';
 import { useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { parseAppError } from '../utils/errorHandler';
 import { useTripState, useTripDispatch } from '../context/TripContext';
 import { ToastType } from '../components/Toast';
 import { calculateBalances, canUserLeaveTrip, getUserBalance } from '../services/billingService'; 
-import { Currency, Settlement, Payment, Balance, unbrand, Expense } from '../types'; 
+import { Currency, Settlement, Payment, Balance, unbrand, Expense, PaymentMethodId } from '../types'; 
 import { LITERALS } from '../constants/literals';
 import { BUSINESS_RULES } from '../config/businessRules';
 import { TripService } from '../services/tripService'; 
@@ -20,17 +20,9 @@ export function useTripMutations() {
   
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
 
+  // --- 1. GESTIÓ D'UI I NOTIFICACIONS ---
   const showToast = useCallback((msg: string, type: ToastType = 'success') => setToast({ msg, type }), []);
   const clearToast = useCallback(() => setToast(null), []);
-
-  // [MILLORA RISC ZERO]: Centralitzem i fem més robust el comportament offline amb i18n
-  const requireOnlineForCritical = useCallback((): boolean => {
-    if (isOffline) {
-      showToast(t('COMMON.OFFLINE_CRITICAL_ERROR', "Acció denegada: Necessites connexió per a canvis crítics."), 'error');
-      return false;
-    }
-    return true;
-  }, [isOffline, showToast, t]);
 
   const notifySuccess = useCallback((msg: string) => {
     if (isOffline) {
@@ -40,9 +32,18 @@ export function useTripMutations() {
     }
   }, [isOffline, showToast, t]);
 
-  // [MILLORA RISC ZERO]: try/catch aïllat per evitar bloquejar l'acció principal
+  const requireOnlineForCritical = useCallback((): boolean => {
+    if (isOffline) {
+      showToast(t('COMMON.OFFLINE_CRITICAL_ERROR', "Acció denegada: Necessites connexió per a canvis crítics."), 'error');
+      return false;
+    }
+    return true;
+  }, [isOffline, showToast, t]);
+
+  // --- 2. LÒGICA DE NEGOCI (Aïllada i no bloquejant) ---
   const evaluateSettledState = useCallback(async (updatedExpenses: Expense[], updatedPayments: Payment[]) => {
-    if (!tripData) return;
+    if (!tripData?.id || !tripData?.users) return;
+    
     try {
       const newBalances = calculateBalances(updatedExpenses, tripData.users, updatedPayments);
       const isSettledNow = newBalances.every(b => Math.abs(unbrand(b.amount)) < BUSINESS_RULES.SETTLED_TOLERANCE_MARGIN);
@@ -53,12 +54,16 @@ export function useTripMutations() {
     } catch (error) {
       console.error("[EvaluateSettledState Error]: Error no bloquejant al calcular l'estat saldat.", error);
     }
-  }, [tripData]);
+  }, [tripData?.id, tripData?.users, tripData?.isSettled]);
 
+  // --- 3. MUTACIONS PRINCIPALS ---
   const updateTripSettings = useCallback(async (name: string, currency: Currency) => {
     try {
       await actions.updateTripSettings(name, new Date().toISOString(), currency);
-      notifySuccess(t(currency ? 'ACTIONS.UPDATE_SETTINGS_SUCCESS' : 'ACTIONS.UPDATE_NAME_SUCCESS', currency ? LITERALS.ACTIONS.UPDATE_SETTINGS_SUCCESS : LITERALS.ACTIONS.UPDATE_NAME_SUCCESS));
+      const successMsg = currency ? 'ACTIONS.UPDATE_SETTINGS_SUCCESS' : 'ACTIONS.UPDATE_NAME_SUCCESS';
+      const fallbackMsg = currency ? LITERALS.ACTIONS.UPDATE_SETTINGS_SUCCESS : LITERALS.ACTIONS.UPDATE_NAME_SUCCESS;
+      
+      notifySuccess(t(successMsg, fallbackMsg));
       return true;
     } catch (e: unknown) { 
       showToast(parseAppError(e, t), 'error'); 
@@ -66,7 +71,8 @@ export function useTripMutations() {
     }
   }, [actions, showToast, t, notifySuccess]); 
 
-  const settleDebt = useCallback(async (settlement: Settlement, method: Payment['method'] = 'manual') => {
+  // [MILLORA RISC ZERO]: Ara fem servir l'enum PaymentMethodId en comptes d'un string genèric
+  const settleDebt = useCallback(async (settlement: Settlement, method: PaymentMethodId = 'manual') => {
     if (!tripData) return false;
 
     try {
@@ -87,10 +93,11 @@ export function useTripMutations() {
 
         notifySuccess(t('ACTIONS.SETTLE_SUCCESS', 'Deute saldat correctament'));
         return true;
-      } else {
-        showToast(res.error || t('ACTIONS.SETTLE_ERROR', LITERALS.ACTIONS.SETTLE_ERROR), 'error');
-        return false;
       }
+      
+      showToast(res.error || t('ACTIONS.SETTLE_ERROR', LITERALS.ACTIONS.SETTLE_ERROR), 'error');
+      return false;
+      
     } catch (e: unknown) { 
       console.error("[SettleDebt Error]:", e);
       showToast(parseAppError(e, t), 'error');
@@ -120,10 +127,11 @@ export function useTripMutations() {
 
         notifySuccess(t('ACTIONS.DELETE_EXPENSE_SUCCESS', LITERALS.ACTIONS.DELETE_EXPENSE_SUCCESS));
         return true;
-      } else {
-        showToast(res.error || t('ACTIONS.DELETE_EXPENSE_ERROR', LITERALS.ACTIONS.DELETE_EXPENSE_ERROR), 'error');
-        return false;
       }
+      
+      showToast(res.error || t('ACTIONS.DELETE_EXPENSE_ERROR', LITERALS.ACTIONS.DELETE_EXPENSE_ERROR), 'error');
+      return false;
+
     } catch (e: unknown) { 
       console.error("[DeleteExpense Error]:", e);
       showToast(parseAppError(e, t), 'error');
@@ -142,6 +150,7 @@ export function useTripMutations() {
       let currentBalances: Balance[] = [];
       let isOwner = false;
 
+      // Optimització: Evitem crides innecessàries a la BD si ja tenim les dades
       if (tripData && tripData.id === idToLeave) {
         currentBalances = calculateBalances(expenses, currentTripUsers, tripData.payments || []);
         isOwner = tripData.ownerId === currentUser.uid;
@@ -193,9 +202,8 @@ export function useTripMutations() {
   }, [actions, currentUser, tripData, expenses, navigate, showToast, t, requireOnlineForCritical]); 
 
   const joinTrip = useCallback(async () => {
-     if (!requireOnlineForCritical()) return;
+     if (!requireOnlineForCritical() || !currentUser) return;
 
-     if(!currentUser) return;
      try {
          await actions.joinTrip(currentUser);
          showToast(t('ACTIONS.JOIN_TRIP_SUCCESS', LITERALS.ACTIONS.JOIN_TRIP_SUCCESS));
@@ -205,9 +213,7 @@ export function useTripMutations() {
   }, [actions, currentUser, showToast, t, requireOnlineForCritical]); 
 
   const deleteTrip = useCallback(async () => {
-    if (!requireOnlineForCritical()) return;
-
-    if (!tripData || !currentUser) return;
+    if (!requireOnlineForCritical() || !tripData || !currentUser) return;
 
     const isOwner = Boolean(
         currentUser.uid && (
@@ -232,6 +238,7 @@ export function useTripMutations() {
     }
   }, [actions, navigate, showToast, t, tripData, currentUser, requireOnlineForCritical]); 
 
+  // Memoitzem només les funcions públiques (API del hook)
   const memoizedMutations = useMemo(() => ({
     updateTripSettings,
     settleDebt,
