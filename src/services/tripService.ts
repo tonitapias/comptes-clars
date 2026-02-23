@@ -116,6 +116,16 @@ export const TripService = {
     }
   },
 
+  getTripPayments: async (tripId: string): Promise<Payment[]> => {
+    try {
+      const snap = await getDocs(getPaymentsCol(tripId));
+      return snap.docs.map(d => ({ ...d.data(), id: d.id })) as Payment[];
+    } catch (error) {
+      console.error("Error obtenint pagaments:", error);
+      return [];
+    }
+  },
+
   createTrip: async (trip: TripData) => {
     const initialMemberUids = trip.users.filter(u => u.linkedUid).map(u => u.linkedUid as string);
     const tripWithMembers = {

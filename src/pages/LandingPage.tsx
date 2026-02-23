@@ -200,7 +200,6 @@ export default function LandingPage({ user }: LandingPageProps) {
         const targetTrip = myTrips.find(t => t.id === confirmModal.tripId);
         if (targetTrip) {
             
-            // [FIX]: Evitem que el propietari abandoni el grup si és l'últim, ha d'esborrar-lo entrant dins.
             const isOwner = targetTrip.ownerId === user.uid;
             const activeUsers = targetTrip.users.filter(u => !u.isDeleted).length;
 
@@ -212,13 +211,17 @@ export default function LandingPage({ user }: LandingPageProps) {
             }
 
             const realExpenses = await TripService.getTripExpenses(confirmModal.tripId);
+            const realPayments = await TripService.getTripPayments(confirmModal.tripId);
             
-            // [FIX CRÍTIC 1]: Passem targetTrip.payments || [] perquè els càlculs comptin que està saldat
-            const balances = calculateBalances(realExpenses, targetTrip.users, targetTrip.payments || []);
+            // [FIX ARQUITECTURA]: Fusionem i DEDUPLIQUEM els pagaments respectant el seu ID.
+            // Això evita que les liquidacions recents es comptin el doble durant el càlcul de sortida.
+            const rawPayments = [...(targetTrip.payments || []), ...realPayments];
+            const allPayments = Array.from(new Map(rawPayments.map(p => [p.id, p])).values());
+            
+            const balances = calculateBalances(realExpenses, targetTrip.users, allPayments);
             const myBalance = balances.find(b => b.userId === confirmModal.internalUserId)?.amount || 0;
             
-            // [FIX CRÍTIC 2]: Desempaquetem el MoneyCents per poder calcular amb Math.abs sense fallar
-            const numericBalance = unbrand ? unbrand(myBalance as any) : Number(myBalance);
+            const numericBalance = typeof unbrand === 'function' ? unbrand(myBalance as any) : Number(myBalance);
 
             if (Math.abs(numericBalance) > 10) { 
                 showToast("No pots sortir d'un viatge si tens deutes pendents o et deuen diners.", "error");
