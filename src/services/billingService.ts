@@ -279,14 +279,20 @@ export const calculateCategoryStats = (expenses: Expense[]): CategoryStat[] => {
   const stats: Record<string, MoneyCents> = {};
   
   const validExpenses = expenses.filter(e => e.category !== SPECIAL_CATEGORIES.TRANSFER);
-  const total = validExpenses.reduce((acc, curr) => acc + unbrand(curr.amount), 0);
+  
+  // [MILLORA RISC ZERO]: Calculem el total només sumant valors absoluts per evitar
+  // que els reemborsaments (despeses negatives) provoquin divisions per zero o gràfics invertits.
+  const totalAbsoluteSpending = validExpenses.reduce((acc, curr) => {
+    return acc + Math.abs(unbrand(curr.amount));
+  }, 0);
 
-  if (total === 0) return [];
+  if (totalAbsoluteSpending === 0) return [];
 
   validExpenses.forEach(exp => {
     const catKey = exp.category || SPECIAL_CATEGORIES.OTHER;
     const current = unbrand(stats[catKey] || toCents(0));
-    stats[catKey] = toCents(current + unbrand(exp.amount));
+    // Acumulem el valor absolut per a les estadístiques
+    stats[catKey] = toCents(current + Math.abs(unbrand(exp.amount)));
   });
 
   return Object.entries(stats).map(([id, amount]) => {
@@ -297,9 +303,9 @@ export const calculateCategoryStats = (expenses: Expense[]): CategoryStat[] => {
     return {
       ...catInfo,
       amount,
-      percentage: (unbrand(amount) / total) * 100
+      percentage: (unbrand(amount) / totalAbsoluteSpending) * 100
     };
-  }).sort((a, b) => b.amount - a.amount);
+  }).sort((a, b) => unbrand(b.amount) - unbrand(a.amount)); // [MILLORA]: Assegurem la comparació numèrica unbrand
 };
 
 export const calculateTotalSpending = (expenses: Expense[]): MoneyCents => {

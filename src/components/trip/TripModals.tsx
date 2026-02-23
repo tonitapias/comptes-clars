@@ -27,40 +27,51 @@ const TripModals = React.memo(function TripModals({ modals, mutations, showToast
   const { trigger } = useHapticFeedback();
   const { tripData, expenses } = useTripState();
 
-  if (!tripData) return null;
+  // [MILLORA RISC ZERO]: Desestruturem funcions i estats específics abans dels useCallback.
+  // Així evitem que un canvi aliè a 'modals' o 'mutations' trenqui la memoització.
+  const { 
+    confirmAction, closeConfirmAction, closeExpenseModal, 
+    settleModalData, setSettleModalData,
+    editingExpense, isExpenseModalOpen, isGroupModalOpen, setGroupModalOpen, groupModalTab,
+    isActivityOpen, setActivityOpen, isSettingsOpen, setSettingsOpen, openConfirmAction
+  } = modals;
 
-  const canChangeCurrency = expenses.length === 0;
+  const { deleteExpense, settleDebt, updateTripSettings, leaveTrip, deleteTrip } = mutations;
+
+  const canChangeCurrency = expenses?.length === 0;
   
-  // [MILLORA RISC ZERO]: Memoitzem els handlers per no passar noves referències en cada render
+  // Ara les dependències són valors primitius o referències a funcions estables
   const handleDeleteExpense = useCallback(async () => {
     trigger('medium');
-    if (modals.confirmAction?.id) {
-      await mutations.deleteExpense(String(modals.confirmAction.id));
+    if (confirmAction?.id) {
+      await deleteExpense(String(confirmAction.id));
     }
-    modals.closeConfirmAction();
-    modals.closeExpenseModal();
-  }, [trigger, modals, mutations]);
+    closeConfirmAction();
+    closeExpenseModal();
+  }, [trigger, confirmAction?.id, deleteExpense, closeConfirmAction, closeExpenseModal]);
 
   const handleSettleConfirm = useCallback(async (method: Payment['method']) => {
-    if (!modals.settleModalData) return false;
-    const success = await mutations.settleDebt(modals.settleModalData, method);
-    if (success) { modals.setSettleModalData(null); }
+    if (!settleModalData) return false;
+    const success = await settleDebt(settleModalData, method);
+    if (success) { setSettleModalData(null); }
     return success;
-  }, [modals, mutations]);
+  }, [settleModalData, settleDebt, setSettleModalData]);
+
+  if (!tripData) return null;
 
   return (
     <Suspense fallback={null}>
       <ExpenseModal 
-        key={modals.editingExpense?.id || 'new'} 
-        isOpen={modals.isExpenseModalOpen} 
-        onClose={modals.closeExpenseModal} 
-        initialData={modals.editingExpense} 
+        key={editingExpense?.id || 'new'} 
+        isOpen={isExpenseModalOpen} 
+        onClose={closeExpenseModal} 
+        initialData={editingExpense} 
         users={tripData.users} 
         currency={tripData.currency} 
         tripId={tripData.id} 
         onDelete={(id) => {
             trigger('medium');
-            modals.openConfirmAction({ 
+            openConfirmAction({ 
                 type: 'delete_expense', id, 
                 title: LITERALS.MODALS.CONFIRM.DELETE_EXPENSE_TITLE, 
                 message: LITERALS.MODALS.CONFIRM.DELETE_EXPENSE_MSG 
@@ -68,17 +79,17 @@ const TripModals = React.memo(function TripModals({ modals, mutations, showToast
         }} 
         showToast={showToast} 
       />
-      <GroupModal isOpen={modals.isGroupModalOpen} onClose={() => modals.setGroupModalOpen(false)} showToast={showToast} initialTab={modals.groupModalTab} />
-      <ActivityModal isOpen={modals.isActivityOpen} onClose={() => modals.setActivityOpen(false)} />
-      <TripSettingsModal isOpen={modals.isSettingsOpen} onClose={() => modals.setSettingsOpen(false)} canChangeCurrency={canChangeCurrency} onUpdate={mutations.updateTripSettings} onLeave={mutations.leaveTrip} onDelete={mutations.deleteTrip} />
-      <TripSettleModal isOpen={!!modals.settleModalData} onClose={() => modals.setSettleModalData(null)} settlement={modals.settleModalData} onConfirm={handleSettleConfirm} />
+      <GroupModal isOpen={isGroupModalOpen} onClose={() => setGroupModalOpen(false)} showToast={showToast} initialTab={groupModalTab} />
+      <ActivityModal isOpen={isActivityOpen} onClose={() => setActivityOpen(false)} />
+      <TripSettingsModal isOpen={isSettingsOpen} onClose={() => setSettingsOpen(false)} canChangeCurrency={canChangeCurrency} onUpdate={updateTripSettings} onLeave={leaveTrip} onDelete={deleteTrip} />
+      <TripSettleModal isOpen={!!settleModalData} onClose={() => setSettleModalData(null)} settlement={settleModalData} onConfirm={handleSettleConfirm} />
       
       <ConfirmActionModal
-        isOpen={!!modals.confirmAction}
-        onClose={modals.closeConfirmAction}
+        isOpen={!!confirmAction}
+        onClose={closeConfirmAction}
         onConfirm={handleDeleteExpense}
-        title={modals.confirmAction?.title}
-        message={modals.confirmAction?.message}
+        title={confirmAction?.title}
+        message={confirmAction?.message}
         trigger={trigger}
       />
     </Suspense>

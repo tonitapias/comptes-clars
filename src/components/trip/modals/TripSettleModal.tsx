@@ -49,19 +49,26 @@ const TripSettleModal = React.memo(function TripSettleModal({ isOpen, onClose, s
     }));
   }, [t]);
 
-  // [MILLORA RISC ZERO]: Memoitzem els usuaris per no executar '.find()' en cada render
+  // [MILLORA RISC ZERO]: Creem un "Diccionari" (Hash Map) per a cerques de cost O(1).
+  // Ara, en lloc de fer un .find() que recorre tot l'array cada cop, anem directes a l'ID.
+  const usersById = useMemo(() => {
+    if (!tripData?.users) return {};
+    return tripData.users.reduce((acc, user) => {
+      acc[user.id] = user;
+      return acc;
+    }, {} as Record<string, TripUser>);
+  }, [tripData?.users]);
+
+  // [MILLORA RISC ZERO]: Utilitzem el diccionari per assignar usuaris instantàniament
   const { fromUser, toUser } = useMemo(() => {
-    if (!tripData || !settlement) {
-      const fallbackUser = { name: texts.unknownUser, photoUrl: null } as TripUser;
-      return { fromUser: fallbackUser, toUser: fallbackUser };
-    }
-    const getUser = (id: string) => tripData.users.find(u => u.id === id) || { name: texts.unknownUser, photoUrl: null } as TripUser;
+    const fallbackUser = { name: texts.unknownUser, photoUrl: null } as TripUser;
+    if (!settlement) return { fromUser: fallbackUser, toUser: fallbackUser };
     
     return {
-      fromUser: getUser(settlement.from),
-      toUser: getUser(settlement.to)
+      fromUser: usersById[settlement.from] || fallbackUser,
+      toUser: usersById[settlement.to] || fallbackUser
     };
-  }, [tripData, settlement, texts.unknownUser]);
+  }, [settlement, usersById, texts.unknownUser]);
 
   const handleConfirm = useCallback(async () => {
       if (isSubmitting) return; 

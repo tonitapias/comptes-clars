@@ -23,7 +23,7 @@ export function useTripMutations() {
   const showToast = useCallback((msg: string, type: ToastType = 'success') => setToast({ msg, type }), []);
   const clearToast = useCallback(() => setToast(null), []);
 
-  // [MILLORA RISC ZERO]: Centralitzem i fem més robust el comportament offline
+  // [MILLORA RISC ZERO]: Centralitzem i fem més robust el comportament offline amb i18n
   const requireOnlineForCritical = useCallback((): boolean => {
     if (isOffline) {
       showToast(t('COMMON.OFFLINE_CRITICAL_ERROR', "Acció denegada: Necessites connexió per a canvis crítics."), 'error');
@@ -34,12 +34,11 @@ export function useTripMutations() {
 
   const notifySuccess = useCallback((msg: string) => {
     if (isOffline) {
-      // Deixem clar que l'acció s'ha desat localment però falta confirmació del servidor
-      showToast(`${msg} (Desat localment, pendent de xarxa)`, 'warning');
+      showToast(`${msg} ${t('COMMON.OFFLINE_PENDING', '(Desat localment, pendent de xarxa)')}`, 'warning');
     } else {
       showToast(msg, 'success');
     }
-  }, [isOffline, showToast]);
+  }, [isOffline, showToast, t]);
 
   // [MILLORA RISC ZERO]: try/catch aïllat per evitar bloquejar l'acció principal
   const evaluateSettledState = useCallback(async (updatedExpenses: Expense[], updatedPayments: Payment[]) => {
@@ -53,14 +52,13 @@ export function useTripMutations() {
       }
     } catch (error) {
       console.error("[EvaluateSettledState Error]: Error no bloquejant al calcular l'estat saldat.", error);
-      // No fem showToast aquí per no trepitjar el toast d'èxit de l'acció principal
     }
   }, [tripData]);
 
   const updateTripSettings = useCallback(async (name: string, currency: Currency) => {
     try {
       await actions.updateTripSettings(name, new Date().toISOString(), currency);
-      notifySuccess(currency ? LITERALS.ACTIONS.UPDATE_SETTINGS_SUCCESS : LITERALS.ACTIONS.UPDATE_NAME_SUCCESS);
+      notifySuccess(t(currency ? 'ACTIONS.UPDATE_SETTINGS_SUCCESS' : 'ACTIONS.UPDATE_NAME_SUCCESS', currency ? LITERALS.ACTIONS.UPDATE_SETTINGS_SUCCESS : LITERALS.ACTIONS.UPDATE_NAME_SUCCESS));
       return true;
     } catch (e: unknown) { 
       showToast(parseAppError(e, t), 'error'); 
@@ -85,14 +83,12 @@ export function useTripMutations() {
         };
         
         const newPayments = [...(tripData.payments || []), simulatedPayment];
-        // Ara si evaluateSettledState falla per un problema de xarxa esporàdic, 
-        // l'usuari igualment veurà que el deute s'ha saldat correctament.
         await evaluateSettledState(expenses, newPayments);
 
         notifySuccess(t('ACTIONS.SETTLE_SUCCESS', 'Deute saldat correctament'));
         return true;
       } else {
-        showToast(res.error || LITERALS.ACTIONS.SETTLE_ERROR, 'error');
+        showToast(res.error || t('ACTIONS.SETTLE_ERROR', LITERALS.ACTIONS.SETTLE_ERROR), 'error');
         return false;
       }
     } catch (e: unknown) { 
@@ -113,7 +109,7 @@ export function useTripMutations() {
         const newPayments = tripData.payments!.filter(p => p.id !== id);
         await evaluateSettledState(expenses, newPayments);
 
-        notifySuccess('Liquidació anul·lada correctament');
+        notifySuccess(t('ACTIONS.CANCEL_SETTLEMENT_SUCCESS', 'Liquidació anul·lada correctament'));
         return true;
       }
 
@@ -122,10 +118,10 @@ export function useTripMutations() {
         const newExpenses = expenses.filter(e => e.id !== id);
         await evaluateSettledState(newExpenses, tripData.payments || []);
 
-        notifySuccess(LITERALS.ACTIONS.DELETE_EXPENSE_SUCCESS);
+        notifySuccess(t('ACTIONS.DELETE_EXPENSE_SUCCESS', LITERALS.ACTIONS.DELETE_EXPENSE_SUCCESS));
         return true;
       } else {
-        showToast(res.error || LITERALS.ACTIONS.DELETE_EXPENSE_ERROR, 'error');
+        showToast(res.error || t('ACTIONS.DELETE_EXPENSE_ERROR', LITERALS.ACTIONS.DELETE_EXPENSE_ERROR), 'error');
         return false;
       }
     } catch (e: unknown) { 
@@ -152,7 +148,7 @@ export function useTripMutations() {
       } else {
         const fetchedTrip = await TripService.getTrip(idToLeave);
         if (!fetchedTrip) {
-           showToast("No s'ha trobat el viatge", "error");
+           showToast(t('ERRORS.TRIP_NOT_FOUND', "No s'ha trobat el viatge"), "error");
            return;
         }
         const fetchedExpenses = await TripService.getTripExpenses(idToLeave);
@@ -164,12 +160,12 @@ export function useTripMutations() {
       const myUser = currentTripUsers.find(u => u.linkedUid === currentUser.uid);
 
       if (isOwner && currentTripUsers.filter(u => !u.isDeleted).length <= 1) {
-          showToast("Ets l'últim membre actiu. Elimina el projecte sencer a 'Configuració'.", "warning");
+          showToast(t('ERRORS.LAST_MEMBER_ACTIVE', "Ets l'últim membre actiu. Elimina el projecte sencer a 'Configuració'."), "warning");
           return;
       }
 
       if (!canUserLeaveTrip(myUser?.id, currentBalances, BUSINESS_RULES.MAX_LEAVE_BALANCE_MARGIN)) {
-        showToast("No pots sortir del viatge fins que no saldis els teus deutes o et paguin el que et deuen.", "error");
+        showToast(t('ERRORS.CANNOT_LEAVE_DEBTS', "No pots sortir del viatge fins que no saldis els teus deutes o et paguin el que et deuen."), "error");
         return;
       }
 
@@ -183,13 +179,13 @@ export function useTripMutations() {
       );
 
       if (res.success) {
-        showToast("Has abandonat el viatge correctament.", "success");
+        showToast(t('ACTIONS.LEAVE_TRIP_SUCCESS', "Has abandonat el viatge correctament."), "success");
         if (tripData?.id === idToLeave) {
           localStorage.removeItem('cc-last-trip-id');
           navigate('/');
         }
       } else {
-        showToast(res.error || "No s'ha pogut sortir del viatge", 'error');
+        showToast(res.error || t('ERRORS.LEAVE_TRIP_FAILED', "No s'ha pogut sortir del viatge"), 'error');
       }
     } catch (e: unknown) {
       showToast(parseAppError(e, t), 'error');
@@ -202,7 +198,7 @@ export function useTripMutations() {
      if(!currentUser) return;
      try {
          await actions.joinTrip(currentUser);
-         showToast(LITERALS.ACTIONS.JOIN_TRIP_SUCCESS);
+         showToast(t('ACTIONS.JOIN_TRIP_SUCCESS', LITERALS.ACTIONS.JOIN_TRIP_SUCCESS));
      } catch(e: unknown) { 
          showToast(parseAppError(e, t), 'error');
      }
@@ -221,13 +217,13 @@ export function useTripMutations() {
     );
     
     if (!isOwner) {
-        showToast("Accés denegat: Només el creador pot eliminar el projecte sencer.", 'error');
+        showToast(t('ERRORS.ONLY_OWNER_CAN_DELETE', "Accés denegat: Només el creador pot eliminar el projecte sencer."), 'error');
         return; 
     }
 
     try {
       await actions.deleteTrip();
-      showToast(LITERALS.ACTIONS.DELETE_TRIP_SUCCESS);
+      showToast(t('ACTIONS.DELETE_TRIP_SUCCESS', LITERALS.ACTIONS.DELETE_TRIP_SUCCESS));
       localStorage.removeItem('cc-last-trip-id');
       navigate('/');
     } catch (e: unknown) { 
