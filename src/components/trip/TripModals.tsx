@@ -16,9 +16,6 @@ const TripSettingsModal = React.lazy(() => import('./modals/TripSettingsModal'))
 const TripSettleModal = React.lazy(() => import('./modals/TripSettleModal'));
 const ConfirmActionModal = React.lazy(() => import('../modals/ConfirmActionModal'));
 
-// [MILLORA RISC ZERO]: Wrapper Intel·ligent per a Modals Asíncrons.
-// Evita descarregar el codi de modals que l'usuari no ha obert mai,
-// però permet que s'executin les animacions de sortida un cop tancats.
 const LazyModal = ({ isOpen, children }: { isOpen: boolean, children: React.ReactNode }) => {
   const [hasMounted, setHasMounted] = useState(isOpen);
   
@@ -50,21 +47,30 @@ const TripModals = React.memo(function TripModals({ modals, mutations, showToast
     isActivityOpen, setActivityOpen, isSettingsOpen, setSettingsOpen, openConfirmAction
   } = modals;
 
-  const { deleteExpense, settleDebt, updateTripSettings, leaveTrip, deleteTrip } = mutations;
+  // [FASE 2 FIX]: Afegim deletePayment a la desestructuració
+  const { deleteExpense, deletePayment, settleDebt, updateTripSettings, leaveTrip, deleteTrip } = mutations;
 
-  // Memoitzem el càlcul basat només en la longitud de l'array
   const canChangeCurrency = useMemo(() => expenses?.length === 0, [expenses?.length]);
   
+  // [FASE 2 FIX]: La UI ara decideix quina mutació cridar basant-se en l'ID
   const handleDeleteExpense = useCallback(async () => {
     trigger('medium');
-    if (confirmAction?.id) {
-      await deleteExpense(String(confirmAction.id));
+    if (confirmAction?.id && tripData) {
+      const targetId = String(confirmAction.id);
+      
+      // Comprovem si l'ID pertany a un pagament/liquidació
+      const isPayment = tripData.payments?.some(p => p.id === targetId);
+
+      if (isPayment) {
+        await deletePayment(targetId);
+      } else {
+        await deleteExpense(targetId);
+      }
     }
     closeConfirmAction();
     closeExpenseModal();
-  }, [trigger, confirmAction?.id, deleteExpense, closeConfirmAction, closeExpenseModal]);
+  }, [trigger, confirmAction?.id, tripData, deletePayment, deleteExpense, closeConfirmAction, closeExpenseModal]);
 
-  // Tipatge fort amb PaymentMethodId
   const handleSettleConfirm = useCallback(async (method: PaymentMethodId) => {
     if (!settleModalData) return false;
     const success = await settleDebt(settleModalData, method);
@@ -89,10 +95,12 @@ const TripModals = React.memo(function TripModals({ modals, mutations, showToast
           tripId={tripData.id} 
           onDelete={(id) => {
               trigger('medium');
+              // Com que la UI reutilitza el modal, el missatge pot ser genèric o podem comprovar si és pagament per canviar el text
+              const isPayment = tripData.payments?.some(p => p.id === String(id));
               openConfirmAction({ 
                   type: 'delete_expense', id, 
-                  title: LITERALS.MODALS.CONFIRM.DELETE_EXPENSE_TITLE, 
-                  message: LITERALS.MODALS.CONFIRM.DELETE_EXPENSE_MSG 
+                  title: isPayment ? "Anul·lar liquidació" : LITERALS.MODALS.CONFIRM.DELETE_EXPENSE_TITLE, 
+                  message: isPayment ? "Segur que vols anul·lar aquest pagament? Els deutes tornaran a l'estat anterior." : LITERALS.MODALS.CONFIRM.DELETE_EXPENSE_MSG 
               });
           }} 
           showToast={showToast} 

@@ -11,7 +11,7 @@ import { LITERALS } from '../constants/literals';
 import { BUSINESS_RULES } from '../config/businessRules';
 import { TripService } from '../services/tripService'; 
 
-// --- FUNCIONS AUXILIARS DE DOMINI (Fora del hook per no recrear-les) ---
+// --- FUNCIONS AUXILIARS DE DOMINI ---
 const isUserOwner = (tripData: TripData, userId: string): boolean => {
   return tripData.ownerId === userId || tripData.memberUids?.[0] === userId;
 };
@@ -58,7 +58,6 @@ export function useTripMutations() {
       const isSettledNow = newBalances.every(b => Math.abs(unbrand(b.amount)) < BUSINESS_RULES.SETTLED_TOLERANCE_MARGIN);
       
       if (tripData.isSettled !== isSettledNow) {
-        // [MILLORA]: Això ara es fa en background sense bloquejar la UI de l'usuari
         TripService.updateTripSettledState(tripData.id, isSettledNow).catch(err => {
             console.warn("[Background Sync] Error actualitzant l'estat saldat", err);
         });
@@ -94,7 +93,6 @@ export function useTripMutations() {
       const res = await actions.settleDebt(settlement, method);
 
       if (res.success) {
-        // Optimistic UI/Calculation evaluation
         const simulatedPayment: Payment = {
           id: `temp-${Date.now()}`,
           from: settlement.from,
@@ -120,21 +118,11 @@ export function useTripMutations() {
     }
   }, [actions, showToast, t, expenses, tripData, notifySuccess, evaluateSettledState]); 
 
+  // [FASE 2 FIX]: Responem només a l'eliminació de despeses
   const deleteExpense = useCallback(async (id: string) => {
     if (!tripData) return false;
 
     try {
-      const isPayment = tripData.payments?.some(p => p.id === id);
-
-      if (isPayment) {
-        await TripService.deletePayment(tripData.id, id, tripData.payments!);
-        const newPayments = tripData.payments!.filter(p => p.id !== id);
-        await evaluateSettledState(expenses, newPayments);
-
-        notifySuccess(t('ACTIONS.CANCEL_SETTLEMENT_SUCCESS', 'Liquidació anul·lada correctament'));
-        return true;
-      }
-
       const res = await actions.deleteExpense(id);
       if (res.success) {
         const newExpenses = expenses.filter(e => e.id !== id);
@@ -153,6 +141,25 @@ export function useTripMutations() {
     }
   }, [actions, showToast, t, expenses, tripData, notifySuccess, evaluateSettledState]); 
 
+  // [FASE 2 FIX]: Nou mètode explícit per eliminar liquidacions/pagaments
+  const deletePayment = useCallback(async (id: string) => {
+    if (!tripData) return false;
+
+    try {
+      const currentPayments = tripData.payments || [];
+      await TripService.deletePayment(tripData.id, id, currentPayments);
+      
+      const newPayments = currentPayments.filter(p => p.id !== id);
+      await evaluateSettledState(expenses, newPayments);
+
+      notifySuccess(t('ACTIONS.CANCEL_SETTLEMENT_SUCCESS', 'Liquidació anul·lada correctament'));
+      return true;
+    } catch (e: unknown) { 
+      showToast(parseAppError(e, t), 'error');
+      return false;
+    }
+  }, [showToast, t, expenses, tripData, notifySuccess, evaluateSettledState]);
+
   const leaveTrip = useCallback(async (targetTripId?: string) => {
     if (!requireOnlineForCritical() || !currentUser) return;
 
@@ -164,7 +171,6 @@ export function useTripMutations() {
       let currentBalances: Balance[] = [];
       let isOwner = false;
 
-      // Optimització: Evitem crides innecessàries a la BD si ja tenim les dades en estat
       if (tripData && tripData.id === idToLeave) {
         currentBalances = calculateBalances(expenses, currentTripUsers, tripData.payments || []);
         isOwner = isUserOwner(tripData, currentUser.uid);
@@ -244,15 +250,16 @@ export function useTripMutations() {
     }
   }, [actions, navigate, showToast, t, tripData, currentUser, requireOnlineForCritical]); 
 
-  // Memoitzem només les funcions públiques (API del hook) de forma estricta
+  // [FASE 2 FIX]: Exposem explícitament deletePayment
   const memoizedMutations = useMemo(() => ({
     updateTripSettings,
     settleDebt,
     deleteExpense,
+    deletePayment, // <--- EXPOSAT AQUÍ
     leaveTrip,
     joinTrip,
     deleteTrip
-  }), [updateTripSettings, settleDebt, deleteExpense, leaveTrip, joinTrip, deleteTrip]);
+  }), [updateTripSettings, settleDebt, deleteExpense, deletePayment, leaveTrip, joinTrip, deleteTrip]);
 
   return {
     toast,

@@ -1,14 +1,23 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { doc, collection, onSnapshot, FirestoreError } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { DB_PATHS } from '../config/dbPaths'; // <-- Afegit per utilitzar les rutes estandarditzades
+import { DB_PATHS } from '../config/dbPaths';
 import { TripData, Expense, Payment, LogEntry } from '../types';
+
+// [FASE 1 FIX]: Moguem la funció deduplicate fora del hook per evitar la seva 
+// recreació en cada render. Funció pura.
+const deduplicate = <T extends { id: string }>(arr1: T[], arr2: T[]): T[] => {
+  const map = new Map<string, T>();
+  [...arr1, ...arr2].forEach(item => {
+    if (item && item.id) map.set(item.id, item);
+  });
+  return Array.from(map.values());
+};
 
 export function useTripData(tripId: string | undefined) {
   const [rawTripData, setRawTripData] = useState<TripData | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   
-  // [NOVA ARQUITECTURA]: Estats separats per a les noves subcol·leccions
   const [subPayments, setSubPayments] = useState<Payment[]>([]);
   const [subLogs, setSubLogs] = useState<LogEntry[]>([]);
 
@@ -53,7 +62,7 @@ export function useTripData(tripId: string | undefined) {
       }
     };
     
-    // 1. Subscripció al Trip (Dades base)
+    // 1. Subscripció al Trip
     const tripRef = doc(db, DB_PATHS.getTripDocPath(tripId));
     const unsubTrip = onSnapshot(tripRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -84,7 +93,7 @@ export function useTripData(tripId: string | undefined) {
       resolveLoading();
     });
 
-    // 3. Subscripció als Pagaments (Subcol·lecció)
+    // 3. Subscripció als Pagaments
     const paymentsRef = collection(db, DB_PATHS.getPaymentsCollectionPath(tripId));
     const unsubPayments = onSnapshot(paymentsRef, (snapshot) => {
       setSubPayments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Payment[]);
@@ -96,7 +105,7 @@ export function useTripData(tripId: string | undefined) {
       resolveLoading();
     });
 
-    // 4. Subscripció als Logs (Subcol·lecció)
+    // 4. Subscripció als Logs
     const logsRef = collection(db, DB_PATHS.getLogsCollectionPath(tripId));
     const unsubLogs = onSnapshot(logsRef, (snapshot) => {
       setSubLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as LogEntry[]);
@@ -112,25 +121,23 @@ export function useTripData(tripId: string | undefined) {
     };
   }, [tripId]);
 
-  // [FIX RENDIMENT I REACT WARNINGS]: Funció per eliminar duplicats.
-  // Això evita que, durant la transició de l'arquitectura híbrida, 
-  // una mateixa despesa o log aparegui duplicada a la UI.
-  const deduplicate = <T extends { id: string }>(arr1: T[], arr2: T[]): T[] => {
-    const map = new Map<string, T>();
-    [...arr1, ...arr2].forEach(item => {
-      if (item && item.id) map.set(item.id, item);
-    });
-    return Array.from(map.values());
-  };
+  // [FASE 1 FIX]: Memoització pesada.
+  // Evitem fer un "sort" i iterar "Map" en memòria durant *cada render* del context.
+  // Ara només es recalcula si les dades font canvien via Firebase.
+  const tripData = useMemo(() => {
+    if (!rawTripData) return null;
 
-  // Apliquem la deduplicació en lloc de concatenar a cegues
-  const tripData = rawTripData ? {
-    ...rawTripData,
-    payments: deduplicate(rawTripData.payments || [], subPayments),
-    logs: deduplicate(rawTripData.logs || [], subLogs).sort((a, b) => 
+    const finalPayments = deduplicate(rawTripData.payments || [], subPayments);
+    const finalLogs = deduplicate(rawTripData.logs || [], subLogs).sort((a, b) => 
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    )
-  } : null;
+    );
+
+    return {
+      ...rawTripData,
+      payments: finalPayments,
+      logs: finalLogs
+    };
+  }, [rawTripData, subPayments, subLogs]);
 
   return { tripData, expenses, loading, error, isOffline };
 }
