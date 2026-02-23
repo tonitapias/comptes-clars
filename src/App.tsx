@@ -12,24 +12,28 @@ import { Footer } from './components/Footer';
 import { useAuth } from './context/AuthContext';
 
 // [MILLORA RISC ZERO]: Importacions dinàmiques (Lazy Loading)
-// El codi de TripPage només es descarregarà si l'usuari hi entra.
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const TripPage = lazy(() => import('./pages/TripPage'));
 
-function App() {
-  useTheme(); 
+// [MILLORA RISC ZERO]: Hem extret LoadingScreen FORA del component App.
+// Definir components dins d'altres components és un anti-patró greu a React, 
+// ja que provoca que es desmuntin i es tornin a muntar completament (matant animacions)
+// a cada re-render del pare.
+const LoadingScreen = () => {
   const { t } = useTranslation(); 
-  
-  const { user, authLoading } = useAuth();
-  
-  // [MILLORA RISC ZERO]: Extraiem el Loader per reutilitzar-lo al Suspense
-  const LoadingScreen = () => (
+  return (
     <div className="flex-grow flex flex-col items-center justify-center">
       <Loader2 className="h-10 w-10 text-indigo-600 dark:text-indigo-400 animate-spin mb-4" />
       <p className="text-slate-400 text-sm font-medium">{t('COMMON.LOADING_SESSION', 'Carregant...')}</p>
     </div>
   );
+};
 
+function App() {
+  useTheme(); 
+  
+  const { user, authLoading } = useAuth();
+  
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 transition-colors duration-200">
       <ErrorBoundary> 

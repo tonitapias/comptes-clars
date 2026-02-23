@@ -6,10 +6,15 @@ import { parseAppError } from '../utils/errorHandler';
 import { useTripState, useTripDispatch } from '../context/TripContext';
 import { ToastType } from '../components/Toast';
 import { calculateBalances, canUserLeaveTrip, getUserBalance } from '../services/billingService'; 
-import { Currency, Settlement, Payment, Balance, unbrand, Expense, PaymentMethodId } from '../types'; 
+import { Currency, Settlement, Payment, Balance, unbrand, Expense, PaymentMethodId, TripData } from '../types'; 
 import { LITERALS } from '../constants/literals';
 import { BUSINESS_RULES } from '../config/businessRules';
 import { TripService } from '../services/tripService'; 
+
+// --- FUNCIONS AUXILIARS DE DOMINI (Fora del hook per no recrear-les) ---
+const isUserOwner = (tripData: TripData, userId: string): boolean => {
+  return tripData.ownerId === userId || tripData.memberUids?.[0] === userId;
+};
 
 export function useTripMutations() {
   const navigate = useNavigate();
@@ -20,13 +25,15 @@ export function useTripMutations() {
   
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
 
-  // --- 1. GESTIÓ D'UI I NOTIFICACIONS ---
+  // ============================================================================
+  // 1. GESTIÓ D'UI I NOTIFICACIONS
+  // ============================================================================
   const showToast = useCallback((msg: string, type: ToastType = 'success') => setToast({ msg, type }), []);
   const clearToast = useCallback(() => setToast(null), []);
 
   const notifySuccess = useCallback((msg: string) => {
     if (isOffline) {
-      showToast(`${msg} ${t('COMMON.OFFLINE_PENDING', '(Desat localment, pendent de xarxa)')}`, 'warning');
+      showToast(`${msg} ${t('COMMON.OFFLINE_PENDING', '(Desat localment)')}`, 'warning');
     } else {
       showToast(msg, 'success');
     }
@@ -40,7 +47,9 @@ export function useTripMutations() {
     return true;
   }, [isOffline, showToast, t]);
 
-  // --- 2. LÒGICA DE NEGOCI (Aïllada i no bloquejant) ---
+  // ============================================================================
+  // 2. LÒGICA DE NEGOCI I CÀLCULS
+  // ============================================================================
   const evaluateSettledState = useCallback(async (updatedExpenses: Expense[], updatedPayments: Payment[]) => {
     if (!tripData?.id || !tripData?.users) return;
     
@@ -49,21 +58,28 @@ export function useTripMutations() {
       const isSettledNow = newBalances.every(b => Math.abs(unbrand(b.amount)) < BUSINESS_RULES.SETTLED_TOLERANCE_MARGIN);
       
       if (tripData.isSettled !== isSettledNow) {
-        await TripService.updateTripSettledState(tripData.id, isSettledNow);
+        // [MILLORA]: Això ara es fa en background sense bloquejar la UI de l'usuari
+        TripService.updateTripSettledState(tripData.id, isSettledNow).catch(err => {
+            console.warn("[Background Sync] Error actualitzant l'estat saldat", err);
+        });
       }
     } catch (error) {
       console.error("[EvaluateSettledState Error]: Error no bloquejant al calcular l'estat saldat.", error);
     }
   }, [tripData?.id, tripData?.users, tripData?.isSettled]);
 
-  // --- 3. MUTACIONS PRINCIPALS ---
+  // ============================================================================
+  // 3. MUTACIONS PRINCIPALS
+  // ============================================================================
   const updateTripSettings = useCallback(async (name: string, currency: Currency) => {
     try {
       await actions.updateTripSettings(name, new Date().toISOString(), currency);
-      const successMsg = currency ? 'ACTIONS.UPDATE_SETTINGS_SUCCESS' : 'ACTIONS.UPDATE_NAME_SUCCESS';
-      const fallbackMsg = currency ? LITERALS.ACTIONS.UPDATE_SETTINGS_SUCCESS : LITERALS.ACTIONS.UPDATE_NAME_SUCCESS;
       
-      notifySuccess(t(successMsg, fallbackMsg));
+      const isCurrencyUpdate = Boolean(currency);
+      const msgKey = isCurrencyUpdate ? 'ACTIONS.UPDATE_SETTINGS_SUCCESS' : 'ACTIONS.UPDATE_NAME_SUCCESS';
+      const fallbackMsg = isCurrencyUpdate ? LITERALS.ACTIONS.UPDATE_SETTINGS_SUCCESS : LITERALS.ACTIONS.UPDATE_NAME_SUCCESS;
+      
+      notifySuccess(t(msgKey, fallbackMsg));
       return true;
     } catch (e: unknown) { 
       showToast(parseAppError(e, t), 'error'); 
@@ -71,7 +87,6 @@ export function useTripMutations() {
     }
   }, [actions, showToast, t, notifySuccess]); 
 
-  // [MILLORA RISC ZERO]: Ara fem servir l'enum PaymentMethodId en comptes d'un string genèric
   const settleDebt = useCallback(async (settlement: Settlement, method: PaymentMethodId = 'manual') => {
     if (!tripData) return false;
 
@@ -79,6 +94,7 @@ export function useTripMutations() {
       const res = await actions.settleDebt(settlement, method);
 
       if (res.success) {
+        // Optimistic UI/Calculation evaluation
         const simulatedPayment: Payment = {
           id: `temp-${Date.now()}`,
           from: settlement.from,
@@ -99,7 +115,6 @@ export function useTripMutations() {
       return false;
       
     } catch (e: unknown) { 
-      console.error("[SettleDebt Error]:", e);
       showToast(parseAppError(e, t), 'error');
       return false;
     }
@@ -133,7 +148,6 @@ export function useTripMutations() {
       return false;
 
     } catch (e: unknown) { 
-      console.error("[DeleteExpense Error]:", e);
       showToast(parseAppError(e, t), 'error');
       return false;
     }
@@ -150,10 +164,10 @@ export function useTripMutations() {
       let currentBalances: Balance[] = [];
       let isOwner = false;
 
-      // Optimització: Evitem crides innecessàries a la BD si ja tenim les dades
+      // Optimització: Evitem crides innecessàries a la BD si ja tenim les dades en estat
       if (tripData && tripData.id === idToLeave) {
         currentBalances = calculateBalances(expenses, currentTripUsers, tripData.payments || []);
-        isOwner = tripData.ownerId === currentUser.uid;
+        isOwner = isUserOwner(tripData, currentUser.uid);
       } else {
         const fetchedTrip = await TripService.getTrip(idToLeave);
         if (!fetchedTrip) {
@@ -163,7 +177,7 @@ export function useTripMutations() {
         const fetchedExpenses = await TripService.getTripExpenses(idToLeave);
         currentTripUsers = fetchedTrip.users;
         currentBalances = calculateBalances(fetchedExpenses, currentTripUsers, fetchedTrip.payments || []);
-        isOwner = fetchedTrip.ownerId === currentUser.uid;
+        isOwner = isUserOwner(fetchedTrip, currentUser.uid);
       }
 
       const myUser = currentTripUsers.find(u => u.linkedUid === currentUser.uid);
@@ -206,23 +220,16 @@ export function useTripMutations() {
 
      try {
          await actions.joinTrip(currentUser);
-         showToast(t('ACTIONS.JOIN_TRIP_SUCCESS', LITERALS.ACTIONS.JOIN_TRIP_SUCCESS));
+         notifySuccess(t('ACTIONS.JOIN_TRIP_SUCCESS', LITERALS.ACTIONS.JOIN_TRIP_SUCCESS));
      } catch(e: unknown) { 
          showToast(parseAppError(e, t), 'error');
      }
-  }, [actions, currentUser, showToast, t, requireOnlineForCritical]); 
+  }, [actions, currentUser, showToast, t, requireOnlineForCritical, notifySuccess]); 
 
   const deleteTrip = useCallback(async () => {
     if (!requireOnlineForCritical() || !tripData || !currentUser) return;
 
-    const isOwner = Boolean(
-        currentUser.uid && (
-            tripData.ownerId === currentUser.uid || 
-            tripData.memberUids?.[0] === currentUser.uid
-        )
-    );
-    
-    if (!isOwner) {
+    if (!isUserOwner(tripData, currentUser.uid)) {
         showToast(t('ERRORS.ONLY_OWNER_CAN_DELETE', "Accés denegat: Només el creador pot eliminar el projecte sencer."), 'error');
         return; 
     }
@@ -233,12 +240,11 @@ export function useTripMutations() {
       localStorage.removeItem('cc-last-trip-id');
       navigate('/');
     } catch (e: unknown) { 
-      console.error(e);
       showToast(parseAppError(e, t), 'error'); 
     }
   }, [actions, navigate, showToast, t, tripData, currentUser, requireOnlineForCritical]); 
 
-  // Memoitzem només les funcions públiques (API del hook)
+  // Memoitzem només les funcions públiques (API del hook) de forma estricta
   const memoizedMutations = useMemo(() => ({
     updateTripSettings,
     settleDebt,
