@@ -146,13 +146,19 @@ export default function ExpensesList({
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const observerTarget = useRef<HTMLDivElement>(null);
 
+  // [MILLORA ARQUITECTURA]: Estabilitzem les dependències profundes
+  // Utilitzem JSON.stringify per crear una firma inmutable dels usuaris i els pagaments.
+  // Això evita re-renders complets si el document 'tripData' s'actualitza per camps no relacionats (com els logs).
+  const usersSignature = JSON.stringify(tripData?.users || []);
+  
   const userMap = useMemo(() => {
     if (!tripData?.users) return {};
     return tripData.users.reduce((acc, user) => {
       acc[user.id] = user;
       return acc;
     }, {} as Record<string, TripUser>);
-  }, [tripData?.users]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usersSignature]); 
 
   const getUserName = useCallback((id: string) => userMap[id]?.name || 'Desconegut', [userMap]);
 
@@ -162,9 +168,11 @@ export default function ExpensesList({
     return map;
   }, []);
 
-  // [RISC ZERO]: Fusionem les despeses normals amb els pagaments disfressats de despeses
+  const paymentsSignature = JSON.stringify(tripData?.payments || []);
+
   const mergedExpenses = useMemo(() => {
-    const mappedPayments: Expense[] = (tripData?.payments || []).map(p => {
+    const rawPayments = tripData?.payments || [];
+    const mappedPayments: Expense[] = rawPayments.map(p => {
         const methodLabel = p.method === 'bizum' ? 'Bizum' : p.method === 'transfer' ? 'Transferència' : p.method === 'card' ? 'Targeta' : 'Efectiu';
         return {
             id: p.id,
@@ -196,7 +204,8 @@ export default function ExpensesList({
         if (dateA !== dateB) return dateB - dateA;
         return String(b.id).localeCompare(String(a.id));
     });
-  }, [expenses, tripData?.payments, searchQuery, filterCategory, getUserName]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expenses, paymentsSignature, searchQuery, filterCategory, getUserName]);
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);

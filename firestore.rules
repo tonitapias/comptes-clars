@@ -7,36 +7,38 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Ruta de la teva col·lecció de viatges
-    match /artifacts/comptes-clars-v1/public/data/trips/{tripId} {
+    // [MILLORA]: Fem servir el comodí {appId} perquè funcioni en qualsevol entorn
+    match /artifacts/{appId}/public/data/trips/{tripId} {
       
-      // Funció: Comprova si l'usuari que fa la petició està dins l'array 'memberUids'
       function isTripMember() {
         return isAuthenticated() && request.auth.uid in resource.data.memberUids;
       }
       
-      // CREATE: Qualsevol usuari autenticat pot crear un viatge nou
+      // REGLES DEL DOCUMENT DEL VIATGE PRINCIPAL
       allow create: if isAuthenticated();
-      
-      // READ: Si tens l'enllaç (el tripId), el pots llegir per validar si existeix abans d'unir-te
       allow read: if isAuthenticated();
-      
-      // UPDATE: Pots actualitzar si ja n'ets membre, O si t'estàs afegint a tu mateix (unir-se)
-      allow update: if isTripMember() || (isAuthenticated() && request.auth.uid in request.resource.data.memberUids);
-      
-      // DELETE: Només ho pots esborrar si ets membre
+      allow update: if isTripMember() ||
+        (isAuthenticated() && request.auth.uid in request.resource.data.memberUids);
       allow delete: if isTripMember();
 
-      // REGLES PER A LES DESPESES (Subcol·lecció)
-      match /expenses/{expenseId} {
-        
-        // Funció: Recupera el document del viatge "pare" per veure qui n'és membre
-        function isParentTripMember() {
-          let tripDoc = get(/databases/$(database)/documents/artifacts/comptes-clars-v1/public/data/trips/$(tripId));
-          return isAuthenticated() && request.auth.uid in tripDoc.data.memberUids;
-        }
+      // Funció compartida per a totes les subcol·leccions
+      function isParentTripMember() {
+        // Obtenim el document pare utilitzant els comodins actuals
+        let tripDoc = get(/databases/$(database)/documents/artifacts/$(appId)/public/data/trips/$(tripId));
+        return isAuthenticated() && request.auth.uid in tripDoc.data.memberUids;
+      }
 
-        // Totes les operacions de despeses queden restringides només als membres del viatge
+      // [NOVA ARQUITECTURA]: Autoritzem explícitament totes les subcol·leccions
+      
+      match /expenses/{expenseId} {
+        allow read, write: if isParentTripMember();
+      }
+      
+      match /payments/{paymentId} {
+        allow read, write: if isParentTripMember();
+      }
+      
+      match /logs/{logId} {
         allow read, write: if isParentTripMember();
       }
     }

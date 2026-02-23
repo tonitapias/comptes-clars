@@ -15,9 +15,15 @@ export default function ActivityModal({ isOpen, onClose }: ActivityModalProps) {
   const logs = tripData?.logs || [];
   const users = tripData?.users || [];
 
+  // [CORRECCIÓ DE L'ERROR]: El log.userId normalment guarda el UID de Firebase (linkedUid), 
+  // però el user.id és un UUID intern. Creem un mapa que busqui per tots dos per assegurar-nos
+  // que sempre trobem l'usuari actualitzat per recuperar el seu nom viu.
   const userMap = useMemo(() => {
     return users.reduce((acc, user) => {
-      acc[user.id] = user;
+      acc[user.id] = user; // Indexem per ID intern
+      if (user.linkedUid) {
+        acc[user.linkedUid] = user; // Indexem també pel UID d'autenticació
+      }
       return acc;
     }, {} as Record<string, TripUser>);
   }, [users]);
@@ -74,14 +80,10 @@ export default function ActivityModal({ isOpen, onClose }: ActivityModalProps) {
                 const { time, date, isToday } = formatLogDate(log.timestamp);
                 const Icon = config.icon;
                 
+                // Si trobem l'usuari actiu, fem servir el seu nom actualitzat de forma reactiva.
+                // Si no el trobem (ex: usuari que ha abandonat el grup), recaiem de forma segura
+                // al nom històric que teníem guardat.
                 const currentName = user?.name || log.userName;
-
-                // [MILLORA RISC ZERO]: Si el text del missatge històric conté el nom antic de l'usuari,
-                // el substituïm "al vol" pel nom nou sense tocar la base de dades.
-                let displayMessage = log.message;
-                if (user?.name && log.userName && displayMessage.includes(log.userName)) {
-                    displayMessage = displayMessage.replace(log.userName, user.name);
-                }
 
                 return (
                   <div key={log.id} className="flex items-start gap-5 animate-fade-in-up group" style={{ animationDelay: `${index * 50}ms` }}>
@@ -109,8 +111,8 @@ export default function ActivityModal({ isOpen, onClose }: ActivityModalProps) {
                              </span>
                         </div>
                         <p className="text-xs text-slate-600 dark:text-slate-300 font-medium leading-relaxed">
-                             {/* ARA FEM SERVIR displayMessage EN COMPTES DE log.message */}
-                             {displayMessage}
+                             {/* Tornem a utilitzar log.message tal qual per evitar errors de replace */}
+                             {log.message}
                         </p>
                     </div>
                   </div>

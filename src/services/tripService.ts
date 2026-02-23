@@ -64,10 +64,12 @@ const getTripRef = (tripId: string) => {
 const getExpensesCol = (tripId: string) => collection(db, DB_PATHS.getExpensesCollectionPath(tripId));
 const getExpenseRef = (tripId: string, expenseId: string) => doc(db, DB_PATHS.getExpenseDocPath(tripId, expenseId));
 
+// [NOVA ARQUITECTURA]: Referències a les noves subcol·leccions
+const getLogsCol = (tripId: string) => collection(db, DB_PATHS.getLogsCollectionPath(tripId));
+const getPaymentsCol = (tripId: string) => collection(db, DB_PATHS.getPaymentsCollectionPath(tripId));
+
 const generateId = () => crypto.randomUUID();
 
-// [MILLORA ARQUITECTURA]: En lloc de fer una escriptura per cada log, generem l'objecte 
-// i l'adjuntem a la transacció principal. Estalvia costos i prevé errors de consistència.
 const createLogEntry = (message: string, action: LogEntry['action']): LogEntry => {
   const currentUser = auth.currentUser;
   const finalUserName = currentUser?.displayName || 'Algú';
@@ -130,11 +132,12 @@ export const TripService = {
 
   updateTrip: async (tripId: string, data: Partial<TripData>) => {
     const log = createLogEntry(`ha actualitzat la configuració`, 'settings');
+    const batch = writeBatch(db);
     
-    await updateDoc(getTripRef(tripId), {
-      ...sanitizeData(data),
-      logs: arrayUnion(sanitizeData(log))
-    } as UpdateData<TripData>);
+    batch.update(getTripRef(tripId), sanitizeData(data) as UpdateData<TripData>);
+    batch.set(doc(getLogsCol(tripId), log.id), sanitizeData(log));
+    
+    await batch.commit();
   },
 
   updateTripSettledState: async (tripId: string, isSettled: boolean) => {
@@ -143,29 +146,26 @@ export const TripService = {
 
   deleteTrip: async (tripId: string) => {
     const log = createLogEntry(`ha arxivat el projecte`, 'settings');
-    await updateDoc(getTripRef(tripId), { 
-      isDeleted: true,
-      logs: arrayUnion(sanitizeData(log))
-    });
+    const batch = writeBatch(db);
+    
+    batch.update(getTripRef(tripId), { isDeleted: true });
+    batch.set(doc(getLogsCol(tripId), log.id), sanitizeData(log));
+    
+    await batch.commit();
   },
 
   addExpense: async (tripId: string, expense: Omit<Expense, 'id'>) => {
     ExpenseSchema.parse(expense); 
     const cleanExpense = sanitizeData(expense);
-    
-    // Generem la referència sense fer l'escriptura a Firebase encara
     const newExpenseRef = doc(getExpensesCol(tripId)); 
     
     const formattedAmount = (expense.amount / 100).toFixed(2).replace('.', ',');
     const log = createLogEntry(`ha afegit la despesa "${expense.title}" de ${formattedAmount} €`, 'create');
     
-    // Agrupem la creació i l'actualització del viatge en una sola transacció atòmica
     const batch = writeBatch(db);
     batch.set(newExpenseRef, cleanExpense);
-    batch.update(getTripRef(tripId), { 
-      isSettled: false,
-      logs: arrayUnion(sanitizeData(log))
-    });
+    batch.update(getTripRef(tripId), { isSettled: false });
+    batch.set(doc(getLogsCol(tripId), log.id), sanitizeData(log));
     
     await batch.commit();
     return newExpenseRef.id;
@@ -178,19 +178,15 @@ export const TripService = {
     }
     const log = createLogEntry(`ha modificat la despesa "${expense.title || 'sense nom'}"${detail}`, 'update');
 
-    // Agrupem en batch
     const batch = writeBatch(db);
     batch.update(getExpenseRef(tripId, expenseId), sanitizeData(expense));
-    batch.update(getTripRef(tripId), { 
-      isSettled: false,
-      logs: arrayUnion(sanitizeData(log))
-    });
+    batch.update(getTripRef(tripId), { isSettled: false });
+    batch.set(doc(getLogsCol(tripId), log.id), sanitizeData(log));
 
     await batch.commit();
   },
 
   deleteExpense: async (tripId: string, expenseId: string) => {
-    // Aquesta lectura prèvia és necessària per saber què estem esborrant per a l'historial
     const snap = await getDoc(getExpenseRef(tripId, expenseId));
     let title = 'una despesa';
     let amountDetail = '';
@@ -207,7 +203,7 @@ export const TripService = {
 
     const batch = writeBatch(db);
     batch.delete(getExpenseRef(tripId, expenseId));
-    batch.update(getTripRef(tripId), { logs: arrayUnion(sanitizeData(log)) });
+    batch.set(doc(getLogsCol(tripId), log.id), sanitizeData(log));
     
     await batch.commit();
   },
@@ -235,16 +231,15 @@ export const TripService = {
     const formattedAmount = (settlement.amount / 100).toFixed(2).replace('.', ',');
     const log = createLogEntry(`ha liquidat un deute de ${formattedAmount} € ${getMethodText(method)}`, 'settle');
 
-    // Combinem el pagament i el log en una sola escriptura
-    await updateDoc(getTripRef(tripId), { 
-      payments: arrayUnion(sanitizeData(payment)),
-      logs: arrayUnion(sanitizeData(log))
-    });
+    const batch = writeBatch(db);
+    batch.set(doc(getPaymentsCol(tripId), payment.id), sanitizeData(payment));
+    batch.set(doc(getLogsCol(tripId), log.id), sanitizeData(log));
+    
+    await batch.commit();
   },
 
   deletePayment: async (tripId: string, paymentId: string, currentPayments: Payment[]) => {
     const paymentToDelete = currentPayments.find(p => p.id === paymentId);
-    const newPayments = currentPayments.filter(p => p.id !== paymentId);
     
     let amountDetail = '';
     if (paymentToDelete) {
@@ -253,11 +248,18 @@ export const TripService = {
     
     const log = createLogEntry(`ha anul·lat una liquidació${amountDetail}`, 'delete');
 
-    // Combinem en una sola escriptura
-    await updateDoc(getTripRef(tripId), { 
-      payments: newPayments,
-      logs: arrayUnion(sanitizeData(log))
-    });
+    const batch = writeBatch(db);
+    
+    // Eliminem de la subcol·lecció
+    batch.delete(doc(getPaymentsCol(tripId), paymentId));
+    
+    // Neteja híbrida: si el pagament era a l'array antic, l'esborrem d'allà també per netejar espai
+    const newPayments = currentPayments.filter(p => p.id !== paymentId);
+    batch.update(getTripRef(tripId), { payments: newPayments });
+    
+    batch.set(doc(getLogsCol(tripId), log.id), sanitizeData(log));
+    
+    await batch.commit();
   },
 
   joinTripViaLink: async (tripId: string, user: User) => {
@@ -290,11 +292,14 @@ export const TripService = {
 
       const log = createLogEntry(`s'ha unit al grup`, 'join');
 
-      await updateDoc(tripRef, {
+      const batch = writeBatch(db);
+      batch.update(tripRef, {
         users: arrayUnion(sanitizeData(newUser)),
-        memberUids: arrayUnion(user.uid),
-        logs: arrayUnion(sanitizeData(log))
+        memberUids: arrayUnion(user.uid)
       });
+      batch.set(doc(getLogsCol(tripId), log.id), sanitizeData(log));
+      
+      await batch.commit();
       
     } catch (error: unknown) {
       console.error("Error en unir-se al viatge:", error);
@@ -321,10 +326,11 @@ export const TripService = {
 
     const log = createLogEntry(`ha canviat el nom d'un participant`, 'settings');
 
-    await updateDoc(tripRef, { 
-      users: updatedUsers,
-      logs: arrayUnion(sanitizeData(log))
-    });
+    const batch = writeBatch(db);
+    batch.update(tripRef, { users: updatedUsers });
+    batch.set(doc(getLogsCol(tripId), log.id), sanitizeData(log));
+    
+    await batch.commit();
   },
 
   leaveTrip: async (tripId: string, internalUserId: string) => {
@@ -347,11 +353,14 @@ export const TripService = {
 
       const updatedMemberUids = tripData.memberUids?.filter(uid => uid !== currentUser.uid) || [];
 
-      await updateDoc(tripRef, { 
+      const batch = writeBatch(db);
+      batch.update(tripRef, { 
         users: updatedUsers, 
-        memberUids: updatedMemberUids,
-        logs: arrayUnion(sanitizeData(log))
+        memberUids: updatedMemberUids
       });
+      batch.set(doc(getLogsCol(tripId), log.id), sanitizeData(log));
+      
+      await batch.commit();
     } catch (error: unknown) {
       console.error("Error en sortir del viatge:", error);
       if (error instanceof Error) throw new Error(error.message);
@@ -372,10 +381,13 @@ export const TripService = {
 
     const log = createLogEntry(`ha reclamat un perfil`, 'join');
 
-    await updateDoc(tripRef, { 
+    const batch = writeBatch(db);
+    batch.update(tripRef, { 
       users: updatedUsers, 
-      memberUids: arrayUnion(user.uid),
-      logs: arrayUnion(sanitizeData(log))
+      memberUids: arrayUnion(user.uid)
     });
+    batch.set(doc(getLogsCol(tripId), log.id), sanitizeData(log));
+    
+    await batch.commit();
   }
 };
