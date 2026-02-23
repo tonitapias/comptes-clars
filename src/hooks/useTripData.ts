@@ -112,13 +112,22 @@ export function useTripData(tripId: string | undefined) {
     };
   }, [tripId]);
 
-  // [RISC ZERO]: Patró Proxy de Dades (Híbrid)
-  // Fusionem els arrays antics guardats al document amb els nous documents de les subcol·leccions.
-  // La UI continua rebent l'objecte 'TripData' exactament amb la mateixa estructura.
+  // [FIX RENDIMENT I REACT WARNINGS]: Funció per eliminar duplicats.
+  // Això evita que, durant la transició de l'arquitectura híbrida, 
+  // una mateixa despesa o log aparegui duplicada a la UI.
+  const deduplicate = <T extends { id: string }>(arr1: T[], arr2: T[]): T[] => {
+    const map = new Map<string, T>();
+    [...arr1, ...arr2].forEach(item => {
+      if (item && item.id) map.set(item.id, item);
+    });
+    return Array.from(map.values());
+  };
+
+  // Apliquem la deduplicació en lloc de concatenar a cegues
   const tripData = rawTripData ? {
     ...rawTripData,
-    payments: [...(rawTripData.payments || []), ...subPayments],
-    logs: [...(rawTripData.logs || []), ...subLogs].sort((a, b) => 
+    payments: deduplicate(rawTripData.payments || [], subPayments),
+    logs: deduplicate(rawTripData.logs || [], subLogs).sort((a, b) => 
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     )
   } : null;
