@@ -1,5 +1,5 @@
 // src/components/trip/modals/TripSettleModal.tsx
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { CheckCircle2, Smartphone, Banknote, Building2, CreditCard, LucideIcon, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import Modal from '../../Modal';
@@ -24,7 +24,8 @@ interface TripSettleModalProps {
   onConfirm: (method: Payment['method']) => Promise<boolean>;
 }
 
-export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm }: TripSettleModalProps) {
+// [MILLORA RISC ZERO]: Blindem el modal per evitar repaints complets quan el context global muta
+const TripSettleModal = React.memo(function TripSettleModal({ isOpen, onClose, settlement, onConfirm }: TripSettleModalProps) {
   const { tripData } = useTripState(); 
   const { trigger } = useHapticFeedback();
   const { t } = useTranslation();
@@ -32,7 +33,6 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
   const [method, setMethod] = useState<Payment['method']>('manual');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // [MILLORA CLEAN CODE]: Extraiem els textos a dalt per mantenir el JSX net com una patena
   const texts = useMemo(() => ({
     title: t('MODALS.SETTLE.TITLE', LITERALS.MODALS.SETTLE.TITLE),
     methodLabel: t('MODALS.SETTLE.METHOD_LABEL', LITERALS.MODALS.SETTLE.METHOD_LABEL),
@@ -49,14 +49,21 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
     }));
   }, [t]);
 
-  if (!tripData || !settlement) return null;
+  // [MILLORA RISC ZERO]: Memoitzem els usuaris per no executar '.find()' en cada render
+  const { fromUser, toUser } = useMemo(() => {
+    if (!tripData || !settlement) {
+      const fallbackUser = { name: texts.unknownUser, photoUrl: null } as TripUser;
+      return { fromUser: fallbackUser, toUser: fallbackUser };
+    }
+    const getUser = (id: string) => tripData.users.find(u => u.id === id) || { name: texts.unknownUser, photoUrl: null } as TripUser;
+    
+    return {
+      fromUser: getUser(settlement.from),
+      toUser: getUser(settlement.to)
+    };
+  }, [tripData, settlement, texts.unknownUser]);
 
-  const getUser = (id: string) => tripData.users.find(u => u.id === id) || { name: texts.unknownUser, photoUrl: null } as TripUser;
-  
-  const fromUser = getUser(settlement.from);
-  const toUser = getUser(settlement.to);
-
-  const handleConfirm = async () => {
+  const handleConfirm = useCallback(async () => {
       if (isSubmitting) return; 
       
       trigger('success');
@@ -65,7 +72,9 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
       await onConfirm(method); 
       
       setIsSubmitting(false); 
-  };
+  }, [isSubmitting, trigger, onConfirm, method]);
+
+  if (!tripData || !settlement) return null;
 
   const currentMethodLabel = translatedPaymentMethods.find(m => m.id === method)?.label || texts.payment;
 
@@ -145,4 +154,6 @@ export default function TripSettleModal({ isOpen, onClose, settlement, onConfirm
       </div>
     </Modal>
   );
-}
+});
+
+export default TripSettleModal;

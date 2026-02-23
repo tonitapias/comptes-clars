@@ -36,13 +36,21 @@ const TripMigrator = React.memo(({ tripId, tripData }: { tripId: string | undefi
 export function TripProvider({ children, tripId, currentUser }: TripProviderProps) {
   const { tripData, expenses, loading, error, isOffline } = useTripData(tripId);
   const actions = useTripActions(tripId);
-  const isMember = !!(currentUser && tripData?.memberUids?.includes(currentUser.uid));
+  
+  // [MILLORA RISC ZERO]: Memoitzem el càlcul de isMember per evitar avaluacions constants
+  // si es dispara un render per canvis en 'isOffline' o 'loading'.
+  const isMember = useMemo(() => {
+    return !!(currentUser && tripData?.memberUids?.includes(currentUser.uid));
+  }, [currentUser, tripData?.memberUids]);
 
   // [CTO FIX]: Hem eliminat el useEffect() que calculava i actualitzava l'estat isSettled.
   // L'actualització de l'estat de saldat es farà de forma transaccional només quan 
   // es facin mutacions reals (afegir/esborrar/editar despeses) per protegir Firestore 
   // de lectures/escriptures innecessàries i evitar condicions de carrera.
 
+  // [NEXT STEPS - ARQUITECTURA]: Si l'app creix molt, aquest useMemo serà un coll d'ampolla.
+  // Es recomanaria migrar a Zustand o Jotai per evitar que els canvis a 'expenses' 
+  // provoquin re-renders a components que només llegeixen 'tripData.name', per exemple.
   const stateValue = useMemo<TripState>(() => ({
     tripId, tripData, expenses, loading, error, currentUser, isMember, isOffline
   }), [tripId, tripData, expenses, loading, error, currentUser, isMember, isOffline]);

@@ -1,5 +1,5 @@
 // src/components/trip/TripModals.tsx
-import React, { Suspense } from 'react';
+import React, { Suspense, useCallback } from 'react';
 import { useTripState } from '../../context/TripContext'; 
 import { useTripModals } from '../../hooks/useTripModals';
 import { useTripMutations } from '../../hooks/useTripMutations';
@@ -22,7 +22,8 @@ interface TripModalsProps {
   showToast: (msg: string, type?: ToastType) => void;
 }
 
-export default function TripModals({ modals, mutations, showToast }: TripModalsProps) {
+// [MILLORA RISC ZERO]: Emboliquem amb React.memo per evitar re-renders si el pare s'actualitza
+const TripModals = React.memo(function TripModals({ modals, mutations, showToast }: TripModalsProps) {
   const { trigger } = useHapticFeedback();
   const { tripData, expenses } = useTripState();
 
@@ -30,21 +31,22 @@ export default function TripModals({ modals, mutations, showToast }: TripModalsP
 
   const canChangeCurrency = expenses.length === 0;
   
-  const handleDeleteExpense = async () => {
+  // [MILLORA RISC ZERO]: Memoitzem els handlers per no passar noves referències en cada render
+  const handleDeleteExpense = useCallback(async () => {
     trigger('medium');
     if (modals.confirmAction?.id) {
       await mutations.deleteExpense(String(modals.confirmAction.id));
     }
     modals.closeConfirmAction();
     modals.closeExpenseModal();
-  };
+  }, [trigger, modals, mutations]);
 
-  const handleSettleConfirm = async (method: Payment['method']) => {
+  const handleSettleConfirm = useCallback(async (method: Payment['method']) => {
     if (!modals.settleModalData) return false;
     const success = await mutations.settleDebt(modals.settleModalData, method);
     if (success) { modals.setSettleModalData(null); }
     return success;
-  };
+  }, [modals, mutations]);
 
   return (
     <Suspense fallback={null}>
@@ -81,4 +83,6 @@ export default function TripModals({ modals, mutations, showToast }: TripModalsP
       />
     </Suspense>
   );
-}
+});
+
+export default TripModals;

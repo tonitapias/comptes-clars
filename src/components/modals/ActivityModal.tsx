@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Clock, PlusCircle, Edit, Trash, UserPlus, CheckCircle2, Settings, Zap } from 'lucide-react';
 import Modal from '../Modal';
 import { LogEntry, TripUser } from '../../types';
-import { useTripState } from '../../context/TripContext'; // <-- CANVI
+import { useTripState } from '../../context/TripContext';
 import Avatar from '../Avatar';
 
 interface ActivityModalProps {
@@ -11,7 +11,7 @@ interface ActivityModalProps {
 }
 
 export default function ActivityModal({ isOpen, onClose }: ActivityModalProps) {
-  const { tripData } = useTripState(); // <-- CANVI
+  const { tripData } = useTripState();
   const logs = tripData?.logs || [];
   const users = tripData?.users || [];
 
@@ -73,6 +73,15 @@ export default function ActivityModal({ isOpen, onClose }: ActivityModalProps) {
                 const config = getActionConfig(log.action);
                 const { time, date, isToday } = formatLogDate(log.timestamp);
                 const Icon = config.icon;
+                
+                const currentName = user?.name || log.userName;
+
+                // [MILLORA RISC ZERO]: Si el text del missatge històric conté el nom antic de l'usuari,
+                // el substituïm "al vol" pel nom nou sense tocar la base de dades.
+                let displayMessage = log.message;
+                if (user?.name && log.userName && displayMessage.includes(log.userName)) {
+                    displayMessage = displayMessage.replace(log.userName, user.name);
+                }
 
                 return (
                   <div key={log.id} className="flex items-start gap-5 animate-fade-in-up group" style={{ animationDelay: `${index * 50}ms` }}>
@@ -94,13 +103,14 @@ export default function ActivityModal({ isOpen, onClose }: ActivityModalProps) {
 
                     <div className="flex-1 min-w-0 bg-white/60 dark:bg-slate-900/40 backdrop-blur-md p-4 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm transition-all duration-300 hover:shadow-lg hover:border-indigo-500/30 dark:hover:border-indigo-400/30 group-hover:translate-x-1">
                         <div className="flex items-center gap-2.5 mb-1.5">
-                             <Avatar name={user?.name || log.userName} photoUrl={user?.photoUrl} size="sm" className="ring-2 ring-white dark:ring-slate-800" />
+                             <Avatar name={currentName} photoUrl={user?.photoUrl} size="sm" className="ring-2 ring-white dark:ring-slate-800" />
                              <span className="text-xs font-black text-slate-800 dark:text-slate-100 truncate tracking-tight">
-                                {user?.name || log.userName}
+                                {currentName}
                              </span>
                         </div>
                         <p className="text-xs text-slate-600 dark:text-slate-300 font-medium leading-relaxed">
-                             {log.message}
+                             {/* ARA FEM SERVIR displayMessage EN COMPTES DE log.message */}
+                             {displayMessage}
                         </p>
                     </div>
                   </div>

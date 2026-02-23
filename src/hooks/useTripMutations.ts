@@ -23,8 +23,7 @@ export function useTripMutations() {
   const showToast = useCallback((msg: string, type: ToastType = 'success') => setToast({ msg, type }), []);
   const clearToast = useCallback(() => setToast(null), []);
 
-  // [MILLORA PWA]: Restaurem el comportament offline-first. 
-  // Només bloquegem accions destructives crítiques (esborrar viatge, sortir-ne).
+  // [MILLORA RISC ZERO]: Centralitzem i fem més robust el comportament offline
   const requireOnlineForCritical = useCallback((): boolean => {
     if (isOffline) {
       showToast(t('COMMON.OFFLINE_CRITICAL_ERROR', "Acció denegada: Necessites connexió per a canvis crítics."), 'error');
@@ -35,22 +34,26 @@ export function useTripMutations() {
 
   const notifySuccess = useCallback((msg: string) => {
     if (isOffline) {
-      showToast(`${msg} (Pendent de xarxa)`, 'warning');
+      // Deixem clar que l'acció s'ha desat localment però falta confirmació del servidor
+      showToast(`${msg} (Desat localment, pendent de xarxa)`, 'warning');
     } else {
       showToast(msg, 'success');
     }
   }, [isOffline, showToast]);
 
-  // [MILLORA CLEAN CODE]: Utilitzem BUSINESS_RULES per evitar els "Magic numbers"
+  // [MILLORA RISC ZERO]: try/catch aïllat per evitar bloquejar l'acció principal
   const evaluateSettledState = useCallback(async (updatedExpenses: Expense[], updatedPayments: Payment[]) => {
     if (!tripData) return;
-    const newBalances = calculateBalances(updatedExpenses, tripData.users, updatedPayments);
-    
-    // Fem servir la constant de negoci per comprovar si tots els balanços estan a prop de zero
-    const isSettledNow = newBalances.every(b => Math.abs(unbrand(b.amount)) < BUSINESS_RULES.SETTLED_TOLERANCE_MARGIN);
-    
-    if (tripData.isSettled !== isSettledNow) {
-      await TripService.updateTripSettledState(tripData.id, isSettledNow);
+    try {
+      const newBalances = calculateBalances(updatedExpenses, tripData.users, updatedPayments);
+      const isSettledNow = newBalances.every(b => Math.abs(unbrand(b.amount)) < BUSINESS_RULES.SETTLED_TOLERANCE_MARGIN);
+      
+      if (tripData.isSettled !== isSettledNow) {
+        await TripService.updateTripSettledState(tripData.id, isSettledNow);
+      }
+    } catch (error) {
+      console.error("[EvaluateSettledState Error]: Error no bloquejant al calcular l'estat saldat.", error);
+      // No fem showToast aquí per no trepitjar el toast d'èxit de l'acció principal
     }
   }, [tripData]);
 
@@ -82,6 +85,8 @@ export function useTripMutations() {
         };
         
         const newPayments = [...(tripData.payments || []), simulatedPayment];
+        // Ara si evaluateSettledState falla per un problema de xarxa esporàdic, 
+        // l'usuari igualment veurà que el deute s'ha saldat correctament.
         await evaluateSettledState(expenses, newPayments);
 
         notifySuccess(t('ACTIONS.SETTLE_SUCCESS', 'Deute saldat correctament'));
