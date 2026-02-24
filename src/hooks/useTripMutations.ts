@@ -6,15 +6,75 @@ import { parseAppError } from '../utils/errorHandler';
 import { useTripMeta, useTripExpenses, useTripDispatch } from '../context/TripContext';
 import { ToastType } from '../components/Toast';
 import { calculateBalances, canUserLeaveTrip, getUserBalance } from '../services/billingService'; 
-import { Currency, Settlement, Payment, Balance, unbrand, Expense, PaymentMethodId, TripData } from '../types'; 
+import { Currency, Settlement, Payment, Expense, PaymentMethodId, TripData, unbrand } from '../types'; 
 import { LITERALS } from '../constants/literals';
 import { BUSINESS_RULES } from '../config/businessRules';
-import { TripService } from '../services/tripService'; 
+import { TripService } from '../services/tripService';
 
-// --- FUNCIONS AUXILIARS DE DOMINI ---
+// --- DICCIONARI DE FALLBACKS D'ERROR ---
+const LEAVE_ERRORS_FALLBACK: Record<string, string> = {
+  'ERRORS.TRIP_NOT_FOUND': "No s'ha trobat el viatge",
+  'ERRORS.LAST_MEMBER_ACTIVE': "Ets l'últim membre actiu. Elimina el projecte sencer a 'Configuració'.",
+  'ERRORS.CANNOT_LEAVE_DEBTS': "No pots sortir del viatge fins que no saldis els teus deutes o et paguin el que et deuen."
+};
+
+// ============================================================================
+// LÒGICA DE NEGOCI PURA (Desacoblada de React - Fàcilment Testejable)
+// ============================================================================
+
 const isUserOwner = (tripData: TripData, userId: string): boolean => {
   return tripData.ownerId === userId || tripData.memberUids?.[0] === userId;
 };
+
+// [FASE 2 MILLORA]: Centralitzem les regles de negoci fora del cicle de vida de React
+async function validateAndPrepareLeave(
+  targetTripId: string,
+  currentUserUid: string,
+  localTripData: TripData | null,
+  localExpenses: Expense[]
+) {
+  let tripUsers = localTripData?.users || [];
+  let balances = [];
+  let isOwner = false;
+
+  // 1. Resolució de dades (Local vs Remot)
+  if (localTripData && localTripData.id === targetTripId) {
+    balances = calculateBalances(localExpenses, tripUsers, localTripData.payments || []);
+    isOwner = isUserOwner(localTripData, currentUserUid);
+  } else {
+    const fetchedTrip = await TripService.getTrip(targetTripId);
+    if (!fetchedTrip) throw new Error('ERRORS.TRIP_NOT_FOUND');
+    
+    const fetchedExpenses = await TripService.getTripExpenses(targetTripId);
+    tripUsers = fetchedTrip.users;
+    balances = calculateBalances(fetchedExpenses, tripUsers, fetchedTrip.payments || []);
+    isOwner = isUserOwner(fetchedTrip, currentUserUid);
+  }
+
+  // 2. Avaluació de regles de negoci
+  const myUser = tripUsers.find(u => u.linkedUid === currentUserUid);
+  
+  if (isOwner && tripUsers.filter(u => !u.isDeleted).length <= 1) {
+    throw new Error('ERRORS.LAST_MEMBER_ACTIVE');
+  }
+
+  if (!canUserLeaveTrip(myUser?.id, balances, BUSINESS_RULES.MAX_LEAVE_BALANCE_MARGIN)) {
+    throw new Error('ERRORS.CANNOT_LEAVE_DEBTS');
+  }
+
+  // 3. Preparació de l'acció
+  const myBalanceAmount = unbrand(getUserBalance(myUser?.id, balances));
+
+  return {
+    internalUserId: myUser ? myUser.id : currentUserUid,
+    myBalanceAmount,
+    isLinked: !!myUser
+  };
+}
+
+// ============================================================================
+// HOOK D'ORQUESTRACIÓ DE LA UI
+// ============================================================================
 
 export function useTripMutations() {
   const navigate = useNavigate();
@@ -26,18 +86,12 @@ export function useTripMutations() {
   
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
 
-  // ============================================================================
-  // 1. GESTIÓ D'UI I NOTIFICACIONS
-  // ============================================================================
+  // --- Helpers de UI ---
   const showToast = useCallback((msg: string, type: ToastType = 'success') => setToast({ msg, type }), []);
   const clearToast = useCallback(() => setToast(null), []);
 
   const notifySuccess = useCallback((msg: string) => {
-    if (isOffline) {
-      showToast(`${msg} ${t('COMMON.OFFLINE_PENDING', '(Desat localment)')}`, 'warning');
-    } else {
-      showToast(msg, 'success');
-    }
+    showToast(isOffline ? `${msg} ${t('COMMON.OFFLINE_PENDING', '(Desat localment)')}` : msg, isOffline ? 'warning' : 'success');
   }, [isOffline, showToast, t]);
 
   const requireOnlineForCritical = useCallback((): boolean => {
@@ -48,12 +102,9 @@ export function useTripMutations() {
     return true;
   }, [isOffline, showToast, t]);
 
-  // ============================================================================
-  // 2. LÒGICA DE NEGOCI I CÀLCULS
-  // ============================================================================
+  // --- Mutacions de suport ---
   const evaluateSettledState = useCallback(async (updatedExpenses: Expense[], updatedPayments: Payment[]) => {
     if (!tripData?.id || !tripData?.users) return;
-    
     try {
       const newBalances = calculateBalances(updatedExpenses, tripData.users, updatedPayments);
       const isSettledNow = newBalances.every(b => Math.abs(unbrand(b.amount)) < BUSINESS_RULES.SETTLED_TOLERANCE_MARGIN);
@@ -64,22 +115,17 @@ export function useTripMutations() {
         });
       }
     } catch (error) {
-      console.error("[EvaluateSettledState Error]: Error no bloquejant al calcular l'estat saldat.", error);
+      console.error("[EvaluateSettledState Error]: Error al calcular l'estat saldat.", error);
     }
   }, [tripData?.id, tripData?.users, tripData?.isSettled]);
 
-  // ============================================================================
-  // 3. MUTACIONS PRINCIPALS
-  // ============================================================================
+  // --- Mutacions Principals ---
+  
   const updateTripSettings = useCallback(async (name: string, currency: Currency) => {
     try {
       await actions.updateTripSettings(name, new Date().toISOString(), currency);
-      
       const isCurrencyUpdate = Boolean(currency);
-      const msgKey = isCurrencyUpdate ? 'ACTIONS.UPDATE_SETTINGS_SUCCESS' : 'ACTIONS.UPDATE_NAME_SUCCESS';
-      const fallbackMsg = isCurrencyUpdate ? LITERALS.ACTIONS.UPDATE_SETTINGS_SUCCESS : LITERALS.ACTIONS.UPDATE_NAME_SUCCESS;
-      
-      notifySuccess(t(msgKey, fallbackMsg));
+      notifySuccess(t(isCurrencyUpdate ? 'ACTIONS.UPDATE_SETTINGS_SUCCESS' : 'ACTIONS.UPDATE_NAME_SUCCESS'));
       return true;
     } catch (e: unknown) { 
       showToast(parseAppError(e, t), 'error'); 
@@ -89,125 +135,68 @@ export function useTripMutations() {
 
   const settleDebt = useCallback(async (settlement: Settlement, method: PaymentMethodId = 'manual') => {
     if (!tripData) return false;
-
     try {
       const res = await actions.settleDebt(settlement, method);
-
       if (res.success) {
         const simulatedPayment: Payment = {
-          id: `temp-${Date.now()}`,
-          from: settlement.from,
-          to: settlement.to,
-          amount: settlement.amount,
-          date: new Date().toISOString(),
-          method
+          id: `temp-${Date.now()}`, from: settlement.from, to: settlement.to, amount: settlement.amount, date: new Date().toISOString(), method
         };
-        
-        const newPayments = [...(tripData.payments || []), simulatedPayment];
-        await evaluateSettledState(expenses, newPayments);
-
+        await evaluateSettledState(expenses, [...(tripData.payments || []), simulatedPayment]);
         notifySuccess(t('ACTIONS.SETTLE_SUCCESS', 'Deute saldat correctament'));
         return true;
       }
-      
       showToast(res.error || t('ACTIONS.SETTLE_ERROR', LITERALS.ACTIONS.SETTLE_ERROR), 'error');
       return false;
-      
     } catch (e: unknown) { 
-      showToast(parseAppError(e, t), 'error');
-      return false;
+      showToast(parseAppError(e, t), 'error'); return false;
     }
   }, [actions, showToast, t, expenses, tripData, notifySuccess, evaluateSettledState]); 
 
-  // [FASE 2 FIX]: Responem només a l'eliminació de despeses
   const deleteExpense = useCallback(async (id: string) => {
     if (!tripData) return false;
-
     try {
       const res = await actions.deleteExpense(id);
       if (res.success) {
-        const newExpenses = expenses.filter(e => e.id !== id);
-        await evaluateSettledState(newExpenses, tripData.payments || []);
-
+        await evaluateSettledState(expenses.filter(e => e.id !== id), tripData.payments || []);
         notifySuccess(t('ACTIONS.DELETE_EXPENSE_SUCCESS', LITERALS.ACTIONS.DELETE_EXPENSE_SUCCESS));
         return true;
       }
-      
       showToast(res.error || t('ACTIONS.DELETE_EXPENSE_ERROR', LITERALS.ACTIONS.DELETE_EXPENSE_ERROR), 'error');
       return false;
-
     } catch (e: unknown) { 
-      showToast(parseAppError(e, t), 'error');
-      return false;
+      showToast(parseAppError(e, t), 'error'); return false;
     }
   }, [actions, showToast, t, expenses, tripData, notifySuccess, evaluateSettledState]); 
 
-  // [FASE 2 FIX]: Nou mètode explícit per eliminar liquidacions/pagaments
   const deletePayment = useCallback(async (id: string) => {
     if (!tripData) return false;
-
     try {
       const currentPayments = tripData.payments || [];
       await TripService.deletePayment(tripData.id, id, currentPayments);
-      
-      const newPayments = currentPayments.filter(p => p.id !== id);
-      await evaluateSettledState(expenses, newPayments);
-
+      await evaluateSettledState(expenses, currentPayments.filter(p => p.id !== id));
       notifySuccess(t('ACTIONS.CANCEL_SETTLEMENT_SUCCESS', 'Liquidació anul·lada correctament'));
       return true;
     } catch (e: unknown) { 
-      showToast(parseAppError(e, t), 'error');
-      return false;
+      showToast(parseAppError(e, t), 'error'); return false;
     }
   }, [showToast, t, expenses, tripData, notifySuccess, evaluateSettledState]);
 
+  // [FASE 2 MILLORA]: Codi ultra-net. El hook ara només actua com a "controlador".
   const leaveTrip = useCallback(async (targetTripId?: string) => {
     if (!requireOnlineForCritical() || !currentUser) return;
-
     const idToLeave = targetTripId || tripData?.id;
     if (!idToLeave) return;
 
     try {
-      let currentTripUsers = tripData?.users || [];
-      let currentBalances: Balance[] = [];
-      let isOwner = false;
-
-      if (tripData && tripData.id === idToLeave) {
-        currentBalances = calculateBalances(expenses, currentTripUsers, tripData.payments || []);
-        isOwner = isUserOwner(tripData, currentUser.uid);
-      } else {
-        const fetchedTrip = await TripService.getTrip(idToLeave);
-        if (!fetchedTrip) {
-           showToast(t('ERRORS.TRIP_NOT_FOUND', "No s'ha trobat el viatge"), "error");
-           return;
-        }
-        const fetchedExpenses = await TripService.getTripExpenses(idToLeave);
-        currentTripUsers = fetchedTrip.users;
-        currentBalances = calculateBalances(fetchedExpenses, currentTripUsers, fetchedTrip.payments || []);
-        isOwner = isUserOwner(fetchedTrip, currentUser.uid);
-      }
-
-      const myUser = currentTripUsers.find(u => u.linkedUid === currentUser.uid);
-
-      if (isOwner && currentTripUsers.filter(u => !u.isDeleted).length <= 1) {
-          showToast(t('ERRORS.LAST_MEMBER_ACTIVE', "Ets l'últim membre actiu. Elimina el projecte sencer a 'Configuració'."), "warning");
-          return;
-      }
-
-      if (!canUserLeaveTrip(myUser?.id, currentBalances, BUSINESS_RULES.MAX_LEAVE_BALANCE_MARGIN)) {
-        showToast(t('ERRORS.CANNOT_LEAVE_DEBTS', "No pots sortir del viatge fins que no saldis els teus deutes o et paguin el que et deuen."), "error");
-        return;
-      }
-
-      const myBalanceAmount = unbrand(getUserBalance(myUser?.id, currentBalances)); 
-
-      const res = await actions.leaveTrip(
-        myUser ? myUser.id : currentUser.uid,
-        myBalanceAmount,
-        !!myUser,
-        currentUser.uid
+      // 1. Demanem les instruccions a la funció pura de domini
+      const { internalUserId, myBalanceAmount, isLinked } = await validateAndPrepareLeave(
+        idToLeave, currentUser.uid, tripData, expenses
       );
 
+      // 2. Executem l'acció real
+      const res = await actions.leaveTrip(internalUserId, myBalanceAmount, isLinked, currentUser.uid);
+
+      // 3. Responem a la UI
       if (res.success) {
         showToast(t('ACTIONS.LEAVE_TRIP_SUCCESS', "Has abandonat el viatge correctament."), "success");
         if (tripData?.id === idToLeave) {
@@ -217,14 +206,19 @@ export function useTripMutations() {
       } else {
         showToast(res.error || t('ERRORS.LEAVE_TRIP_FAILED', "No s'ha pogut sortir del viatge"), 'error');
       }
-    } catch (e: unknown) {
-      showToast(parseAppError(e, t), 'error');
+    } catch (e: any) {
+      // Ara interceptem la clau i li passem el text de seguretat correcte
+      const errorKey = e.message;
+      if (LEAVE_ERRORS_FALLBACK[errorKey]) {
+        showToast(t(errorKey, LEAVE_ERRORS_FALLBACK[errorKey]), 'error');
+      } else {
+        showToast(parseAppError(e, t), 'error');
+      }
     }
   }, [actions, currentUser, tripData, expenses, navigate, showToast, t, requireOnlineForCritical]); 
-
+  
   const joinTrip = useCallback(async () => {
      if (!requireOnlineForCritical() || !currentUser) return;
-
      try {
          await actions.joinTrip(currentUser);
          notifySuccess(t('ACTIONS.JOIN_TRIP_SUCCESS', LITERALS.ACTIONS.JOIN_TRIP_SUCCESS));
@@ -235,12 +229,10 @@ export function useTripMutations() {
 
   const deleteTrip = useCallback(async () => {
     if (!requireOnlineForCritical() || !tripData || !currentUser) return;
-
     if (!isUserOwner(tripData, currentUser.uid)) {
         showToast(t('ERRORS.ONLY_OWNER_CAN_DELETE', "Accés denegat: Només el creador pot eliminar el projecte sencer."), 'error');
         return; 
     }
-
     try {
       await actions.deleteTrip();
       showToast(t('ACTIONS.DELETE_TRIP_SUCCESS', LITERALS.ACTIONS.DELETE_TRIP_SUCCESS));
@@ -251,21 +243,9 @@ export function useTripMutations() {
     }
   }, [actions, navigate, showToast, t, tripData, currentUser, requireOnlineForCritical]); 
 
-  // [FASE 2 FIX]: Exposem explícitament deletePayment
   const memoizedMutations = useMemo(() => ({
-    updateTripSettings,
-    settleDebt,
-    deleteExpense,
-    deletePayment, // <--- EXPOSAT AQUÍ
-    leaveTrip,
-    joinTrip,
-    deleteTrip
+    updateTripSettings, settleDebt, deleteExpense, deletePayment, leaveTrip, joinTrip, deleteTrip
   }), [updateTripSettings, settleDebt, deleteExpense, deletePayment, leaveTrip, joinTrip, deleteTrip]);
 
-  return {
-    toast,
-    showToast,
-    clearToast,
-    mutations: memoizedMutations
-  };
+  return { toast, showToast, clearToast, mutations: memoizedMutations };
 }

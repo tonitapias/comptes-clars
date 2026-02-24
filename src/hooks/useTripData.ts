@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { doc, collection, onSnapshot, FirestoreError } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { DB_PATHS } from '../config/dbPaths';
@@ -7,126 +7,119 @@ import { TripData, Expense, Payment, LogEntry } from '../types';
 const deduplicate = <T extends { id: string }>(arr1: T[], arr2: T[]): T[] => {
   const map = new Map<string, T>();
   [...arr1, ...arr2].forEach(item => {
-    if (item && item.id) map.set(item.id, item);
+    if (item?.id) map.set(item.id, item);
   });
   return Array.from(map.values());
 };
 
-// [FASE 1 FIX]: Ordenació basada en strings lexicogràfics (ISO-8601).
-// És O(N log N) però evita instanciar milers d'objectes Date() a la memòria
 const sortLogsDesc = (a: LogEntry, b: LogEntry) => b.timestamp.localeCompare(a.timestamp);
 
-export function useTripData(tripId: string | undefined) {
-  const [rawTripData, setRawTripData] = useState<TripData | null>(null);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [subPayments, setSubPayments] = useState<Payment[]>([]);
-  const [subLogs, setSubLogs] = useState<LogEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+// [FASE 1 MILLORA]: useSyncExternalStore és l'estàndard de React 18+ per a APIs del navegador
+const subscribeToOnlineStatus = (callback: () => void) => {
+  window.addEventListener('online', callback);
+  window.addEventListener('offline', callback);
+  return () => {
+    window.removeEventListener('online', callback);
+    window.removeEventListener('offline', callback);
+  };
+};
 
-  useEffect(() => {
-    const handleOnline = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
+export function useTripData(tripId: string | undefined) {
+  // [FASE 1 MILLORA]: Agrupem els estats fortament acoblats. 
+  // Això garanteix que les actualitzacions (ex: viatge + despeses) no generin renders innecessaris pel mig.
+  const [state, setState] = useState({
+    rawTripData: null as TripData | null,
+    expenses: [] as Expense[],
+    subPayments: [] as Payment[],
+    subLogs: [] as LogEntry[],
+    loading: true,
+    error: null as string | null,
+    // Comptadors interns per resoldre el loading un cop de forma precisa
+    pendingInitialLoads: 3 
+  });
+
+  const isOffline = useSyncExternalStore(
+    subscribeToOnlineStatus,
+    () => !navigator.onLine,
+    () => false // Fallback en SSR (Server-Side Rendering)
+  );
 
   useEffect(() => {
     if (!tripId) {
-      setRawTripData(null);
-      setExpenses([]);
-      setSubPayments([]);
-      setSubLogs([]);
-      setLoading(false);
+      setState(prev => ({
+        ...prev, rawTripData: null, expenses: [], subPayments: [], subLogs: [], loading: false, pendingInitialLoads: 0
+      }));
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    setState(prev => ({ ...prev, loading: true, error: null, pendingInitialLoads: 3 }));
 
-    let isTripReady = false;
-    let isExpensesReady = false;
-    let isPaymentsReady = false;
+    // Funció atòmica per decrementar els loaders sense dependre de let variables externes
+    const resolveLoad = () => setState(prev => ({ 
+      ...prev, 
+      pendingInitialLoads: Math.max(0, prev.pendingInitialLoads - 1),
+      loading: prev.pendingInitialLoads - 1 > 0 
+    }));
 
-    const resolveLoading = () => {
-      if (isTripReady && isExpensesReady && isPaymentsReady) {
-        setLoading(false);
+    const unsubTrip = onSnapshot(doc(db, DB_PATHS.getTripDocPath(tripId)), 
+      (docSnap) => {
+        setState(prev => ({
+          ...prev,
+          rawTripData: docSnap.exists() ? (docSnap.data() as TripData) : null,
+          error: docSnap.exists() ? null : "Grup no trobat"
+        }));
+        resolveLoad();
+      }, 
+      (err: FirestoreError) => {
+        setState(prev => ({ ...prev, error: err?.code === 'permission-denied' ? "⛔ Accés denegat." : "Error carregant el grup." }));
+        resolveLoad();
       }
-    };
-    
-    const tripRef = doc(db, DB_PATHS.getTripDocPath(tripId));
-    const unsubTrip = onSnapshot(tripRef, (docSnap) => {
-      if (docSnap.exists()) {
-        setRawTripData(docSnap.data() as TripData);
-        setError(null);
-      } else {
-        setError("Grup no trobat");
-        setRawTripData(null);
+    );
+
+    const unsubExpenses = onSnapshot(collection(db, DB_PATHS.getExpensesCollectionPath(tripId)), 
+      (snapshot) => {
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Expense[];
+        setState(prev => ({ ...prev, expenses: data }));
+        resolveLoad();
       }
-      isTripReady = true;
-      resolveLoading();
-    }, (err: FirestoreError) => {
-      if (err?.code !== 'permission-denied') console.error(err);
-      setError(err?.code === 'permission-denied' ? "⛔ Accés denegat." : "Error carregant el grup.");
-      isTripReady = true;
-      resolveLoading();
-    });
+    );
 
-    const expensesRef = collection(db, DB_PATHS.getExpensesCollectionPath(tripId));
-    const unsubExpenses = onSnapshot(expensesRef, (snapshot) => {
-      setExpenses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Expense[]);
-      isExpensesReady = true;
-      resolveLoading();
-    }, (err: FirestoreError) => {
-      if (err?.code !== 'permission-denied') console.error("Error carregant despeses:", err);
-      isExpensesReady = true;
-      resolveLoading();
-    });
+    const unsubPayments = onSnapshot(collection(db, DB_PATHS.getPaymentsCollectionPath(tripId)), 
+      (snapshot) => {
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Payment[];
+        setState(prev => ({ ...prev, subPayments: data }));
+        resolveLoad();
+      }
+    );
 
-    const paymentsRef = collection(db, DB_PATHS.getPaymentsCollectionPath(tripId));
-    const unsubPayments = onSnapshot(paymentsRef, (snapshot) => {
-      setSubPayments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Payment[]);
-      isPaymentsReady = true;
-      resolveLoading();
-    }, (err: FirestoreError) => {
-      if (err?.code !== 'permission-denied') console.error("Error carregant pagaments:", err);
-      isPaymentsReady = true;
-      resolveLoading();
-    });
-
-    const logsRef = collection(db, DB_PATHS.getLogsCollectionPath(tripId));
-    const unsubLogs = onSnapshot(logsRef, (snapshot) => {
-      setSubLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as LogEntry[]);
-    }, (err: FirestoreError) => {
-      if (err?.code !== 'permission-denied') console.error("Error carregant logs:", err);
-    });
+    const unsubLogs = onSnapshot(collection(db, DB_PATHS.getLogsCollectionPath(tripId)), 
+      (snapshot) => {
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as LogEntry[];
+        setState(prev => ({ ...prev, subLogs: data }));
+      }
+    );
 
     return () => {
-      unsubTrip();
-      unsubExpenses();
-      unsubPayments();
-      unsubLogs();
+      unsubTrip(); unsubExpenses(); unsubPayments(); unsubLogs();
     };
   }, [tripId]);
 
+  // Derivació d'estat (Memoized)
   const tripData = useMemo(() => {
-    if (!rawTripData) return null;
-
-    const finalPayments = deduplicate(rawTripData.payments || [], subPayments);
-    // [FASE 1 FIX]: Utilitzem la funció lleugera per ordenar dates
-    const finalLogs = deduplicate(rawTripData.logs || [], subLogs).sort(sortLogsDesc);
+    if (!state.rawTripData) return null;
 
     return {
-      ...rawTripData,
-      payments: finalPayments,
-      logs: finalLogs
+      ...state.rawTripData,
+      payments: deduplicate(state.rawTripData.payments || [], state.subPayments),
+      logs: deduplicate(state.rawTripData.logs || [], state.subLogs).sort(sortLogsDesc)
     };
-  }, [rawTripData, subPayments, subLogs]);
+  }, [state.rawTripData, state.subPayments, state.subLogs]);
 
-  return { tripData, expenses, loading, error, isOffline };
+  return { 
+    tripData, 
+    expenses: state.expenses, 
+    loading: state.loading, 
+    error: state.error, 
+    isOffline 
+  };
 }

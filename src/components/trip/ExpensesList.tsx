@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Receipt, ArrowRightLeft, Paperclip, Loader2, Calendar, X, SlidersHorizontal, ArrowDownRight } from 'lucide-react'; 
 import { CATEGORIES } from '../../utils/constants';
-import { Expense, CategoryId, TripUser, Currency } from '../../types';
+import { Expense, CategoryId, TripUser, Currency, Payment } from '../../types';
 import { formatCurrency, formatDateDisplay } from '../../utils/formatters';
 import { useTripMeta } from '../../context/TripContext'; 
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
@@ -19,8 +19,6 @@ interface ExpensesListProps {
 
 const PAGE_SIZE = 20;
 
-// [FASE 1 FIX]: Mapa precalculat estàtic fora del cicle de React
-// Evita reserves de memòria i injeccions innecessàries en cada render
 const STATIC_CATEGORY_MAP = new Map<CategoryId | string, typeof CATEGORIES[0]>(
   CATEGORIES.map(c => [c.id, c])
 );
@@ -49,6 +47,21 @@ interface MemoizedExpenseItemProps {
   onEdit: (e: Expense | null) => void;
   trigger: (type: string) => void;
 }
+
+// [FASE 2 MILLORA]: Comparador profund per blindar els re-renders innecessaris
+const arePropsEqual = (prev: MemoizedExpenseItemProps, next: MemoizedExpenseItemProps) => {
+  return (
+    prev.expense.id === next.expense.id &&
+    prev.expense.amount === next.expense.amount &&
+    prev.expense.title === next.expense.title &&
+    prev.expense.date === next.expense.date &&
+    prev.expense.category === next.expense.category &&
+    prev.showDateHeader === next.showDateHeader &&
+    prev.payerName === next.payerName &&
+    prev.involvedName === next.involvedName &&
+    prev.currency.code === next.currency.code
+  );
+};
 
 const MemoizedExpenseItem = React.memo(({
   expense,
@@ -136,7 +149,7 @@ const MemoizedExpenseItem = React.memo(({
       </li>
     </React.Fragment>
   );
-});
+}, arePropsEqual); // <-- Injectem el comparador estricte aquí
 
 export default function ExpensesList({ 
   expenses, 
@@ -168,7 +181,9 @@ export default function ExpensesList({
   const paymentsSignature = JSON.stringify(tripData?.payments || []);
 
   const mergedExpenses = useMemo(() => {
-    const rawPayments = tripData?.payments || [];
+    // [FASE 2 MILLORA]: Convertim explícitament la firma des de la dependència per evitar "Stale Closures"
+    const rawPayments: Payment[] = JSON.parse(paymentsSignature);
+    
     const mappedPayments: Expense[] = rawPayments.map(p => {
         const methodLabel = p.method === 'bizum' ? 'Bizum' : p.method === 'transfer' ? 'Transferència' : p.method === 'card' ? 'Targeta' : 'Efectiu';
         return {
@@ -195,7 +210,6 @@ export default function ExpensesList({
         return true;
     });
 
-    // [FASE 1 FIX]: Substituït new Date().getTime() per comparació directa de Strings ISO. Més ràpid per a arrays llargs.
     return [...expenses, ...filteredPayments].sort((a, b) => {
         if (a.date !== b.date) return b.date.localeCompare(a.date);
         return String(b.id).localeCompare(String(a.id));
@@ -315,7 +329,6 @@ export default function ExpensesList({
         ) : (
             <ul className="space-y-4 relative z-10">
               {visibleExpenses.map((expense, index) => {
-                  // [FASE 1 FIX]: Utilitzem el mapa estàtic fora de memòria
                   const category = STATIC_CATEGORY_MAP.get(expense.category) || CATEGORIES[0];
                   const isTransfer = expense.category === 'transfer';
                   const payerName = getUserName(expense.payer);
