@@ -170,6 +170,9 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[], paymen
 
   const idResolver = createUserResolutionMap(users);
   const getCanonicalId = (rawId: string): string | undefined => idResolver[rawId];
+  
+  // [MILLORA FASE 1]: Invariants fora del bucle!
+  // Això evita crear centenars d'Arrays i Sets a memòria a cada recàlcul de la UI.
   const allUserIds = users.map(u => u.id);
   const validUserIds = new Set(allUserIds);
 
@@ -223,7 +226,8 @@ export const calculateBalances = (expenses: Expense[], users: TripUser[], paymen
 
   return Object.entries(balanceMap)
     .map(([userId, amount]) => ({ userId, amount }))
-    .sort((a, b) => b.amount - a.amount);
+    // [MILLORA FASE 1]: Desenvoltem explícitament els valors per mantenir la integritat del TypeScript
+    .sort((a, b) => unbrand(b.amount) - unbrand(a.amount));
 };
 
 export const calculateSettlements = (balances: Balance[]): Settlement[] => {
@@ -276,24 +280,26 @@ export const calculateSettlements = (balances: Balance[]): Settlement[] => {
 };
 
 export const calculateCategoryStats = (expenses: Expense[]): CategoryStat[] => {
-  const stats: Record<string, MoneyCents> = {};
+  // [MILLORA FASE 1]: Lògica estricta per a devolucions (ingressos).
+  const stats: Record<string, number> = {}; 
   
   const validExpenses = expenses.filter(e => e.category !== SPECIAL_CATEGORIES.TRANSFER);
   
-  // [MILLORA RISC ZERO]: Calculem el total només sumant valors absoluts per evitar
-  // que els reemborsaments (despeses negatives) provoquin divisions per zero o gràfics invertits.
-  const totalAbsoluteSpending = validExpenses.reduce((acc, curr) => {
-    return acc + Math.abs(unbrand(curr.amount));
-  }, 0);
-
-  if (totalAbsoluteSpending === 0) return [];
-
+  // 1. Acumulem el valor real (les devolucions són negatives i resten del total)
   validExpenses.forEach(exp => {
     const catKey = exp.category || SPECIAL_CATEGORIES.OTHER;
-    const current = unbrand(stats[catKey] || toCents(0));
-    // Acumulem el valor absolut per a les estadístiques
-    stats[catKey] = toCents(current + Math.abs(unbrand(exp.amount)));
+    const current = stats[catKey] || 0;
+    stats[catKey] = current + unbrand(exp.amount);
   });
+
+  // 2. Tallem els "profunds negatius" i calculem el total real
+  let totalValidSpending = 0;
+  Object.keys(stats).forEach(key => {
+      if (stats[key] < 0) stats[key] = 0; // Si hi ha més reemborsament que despesa, el topall inferior és 0
+      totalValidSpending += stats[key];
+  });
+
+  if (totalValidSpending === 0) return [];
 
   return Object.entries(stats).map(([id, amount]) => {
     const catInfo = CATEGORIES.find(c => c.id === id) || 
@@ -302,10 +308,10 @@ export const calculateCategoryStats = (expenses: Expense[]): CategoryStat[] => {
     
     return {
       ...catInfo,
-      amount,
-      percentage: (unbrand(amount) / totalAbsoluteSpending) * 100
+      amount: toCents(amount),
+      percentage: (amount / totalValidSpending) * 100
     };
-  }).sort((a, b) => unbrand(b.amount) - unbrand(a.amount)); // [MILLORA]: Assegurem la comparació numèrica unbrand
+  }).sort((a, b) => unbrand(b.amount) - unbrand(a.amount));
 };
 
 export const calculateTotalSpending = (expenses: Expense[]): MoneyCents => {

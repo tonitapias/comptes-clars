@@ -68,11 +68,10 @@ export const signInWithGoogle = async () => {
     return result.user;
   } catch (error) {
     console.error("[Auth] Error en login de Google:", error);
-    throw error; // L'error seguirà pujant perquè la UI el mostri, però ara tenim traçabilitat
+    throw error;
   }
 };
 
-// [MILLORA]: Hem netejat l'anti-patró del try/catch buit i gestionat millor el nom d'usuari
 export const registerWithEmail = async (email: string, pass: string, name: string) => {
   try {
     const result = await createUserWithEmailAndPassword(auth, email, pass);
@@ -100,7 +99,10 @@ export const loginWithEmail = async (email: string, pass: string) => {
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager() 
-  })
+  }),
+  // [MILLORA FASE 2]: Firestore ignora automàticament els "undefined" a nivell natiu.
+  // Ens permet eliminar per complet les desastroses funcions JSON.parse(JSON.stringify())
+  ignoreUndefinedProperties: true 
 });
 
 export const appId = "comptes-clars-v1";

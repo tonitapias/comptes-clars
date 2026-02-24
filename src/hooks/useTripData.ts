@@ -1,3 +1,4 @@
+// src/hooks/useTripData.ts
 import { useState, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { doc, collection, onSnapshot, FirestoreError } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -14,7 +15,6 @@ const deduplicate = <T extends { id: string }>(arr1: T[], arr2: T[]): T[] => {
 
 const sortLogsDesc = (a: LogEntry, b: LogEntry) => b.timestamp.localeCompare(a.timestamp);
 
-// [FASE 1 MILLORA]: useSyncExternalStore és l'estàndard de React 18+ per a APIs del navegador
 const subscribeToOnlineStatus = (callback: () => void) => {
   window.addEventListener('online', callback);
   window.addEventListener('offline', callback);
@@ -25,41 +25,38 @@ const subscribeToOnlineStatus = (callback: () => void) => {
 };
 
 export function useTripData(tripId: string | undefined) {
-  // [FASE 1 MILLORA]: Agrupem els estats fortament acoblats. 
-  // Això garanteix que les actualitzacions (ex: viatge + despeses) no generin renders innecessaris pel mig.
   const [state, setState] = useState({
     rawTripData: null as TripData | null,
     expenses: [] as Expense[],
     subPayments: [] as Payment[],
     subLogs: [] as LogEntry[],
-    loading: true,
     error: null as string | null,
-    // Comptadors interns per resoldre el loading un cop de forma precisa
-    pendingInitialLoads: 3 
+  });
+
+  // [MILLORA FASE 1]: Rastreig explícit de cada listener de Firebase.
+  // Evitem el bug on múltiples respostes de cache+servidor corrompien el comptador.
+  const [loadStatus, setLoadStatus] = useState({
+    trip: false,
+    expenses: false,
+    payments: false,
+    // logs no bloqueja la UI inicial, ho podem considerar opcional per al "loading" general.
   });
 
   const isOffline = useSyncExternalStore(
     subscribeToOnlineStatus,
     () => !navigator.onLine,
-    () => false // Fallback en SSR (Server-Side Rendering)
+    () => false 
   );
 
   useEffect(() => {
     if (!tripId) {
-      setState(prev => ({
-        ...prev, rawTripData: null, expenses: [], subPayments: [], subLogs: [], loading: false, pendingInitialLoads: 0
-      }));
+      setState({ rawTripData: null, expenses: [], subPayments: [], subLogs: [], error: null });
+      setLoadStatus({ trip: true, expenses: true, payments: true }); // Resolt immediatament
       return;
     }
 
-    setState(prev => ({ ...prev, loading: true, error: null, pendingInitialLoads: 3 }));
-
-    // Funció atòmica per decrementar els loaders sense dependre de let variables externes
-    const resolveLoad = () => setState(prev => ({ 
-      ...prev, 
-      pendingInitialLoads: Math.max(0, prev.pendingInitialLoads - 1),
-      loading: prev.pendingInitialLoads - 1 > 0 
-    }));
+    setLoadStatus({ trip: false, expenses: false, payments: false });
+    setState(prev => ({ ...prev, error: null }));
 
     const unsubTrip = onSnapshot(doc(db, DB_PATHS.getTripDocPath(tripId)), 
       (docSnap) => {
@@ -68,11 +65,11 @@ export function useTripData(tripId: string | undefined) {
           rawTripData: docSnap.exists() ? (docSnap.data() as TripData) : null,
           error: docSnap.exists() ? null : "Grup no trobat"
         }));
-        resolveLoad();
+        setLoadStatus(prev => ({ ...prev, trip: true }));
       }, 
       (err: FirestoreError) => {
         setState(prev => ({ ...prev, error: err?.code === 'permission-denied' ? "⛔ Accés denegat." : "Error carregant el grup." }));
-        resolveLoad();
+        setLoadStatus(prev => ({ ...prev, trip: true }));
       }
     );
 
@@ -80,7 +77,7 @@ export function useTripData(tripId: string | undefined) {
       (snapshot) => {
         const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Expense[];
         setState(prev => ({ ...prev, expenses: data }));
-        resolveLoad();
+        setLoadStatus(prev => ({ ...prev, expenses: true }));
       }
     );
 
@@ -88,7 +85,7 @@ export function useTripData(tripId: string | undefined) {
       (snapshot) => {
         const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Payment[];
         setState(prev => ({ ...prev, subPayments: data }));
-        resolveLoad();
+        setLoadStatus(prev => ({ ...prev, payments: true }));
       }
     );
 
@@ -104,7 +101,11 @@ export function useTripData(tripId: string | undefined) {
     };
   }, [tripId]);
 
-  // Derivació d'estat (Memoized)
+  // Càlcul derivat de l'estat de càrrega total
+  const loading = useMemo(() => {
+    return !loadStatus.trip || !loadStatus.expenses || !loadStatus.payments;
+  }, [loadStatus]);
+
   const tripData = useMemo(() => {
     if (!state.rawTripData) return null;
 
@@ -118,7 +119,7 @@ export function useTripData(tripId: string | undefined) {
   return { 
     tripData, 
     expenses: state.expenses, 
-    loading: state.loading, 
+    loading, 
     error: state.error, 
     isOffline 
   };

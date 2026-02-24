@@ -1,6 +1,6 @@
 // src/hooks/useTripCalculations.ts
 
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo, useDeferredValue } from 'react';
 import type { Expense, TripUser, MoneyCents, Payment } from '../types';
 import * as billingService from '../services/billingService';
 
@@ -23,24 +23,10 @@ export function useTripCalculations(
   filterCategory: string
 ): CalculationsResult {
   
-  const [debouncedQuery, setDebouncedQuery] = useState(searchQuery || ''); // FIX: Fallback inicial
-  const [isSearching, setIsSearching] = useState(false);
-
-  useEffect(() => {
-    if (!searchQuery) {
-      setDebouncedQuery('');
-      setIsSearching(false);
-      return;
-    }
-
-    setIsSearching(true);
-    const handler = setTimeout(() => {
-      setDebouncedQuery(searchQuery);
-      setIsSearching(false);
-    }, 300); 
-
-    return () => clearTimeout(handler);
-  }, [searchQuery]);
+  // [MILLORA FASE 2]: Utilitzem la funcionalitat nativa de React 18 per a cerques no bloquejants.
+  // Això elimina la necessitat d'usar `useState` i `setTimeout`, reduint els re-renders.
+  const deferredQuery = useDeferredValue(searchQuery);
+  const isSearching = searchQuery !== deferredQuery;
 
   const userSearchIndex = useMemo(() => {
     const map: Record<string, string> = {};
@@ -62,31 +48,32 @@ export function useTripCalculations(
   }, [expenses, userSearchIndex]);
 
   const filteredExpenses = useMemo(() => {
-    // FIX CRÍTIC: Ens assegurem que sempre és un string abans de fer toLowerCase()
-    const safeQuery = debouncedQuery || '';
-    const q = safeQuery.toLowerCase().trim();
-    
+    const q = (deferredQuery || '').toLowerCase().trim();
     const isCategoryFilterActive = filterCategory !== 'all';
 
-    const sorted = [...expenses].sort((a, b) => {
+    // 1. [MILLORA FASE 2]: FILTRAR PRIMER. Així no ordenem despeses que igualment amagarem.
+    let result = expenses;
+    
+    if (q || isCategoryFilterActive) {
+        result = expenses.filter(e => {
+            if (isCategoryFilterActive && e.category !== filterCategory) return false;
+            if (q) {
+                const searchStr = searchIndexMap.get(e.id);
+                if (!searchStr || !searchStr.includes(q)) return false;
+            }
+            return true;
+        });
+    }
+
+    // 2. ORDENAR NOMÉS EL QUE QUEDA
+    return result.sort((a, b) => {
       const dateA = new Date(a.date).getTime();
       const dateB = new Date(b.date).getTime();
       if (dateA !== dateB) return dateB - dateA;
       if (typeof a.id === 'number' && typeof b.id === 'number') return b.id - a.id;
       return String(b.id).localeCompare(String(a.id));
     });
-
-    if (!q && !isCategoryFilterActive) return sorted; 
-    
-    return sorted.filter(e => {
-        if (isCategoryFilterActive && e.category !== filterCategory) return false;
-        if (q) {
-            const searchStr = searchIndexMap.get(e.id);
-            if (!searchStr || !searchStr.includes(q)) return false;
-        }
-        return true;
-      });
-  }, [expenses, debouncedQuery, filterCategory, searchIndexMap]);
+  }, [expenses, deferredQuery, filterCategory, searchIndexMap]);
 
   const displayedTotal = useMemo(() => 
     billingService.calculateTotalSpending(filteredExpenses), 

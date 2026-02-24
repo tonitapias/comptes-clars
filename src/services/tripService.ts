@@ -10,22 +10,16 @@ import { DB_PATHS, TRIP_DOC_PREFIX } from '../config/dbPaths';
 import { Expense, TripData, Settlement, TripUser, LogEntry, Currency, Payment } from '../types';
 import { ExpenseSchema } from '../utils/validation';
 
-// [FASE 2 MILLORA]: Utilitzem la serialització del motor C++ (V8) del navegador.
-// És ~10x més ràpid que un bucle recursiu en JS. 
-// Elimina automàticament els 'undefined' i converteix els objectes 'Date' a strings ISO-8601.
-const cleanPayload = <T>(data: T): T => {
-  return JSON.parse(JSON.stringify(data));
-};
+// [FASE 2 MILLORA]: cleanPayload eliminat completament. Ens recolzem en ignoreUndefinedProperties de Firestore.
 
 const tripConverter: FirestoreDataConverter<TripData> = {
   toFirestore: (trip: TripData) => {
-    const sanitized = cleanPayload(trip);
     return {
-      ...sanitized,
-      logs: sanitized.logs || [],
-      memberUids: sanitized.memberUids || [],
-      ownerId: sanitized.ownerId || null,
-      payments: sanitized.payments || []
+      ...trip,
+      logs: trip.logs || [],
+      memberUids: trip.memberUids || [],
+      ownerId: trip.ownerId || null,
+      payments: trip.payments || []
     };
   },
   fromFirestore: (snapshot: QueryDocumentSnapshot, options: SnapshotOptions): TripData => {
@@ -129,15 +123,15 @@ export const TripService = {
       isDeleted: false,
       isSettled: true 
     };
-    await setDoc(getTripRef(trip.id), cleanPayload(tripWithMembers));
+    await setDoc(getTripRef(trip.id), tripWithMembers);
   },
 
   updateTrip: async (tripId: string, data: Partial<TripData>) => {
     const log = createLogEntry(`ha actualitzat la configuració`, 'settings');
     const batch = writeBatch(db);
     
-    batch.update(getTripRef(tripId), cleanPayload(data) as UpdateData<TripData>);
-    batch.set(doc(getLogsCol(tripId), log.id), cleanPayload(log));
+    batch.update(getTripRef(tripId), data as UpdateData<TripData>);
+    batch.set(doc(getLogsCol(tripId), log.id), log);
     
     await batch.commit();
   },
@@ -151,25 +145,22 @@ export const TripService = {
     const batch = writeBatch(db);
     
     batch.update(getTripRef(tripId), { isDeleted: true });
-    batch.set(doc(getLogsCol(tripId), log.id), cleanPayload(log));
+    batch.set(doc(getLogsCol(tripId), log.id), log);
     
     await batch.commit();
   },
 
   addExpense: async (tripId: string, expense: Omit<Expense, 'id'>) => {
-    // [FASE 2 MILLORA]: Forcem la validació del Schema abans de continuar. Fail-Fast.
     ExpenseSchema.parse(expense); 
     
-    const cleanExpense = cleanPayload(expense);
     const newExpenseRef = doc(getExpensesCol(tripId)); 
-    
     const formattedAmount = (expense.amount / 100).toFixed(2).replace('.', ',');
     const log = createLogEntry(`ha afegit la despesa "${expense.title}" de ${formattedAmount} €`, 'create');
     
     const batch = writeBatch(db);
-    batch.set(newExpenseRef, cleanExpense);
+    batch.set(newExpenseRef, expense);
     batch.update(getTripRef(tripId), { isSettled: false });
-    batch.set(doc(getLogsCol(tripId), log.id), cleanPayload(log));
+    batch.set(doc(getLogsCol(tripId), log.id), log);
     
     await batch.commit();
     return newExpenseRef.id;
@@ -183,9 +174,9 @@ export const TripService = {
     const log = createLogEntry(`ha modificat la despesa "${expense.title || 'sense nom'}"${detail}`, 'update');
 
     const batch = writeBatch(db);
-    batch.update(getExpenseRef(tripId, expenseId), cleanPayload(expense));
+    batch.update(getExpenseRef(tripId, expenseId), expense as any);
     batch.update(getTripRef(tripId), { isSettled: false });
-    batch.set(doc(getLogsCol(tripId), log.id), cleanPayload(log));
+    batch.set(doc(getLogsCol(tripId), log.id), log);
 
     await batch.commit();
   },
@@ -207,7 +198,7 @@ export const TripService = {
 
     const batch = writeBatch(db);
     batch.delete(getExpenseRef(tripId, expenseId));
-    batch.set(doc(getLogsCol(tripId), log.id), cleanPayload(log));
+    batch.set(doc(getLogsCol(tripId), log.id), log);
     
     await batch.commit();
   },
@@ -236,8 +227,8 @@ export const TripService = {
     const log = createLogEntry(`ha liquidat un deute de ${formattedAmount} € ${getMethodText(method)}`, 'settle');
 
     const batch = writeBatch(db);
-    batch.set(doc(getPaymentsCol(tripId), payment.id), cleanPayload(payment));
-    batch.set(doc(getLogsCol(tripId), log.id), cleanPayload(log));
+    batch.set(doc(getPaymentsCol(tripId), payment.id), payment);
+    batch.set(doc(getLogsCol(tripId), log.id), log);
     
     await batch.commit();
   },
@@ -259,7 +250,7 @@ export const TripService = {
     const newPayments = currentPayments.filter(p => p.id !== paymentId);
     batch.update(getTripRef(tripId), { payments: newPayments });
     
-    batch.set(doc(getLogsCol(tripId), log.id), cleanPayload(log));
+    batch.set(doc(getLogsCol(tripId), log.id), log);
     
     await batch.commit();
   },
@@ -296,10 +287,10 @@ export const TripService = {
 
       const batch = writeBatch(db);
       batch.update(tripRef, {
-        users: arrayUnion(cleanPayload(newUser)),
+        users: arrayUnion(newUser),
         memberUids: arrayUnion(user.uid)
       });
-      batch.set(doc(getLogsCol(tripId), log.id), cleanPayload(log));
+      batch.set(doc(getLogsCol(tripId), log.id), log);
       
       await batch.commit();
       
@@ -328,7 +319,7 @@ export const TripService = {
 
     const batch = writeBatch(db);
     batch.update(tripRef, { users: updatedUsers });
-    batch.set(doc(getLogsCol(tripId), log.id), cleanPayload(log));
+    batch.set(doc(getLogsCol(tripId), log.id), log);
     
     await batch.commit();
   },
@@ -358,7 +349,7 @@ export const TripService = {
         users: updatedUsers, 
         memberUids: updatedMemberUids
       });
-      batch.set(doc(getLogsCol(tripId), log.id), cleanPayload(log));
+      batch.set(doc(getLogsCol(tripId), log.id), log);
       
       await batch.commit();
     } catch (error: any) {
@@ -386,7 +377,7 @@ export const TripService = {
       users: updatedUsers, 
       memberUids: arrayUnion(user.uid)
     });
-    batch.set(doc(getLogsCol(tripId), log.id), cleanPayload(log));
+    batch.set(doc(getLogsCol(tripId), log.id), log);
     
     await batch.commit();
   }

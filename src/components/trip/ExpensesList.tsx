@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Receipt, ArrowRightLeft, Paperclip, Loader2, Calendar, X, SlidersHorizontal, ArrowDownRight } from 'lucide-react'; 
 import { CATEGORIES } from '../../utils/constants';
-import { Expense, CategoryId, TripUser, Currency, Payment } from '../../types';
+import { Expense, CategoryId, TripUser, Currency, } from '../../types';
 import { formatCurrency, formatDateDisplay } from '../../utils/formatters';
 import { useTripMeta } from '../../context/TripContext'; 
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
@@ -165,57 +165,52 @@ export default function ExpensesList({
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const observerTarget = useRef<HTMLDivElement>(null);
 
-  const usersSignature = JSON.stringify(tripData?.users || []);
+  const tripUsers = tripData?.users || [];
   
   const userMap = useMemo(() => {
-    if (!tripData?.users) return {};
-    return tripData.users.reduce((acc, user) => {
+    if (!tripUsers.length) return {};
+    return tripUsers.reduce((acc, user) => {
       acc[user.id] = user;
       return acc;
     }, {} as Record<string, TripUser>);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [usersSignature]); 
-
+  }, [tripUsers]);
+   
   const getUserName = useCallback((id: string) => userMap[id]?.name || 'Desconegut', [userMap]);
 
-  const paymentsSignature = JSON.stringify(tripData?.payments || []);
+  const tripPayments = tripData?.payments || [];
 
-  const mergedExpenses = useMemo(() => {
-    // [FASE 2 MILLORA]: Convertim explícitament la firma des de la dependència per evitar "Stale Closures"
-    const rawPayments: Payment[] = JSON.parse(paymentsSignature);
-    
-    const mappedPayments: Expense[] = rawPayments.map(p => {
-        const methodLabel = p.method === 'bizum' ? 'Bizum' : p.method === 'transfer' ? 'Transferència' : p.method === 'card' ? 'Targeta' : 'Efectiu';
-        return {
-            id: p.id,
-            title: `Liquidació (${methodLabel})`,
-            amount: p.amount,
-            payer: p.from,
-            involved: [p.to],
-            category: 'transfer',
-            date: p.date,
-            splitType: 'equal'
-        } as unknown as Expense;
-    });
+const mergedExpenses = useMemo(() => {
+  const mappedPayments: Expense[] = tripPayments.map(p => {
+      const methodLabel = p.method === 'bizum' ? 'Bizum' : p.method === 'transfer' ? 'Transferència' : p.method === 'card' ? 'Targeta' : 'Efectiu';
+      return {
+          id: p.id,
+          title: `Liquidació (${methodLabel})`,
+          amount: p.amount,
+          payer: p.from,
+          involved: [p.to],
+          category: 'transfer',
+          date: p.date,
+          splitType: 'equal'
+      } as unknown as Expense;
+  });
 
-    const q = searchQuery.toLowerCase().trim();
-    const cat = filterCategory;
+  const q = searchQuery.toLowerCase().trim();
+  const cat = filterCategory;
 
-    const filteredPayments = mappedPayments.filter(e => {
-        if (cat !== 'all' && e.category !== cat) return false;
-        if (q) {
-            const searchStr = `${e.title} ${getUserName(e.payer)} ${e.involved.map(uid => getUserName(uid)).join(' ')}`.toLowerCase();
-            if (!searchStr.includes(q)) return false;
-        }
-        return true;
-    });
+  const filteredPayments = mappedPayments.filter(e => {
+      if (cat !== 'all' && e.category !== cat) return false;
+      if (q) {
+          const searchStr = `${e.title} ${getUserName(e.payer)} ${e.involved.map(uid => getUserName(uid)).join(' ')}`.toLowerCase();
+          if (!searchStr.includes(q)) return false;
+      }
+      return true;
+  });
 
-    return [...expenses, ...filteredPayments].sort((a, b) => {
-        if (a.date !== b.date) return b.date.localeCompare(a.date);
-        return String(b.id).localeCompare(String(a.id));
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expenses, paymentsSignature, searchQuery, filterCategory, getUserName]);
+  return [...expenses, ...filteredPayments].sort((a, b) => {
+      if (a.date !== b.date) return b.date.localeCompare(a.date);
+      return String(b.id).localeCompare(String(a.id));
+  });
+}, [expenses, tripPayments, searchQuery, filterCategory, getUserName]);
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
