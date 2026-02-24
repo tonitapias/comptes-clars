@@ -1,6 +1,6 @@
 // src/hooks/useTripData.ts
 import { useReducer, useEffect, useMemo, useSyncExternalStore } from 'react';
-import { doc, collection, onSnapshot, FirestoreError } from 'firebase/firestore';
+import { doc, collection, onSnapshot, FirestoreError, query, orderBy, limit } from 'firebase/firestore'; 
 import { db } from '../config/firebase';
 import { DB_PATHS } from '../config/dbPaths';
 import { TripData, Expense, Payment, LogEntry } from '../types';
@@ -143,7 +143,14 @@ export function useTripData(tripId: string | undefined) {
       }
     );
 
-    const unsubLogs = onSnapshot(collection(db, DB_PATHS.getLogsCollectionPath(tripId)), 
+    // [FASE 2 FIX]: Optimitització crítica de lectures. Només ens subscrivim als últims 50 logs.
+    const logsQuery = query(
+      collection(db, DB_PATHS.getLogsCollectionPath(tripId)),
+      orderBy('timestamp', 'desc'),
+      limit(50)
+    );
+
+    const unsubLogs = onSnapshot(logsQuery, 
       (snapshot) => {
         const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as LogEntry[];
         dispatch({ type: 'LOGS_SUCCESS', payload: data });

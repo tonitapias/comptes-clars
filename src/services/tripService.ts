@@ -42,7 +42,6 @@ const tripConverter: FirestoreDataConverter<TripData> = {
 const tripsCol = collection(db, DB_PATHS.TRIPS_COLLECTION).withConverter(tripConverter);
 
 const getTripRef = (tripId: string) => {
-  // [FASE 2 FIX]: Llançament de clau d'error agnòstica en lloc de text en català
   if (!tripId) throw new Error("ERRORS.INVALID_TRIP_ID");
   return doc(db, DB_PATHS.getTripDocPath(tripId)).withConverter(tripConverter);
 }
@@ -53,7 +52,7 @@ const getExpenseRef = (tripId: string, expenseId: string) => doc(db, DB_PATHS.ge
 const getLogsCol = (tripId: string) => collection(db, DB_PATHS.getLogsCollectionPath(tripId));
 const getPaymentsCol = (tripId: string) => collection(db, DB_PATHS.getPaymentsCollectionPath(tripId));
 
-const generateId = () => crypto.randomUUID();
+const generateId = (): string => crypto.randomUUID();
 
 const createLogEntry = (message: string, action: LogEntry['action']): LogEntry => {
   const currentUser = auth.currentUser;
@@ -107,11 +106,12 @@ export const TripService = {
       return snap.docs.map(d => ({ ...d.data(), id: d.id })) as Payment[];
     } catch (error) {
       console.error("Error obtenint pagaments:", error);
-      return [];
+      // FASE 1 FIX: Estandardització d'errors com als altres mètodes.
+      throw new Error("ERRORS.FETCH_PAYMENTS_FAILED");
     }
   },
 
-  createTrip: async (trip: TripData) => {
+  createTrip: async (trip: TripData): Promise<void> => {
     const initialMemberUids = trip.users.filter(u => u.linkedUid).map(u => u.linkedUid as string);
     const tripWithMembers = {
       ...trip,
@@ -125,7 +125,7 @@ export const TripService = {
     await setDoc(getTripRef(trip.id), tripWithMembers);
   },
 
-  updateTrip: async (tripId: string, data: Partial<TripData>) => {
+  updateTrip: async (tripId: string, data: Partial<TripData>): Promise<void> => {
     const log = createLogEntry(`ha actualitzat la configuració`, 'settings');
     const batch = writeBatch(db);
     
@@ -135,11 +135,11 @@ export const TripService = {
     await batch.commit();
   },
 
-  updateTripSettledState: async (tripId: string, isSettled: boolean) => {
+  updateTripSettledState: async (tripId: string, isSettled: boolean): Promise<void> => {
     await updateDoc(getTripRef(tripId), { isSettled });
   },
 
-  deleteTrip: async (tripId: string) => {
+  deleteTrip: async (tripId: string): Promise<void> => {
     const log = createLogEntry(`ha arxivat el projecte`, 'settings');
     const batch = writeBatch(db);
     
@@ -149,7 +149,7 @@ export const TripService = {
     await batch.commit();
   },
 
-  addExpense: async (tripId: string, expense: Omit<Expense, 'id'>) => {
+  addExpense: async (tripId: string, expense: Omit<Expense, 'id'>): Promise<string> => {
     ExpenseSchema.parse(expense); 
     
     const newExpenseRef = doc(getExpensesCol(tripId)); 
@@ -165,7 +165,7 @@ export const TripService = {
     return newExpenseRef.id;
   },
 
-  updateExpense: async (tripId: string, expenseId: string, expense: Partial<Expense>) => {
+  updateExpense: async (tripId: string, expenseId: string, expense: Partial<Expense>): Promise<void> => {
     let detail = '';
     if (expense.amount) {
         detail = ` (nou import: ${(expense.amount / 100).toFixed(2).replace('.', ',')} €)`;
@@ -173,14 +173,15 @@ export const TripService = {
     const log = createLogEntry(`ha modificat la despesa "${expense.title || 'sense nom'}"${detail}`, 'update');
 
     const batch = writeBatch(db);
-    batch.update(getExpenseRef(tripId, expenseId), expense as any);
+    // FASE 1 FIX: Corregit 'as any' per seguretat de domini i Type Safety complet.
+    batch.update(getExpenseRef(tripId, expenseId), expense as UpdateData<Expense>);
     batch.update(getTripRef(tripId), { isSettled: false });
     batch.set(doc(getLogsCol(tripId), log.id), log);
 
     await batch.commit();
   },
 
-  deleteExpense: async (tripId: string, expenseId: string) => {
+  deleteExpense: async (tripId: string, expenseId: string): Promise<void> => {
     const snap = await getDoc(getExpenseRef(tripId, expenseId));
     let title = 'una despesa';
     let amountDetail = '';
@@ -202,7 +203,7 @@ export const TripService = {
     await batch.commit();
   },
 
-  settleDebt: async (tripId: string, settlement: Settlement, method: string) => {
+  settleDebt: async (tripId: string, settlement: Settlement, method: string): Promise<void> => {
     const payment: Payment = {
       id: generateId(),
       from: settlement.from,
@@ -232,7 +233,7 @@ export const TripService = {
     await batch.commit();
   },
 
-  deletePayment: async (tripId: string, paymentId: string, currentPayments: Payment[]) => {
+  deletePayment: async (tripId: string, paymentId: string, currentPayments: Payment[]): Promise<void> => {
     const paymentToDelete = currentPayments.find(p => p.id === paymentId);
     
     let amountDetail = '';
@@ -254,16 +255,14 @@ export const TripService = {
     await batch.commit();
   },
 
-  joinTripViaLink: async (tripId: string, user: User) => {
+  joinTripViaLink: async (tripId: string, user: User): Promise<void> => {
     try {
       const tripRef = getTripRef(tripId);
       const tripSnap = await getDoc(tripRef);
       
-      // [FASE 2 FIX]: Substituïm el text per la clau d'error
       if (!tripSnap.exists()) throw new Error("ERRORS.JOIN_INVALID_CODE");
       
       const data = tripSnap.data();
-      // [FASE 2 FIX]: Substituïm el text per la clau d'error
       if (data.isDeleted) throw new Error("ERRORS.JOIN_TRIP_DELETED");
 
       const currentUsers = data.users || [];
@@ -296,21 +295,17 @@ export const TripService = {
       
       await batch.commit();
       
-    } catch (error: unknown) { // [FASE 1 FIX]
+    } catch (error: unknown) { 
       console.error("Error en unir-se al viatge:", error);
-      
-      // Comprovació segura de l'objecte d'error de Firebase
       const isPermissionDenied = error && typeof error === 'object' && 'code' in error && error.code === 'permission-denied';
-      
-      // [FASE 2 FIX]: Substituïm textos per claus
       if (isPermissionDenied) throw new Error("ERRORS.PERMISSION_DENIED");
       
-      if (error instanceof Error) throw new Error(error.message); // Manté la clau propagada des de dalt (ex: ERRORS.JOIN_TRIP_DELETED)
+      if (error instanceof Error) throw new Error(error.message); 
       throw new Error("ERRORS.JOIN_FAILED");
     }
   },
 
-  updateTripUserName: async (tripId: string, userId: string, newName: string) => {
+  updateTripUserName: async (tripId: string, userId: string, newName: string): Promise<void> => {
     if (!tripId) throw new Error("ERRORS.INVALID_TRIP_ID");
     const tripRef = getTripRef(tripId); 
     const tripSnap = await getDoc(tripRef);
@@ -332,18 +327,16 @@ export const TripService = {
     await batch.commit();
   },
 
-  leaveTrip: async (tripId: string, internalUserId: string) => {
+  leaveTrip: async (tripId: string, internalUserId: string): Promise<void> => {
     try {
       const tripRef = getTripRef(tripId);
       const tripSnap = await getDoc(tripRef);
       
-      // [FASE 2 FIX]: Clau agnòstica en lloc de text fix
       if (!tripSnap.exists()) throw new Error("ERRORS.TRIP_NOT_FOUND");
       
       const tripData = tripSnap.data();
       const currentUser = auth.currentUser;
       
-      // [FASE 2 FIX]: Clau agnòstica en lloc de text fix
       if (!currentUser) throw new Error("ERRORS.NOT_AUTHENTICATED");
 
       const log = createLogEntry(`ha abandonat el projecte`, 'settings');
@@ -363,16 +356,14 @@ export const TripService = {
       batch.set(doc(getLogsCol(tripId), log.id), log);
       
       await batch.commit();
-    } catch (error: unknown) { // [FASE 1 FIX]
+    } catch (error: unknown) { 
       console.error("Error en sortir del viatge:", error);
-      if (error instanceof Error) throw new Error(error.message); // Manté l'error de domini (ex: ERRORS.TRIP_NOT_FOUND)
-      
-      // [FASE 2 FIX]: Error genèric amb clau
+      if (error instanceof Error) throw new Error(error.message); 
       throw new Error("ERRORS.LEAVE_TRIP_FAILED");
     }
   },
 
-  linkUserToAccount: async (tripId: string, tripUserId: string, user: User) => {
+  linkUserToAccount: async (tripId: string, tripUserId: string, user: User): Promise<void> => {
     const tripRef = getTripRef(tripId);
     const tripSnap = await getDoc(tripRef);
     if (!tripSnap.exists()) throw new Error("ERRORS.TRIP_NOT_FOUND");
