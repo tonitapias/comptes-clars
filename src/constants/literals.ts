@@ -1,3 +1,4 @@
+// src/constants/literals.ts
 export const LITERALS = {
   ACTIONS: {
     UPDATE_SETTINGS_SUCCESS: "Configuració actualitzada",
@@ -15,6 +16,22 @@ export const LITERALS = {
     CONNECTION_ERROR: "Error de connexió",
     UNEXPECTED_ERROR: "Error inesperat",
   },
+  ERRORS: { // --- NOVA SECCIÓ (FASE 2) ---
+    INVALID_TRIP_ID: "ID de viatge invàlid",
+    FETCH_TRIPS_FAILED: "No s'han pogut carregar els viatges. Comprova la teva connexió.",
+    FETCH_EXPENSES_FAILED: "No s'han pogut carregar les despeses del viatge.",
+    JOIN_INVALID_CODE: "El codi no és vàlid o el projecte no existeix.",
+    JOIN_TRIP_DELETED: "Aquest projecte ha estat eliminat per l'administrador.",
+    PERMISSION_DENIED: "No tens permisos suficients per fer aquesta acció.",
+    JOIN_FAILED: "No s'ha pogut unir al viatge. Comprova el codi.",
+    TRIP_NOT_FOUND: "El viatge no existeix",
+    NOT_AUTHENTICATED: "No estàs autenticat",
+    LEAVE_TRIP_FAILED: "No s'ha pogut sortir del grup. Torna-ho a provar.",
+    NETWORK: "Sense connexió a Internet. Revisa la teva xarxa.",
+    NOT_FOUND: "No s'ha trobat la dada sol·licitada.",
+    AUTH_INVALID: "Les credencials no són vàlides.",
+    UNEXPECTED: "S'ha produït un error inesperat"
+  },
   MODALS: {
     SETTLE: {
       TITLE: "Liquidar Deute",
@@ -22,7 +39,7 @@ export const LITERALS = {
       METHOD_LABEL: "Mètode de Pagament",
       BTN_CONFIRM: "Confirmar",
     },
-    CONFIRM: { // --- SECCIÓ NOVA ---
+    CONFIRM: { 
       DEFAULT_TITLE: "Estàs segur?",
       BTN_CANCEL: "Cancel·lar",
       BTN_DELETE: "Eliminar",
@@ -45,6 +62,6 @@ export const LITERALS = {
   },
   COMMON: {
     UNKNOWN_USER: "?",
-    LOADING_SESSION: "Carregant la teva sessió...", // --- NOVA ---
+    LOADING_SESSION: "Carregant la teva sessió...", 
   }
 } as const;

@@ -10,8 +10,6 @@ import { DB_PATHS, TRIP_DOC_PREFIX } from '../config/dbPaths';
 import { Expense, TripData, Settlement, TripUser, LogEntry, Currency, Payment } from '../types';
 import { ExpenseSchema } from '../utils/validation';
 
-// [FASE 2 MILLORA]: cleanPayload eliminat completament. Ens recolzem en ignoreUndefinedProperties de Firestore.
-
 const tripConverter: FirestoreDataConverter<TripData> = {
   toFirestore: (trip: TripData) => {
     return {
@@ -44,7 +42,8 @@ const tripConverter: FirestoreDataConverter<TripData> = {
 const tripsCol = collection(db, DB_PATHS.TRIPS_COLLECTION).withConverter(tripConverter);
 
 const getTripRef = (tripId: string) => {
-  if (!tripId) throw new Error("ID de viatge invàlid");
+  // [FASE 2 FIX]: Llançament de clau d'error agnòstica en lloc de text en català
+  if (!tripId) throw new Error("ERRORS.INVALID_TRIP_ID");
   return doc(db, DB_PATHS.getTripDocPath(tripId)).withConverter(tripConverter);
 }
 
@@ -58,7 +57,7 @@ const generateId = () => crypto.randomUUID();
 
 const createLogEntry = (message: string, action: LogEntry['action']): LogEntry => {
   const currentUser = auth.currentUser;
-  const finalUserName = currentUser?.displayName || 'Algú';
+  const finalUserName = currentUser?.displayName || 'Algú'; 
 
   return {
     id: generateId(),
@@ -88,7 +87,7 @@ export const TripService = {
       return snap.docs.map(d => d.data()).filter(trip => !trip.isDeleted); 
     } catch (error) {
       console.error("Error obtenint viatges:", error);
-      throw new Error("No s'han pogut carregar els viatges. Comprova la teva connexió.");
+      throw new Error("ERRORS.FETCH_TRIPS_FAILED");
     }
   },
 
@@ -98,7 +97,7 @@ export const TripService = {
       return snap.docs.map(d => ({ ...d.data(), id: d.id })) as Expense[];
     } catch (error) {
       console.error("Error obtenint despeses:", error);
-      throw new Error("No s'han pogut carregar les despeses del viatge.");
+      throw new Error("ERRORS.FETCH_EXPENSES_FAILED");
     }
   },
 
@@ -260,9 +259,12 @@ export const TripService = {
       const tripRef = getTripRef(tripId);
       const tripSnap = await getDoc(tripRef);
       
-      if (!tripSnap.exists()) throw new Error("El codi no és vàlid o el projecte no existeix.");
+      // [FASE 2 FIX]: Substituïm el text per la clau d'error
+      if (!tripSnap.exists()) throw new Error("ERRORS.JOIN_INVALID_CODE");
+      
       const data = tripSnap.data();
-      if (data.isDeleted) throw new Error("Aquest projecte ha estat eliminat per l'administrador.");
+      // [FASE 2 FIX]: Substituïm el text per la clau d'error
+      if (data.isDeleted) throw new Error("ERRORS.JOIN_TRIP_DELETED");
 
       const currentUsers = data.users || [];
       const alreadyExists = currentUsers.some(u => u.linkedUid === user.uid);
@@ -294,20 +296,26 @@ export const TripService = {
       
       await batch.commit();
       
-    } catch (error: any) {
+    } catch (error: unknown) { // [FASE 1 FIX]
       console.error("Error en unir-se al viatge:", error);
-      if (error?.code === 'permission-denied') throw new Error("No tens permisos per unir-te a aquest projecte.");
-      if (error instanceof Error) throw new Error(error.message);
-      throw new Error("No s'ha pogut unir al viatge. Comprova el codi.");
+      
+      // Comprovació segura de l'objecte d'error de Firebase
+      const isPermissionDenied = error && typeof error === 'object' && 'code' in error && error.code === 'permission-denied';
+      
+      // [FASE 2 FIX]: Substituïm textos per claus
+      if (isPermissionDenied) throw new Error("ERRORS.PERMISSION_DENIED");
+      
+      if (error instanceof Error) throw new Error(error.message); // Manté la clau propagada des de dalt (ex: ERRORS.JOIN_TRIP_DELETED)
+      throw new Error("ERRORS.JOIN_FAILED");
     }
   },
 
   updateTripUserName: async (tripId: string, userId: string, newName: string) => {
-    if (!tripId) throw new Error("ID de viatge no vàlid");
+    if (!tripId) throw new Error("ERRORS.INVALID_TRIP_ID");
     const tripRef = getTripRef(tripId); 
     const tripSnap = await getDoc(tripRef);
 
-    if (!tripSnap.exists()) throw new Error("El viatge no existeix");
+    if (!tripSnap.exists()) throw new Error("ERRORS.TRIP_NOT_FOUND");
     const tripData = tripSnap.data(); 
 
     const updatedUsers = tripData.users.map(u => {
@@ -329,11 +337,14 @@ export const TripService = {
       const tripRef = getTripRef(tripId);
       const tripSnap = await getDoc(tripRef);
       
-      if (!tripSnap.exists()) throw new Error("El projecte no existeix");
+      // [FASE 2 FIX]: Clau agnòstica en lloc de text fix
+      if (!tripSnap.exists()) throw new Error("ERRORS.TRIP_NOT_FOUND");
+      
       const tripData = tripSnap.data();
       const currentUser = auth.currentUser;
       
-      if (!currentUser) throw new Error("No estàs autenticat");
+      // [FASE 2 FIX]: Clau agnòstica en lloc de text fix
+      if (!currentUser) throw new Error("ERRORS.NOT_AUTHENTICATED");
 
       const log = createLogEntry(`ha abandonat el projecte`, 'settings');
 
@@ -352,17 +363,19 @@ export const TripService = {
       batch.set(doc(getLogsCol(tripId), log.id), log);
       
       await batch.commit();
-    } catch (error: any) {
+    } catch (error: unknown) { // [FASE 1 FIX]
       console.error("Error en sortir del viatge:", error);
-      if (error instanceof Error) throw new Error(error.message);
-      throw new Error("No s'ha pogut sortir del grup. Torna-ho a provar.");
+      if (error instanceof Error) throw new Error(error.message); // Manté l'error de domini (ex: ERRORS.TRIP_NOT_FOUND)
+      
+      // [FASE 2 FIX]: Error genèric amb clau
+      throw new Error("ERRORS.LEAVE_TRIP_FAILED");
     }
   },
 
   linkUserToAccount: async (tripId: string, tripUserId: string, user: User) => {
     const tripRef = getTripRef(tripId);
     const tripSnap = await getDoc(tripRef);
-    if (!tripSnap.exists()) throw new Error("Viatge no trobat");
+    if (!tripSnap.exists()) throw new Error("ERRORS.TRIP_NOT_FOUND");
 
     const data = tripSnap.data();
     const updatedUsers = data.users.map(u => {

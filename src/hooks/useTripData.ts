@@ -1,5 +1,5 @@
 // src/hooks/useTripData.ts
-import { useState, useEffect, useMemo, useSyncExternalStore } from 'react';
+import { useReducer, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { doc, collection, onSnapshot, FirestoreError } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { DB_PATHS } from '../config/dbPaths';
@@ -24,23 +24,84 @@ const subscribeToOnlineStatus = (callback: () => void) => {
   };
 };
 
-export function useTripData(tripId: string | undefined) {
-  const [state, setState] = useState({
-    rawTripData: null as TripData | null,
-    expenses: [] as Expense[],
-    subPayments: [] as Payment[],
-    subLogs: [] as LogEntry[],
-    error: null as string | null,
-  });
+// --- 1. DEFINICIÓ DE L'ESTAT ---
+interface TripDataState {
+  rawTripData: TripData | null;
+  expenses: Expense[];
+  subPayments: Payment[];
+  subLogs: LogEntry[];
+  error: string | null;
+  loadStatus: {
+    trip: boolean;
+    expenses: boolean;
+    payments: boolean;
+  };
+}
 
-  // [MILLORA FASE 1]: Rastreig explícit de cada listener de Firebase.
-  // Evitem el bug on múltiples respostes de cache+servidor corrompien el comptador.
-  const [loadStatus, setLoadStatus] = useState({
-    trip: false,
-    expenses: false,
-    payments: false,
-    // logs no bloqueja la UI inicial, ho podem considerar opcional per al "loading" general.
-  });
+const initialState: TripDataState = {
+  rawTripData: null,
+  expenses: [],
+  subPayments: [],
+  subLogs: [],
+  error: null,
+  loadStatus: { trip: false, expenses: false, payments: false }
+};
+
+// --- 2. DEFINICIÓ DE LES ACCIONS ---
+type TripDataAction =
+  | { type: 'CLEAR' }
+  | { type: 'INIT_FETCH' }
+  | { type: 'TRIP_SUCCESS'; payload: TripData | null }
+  | { type: 'TRIP_ERROR'; payload: string }
+  | { type: 'EXPENSES_SUCCESS'; payload: Expense[] }
+  | { type: 'PAYMENTS_SUCCESS'; payload: Payment[] }
+  | { type: 'LOGS_SUCCESS'; payload: LogEntry[] };
+
+// --- 3. EL REDUCER (Lògica pura i predictible) ---
+function tripDataReducer(state: TripDataState, action: TripDataAction): TripDataState {
+  switch (action.type) {
+    case 'CLEAR':
+      return { ...initialState, loadStatus: { trip: true, expenses: true, payments: true } };
+    case 'INIT_FETCH':
+      return { ...initialState };
+    case 'TRIP_SUCCESS':
+      return {
+        ...state,
+        rawTripData: action.payload,
+        error: action.payload ? null : "Grup no trobat",
+        loadStatus: { ...state.loadStatus, trip: true }
+      };
+    case 'TRIP_ERROR':
+      return {
+        ...state,
+        error: action.payload,
+        loadStatus: { ...state.loadStatus, trip: true }
+      };
+    case 'EXPENSES_SUCCESS':
+      return {
+        ...state,
+        expenses: action.payload,
+        loadStatus: { ...state.loadStatus, expenses: true }
+      };
+    case 'PAYMENTS_SUCCESS':
+      return {
+        ...state,
+        subPayments: action.payload,
+        loadStatus: { ...state.loadStatus, payments: true }
+      };
+    case 'LOGS_SUCCESS':
+      return {
+        ...state,
+        subLogs: action.payload
+      };
+    default:
+      return state;
+  }
+}
+
+// --- 4. EL HOOK ---
+export function useTripData(tripId: string | undefined) {
+  const [state, dispatch] = useReducer(tripDataReducer, initialState);
 
   const isOffline = useSyncExternalStore(
     subscribeToOnlineStatus,
@@ -50,49 +111,42 @@ export function useTripData(tripId: string | undefined) {
 
   useEffect(() => {
     if (!tripId) {
-      setState({ rawTripData: null, expenses: [], subPayments: [], subLogs: [], error: null });
-      setLoadStatus({ trip: true, expenses: true, payments: true }); // Resolt immediatament
+      dispatch({ type: 'CLEAR' });
       return;
     }
 
-    setLoadStatus({ trip: false, expenses: false, payments: false });
-    setState(prev => ({ ...prev, error: null }));
+    dispatch({ type: 'INIT_FETCH' });
 
     const unsubTrip = onSnapshot(doc(db, DB_PATHS.getTripDocPath(tripId)), 
       (docSnap) => {
-        setState(prev => ({
-          ...prev,
-          rawTripData: docSnap.exists() ? (docSnap.data() as TripData) : null,
-          error: docSnap.exists() ? null : "Grup no trobat"
-        }));
-        setLoadStatus(prev => ({ ...prev, trip: true }));
+        dispatch({ type: 'TRIP_SUCCESS', payload: docSnap.exists() ? (docSnap.data() as TripData) : null });
       }, 
       (err: FirestoreError) => {
-        setState(prev => ({ ...prev, error: err?.code === 'permission-denied' ? "⛔ Accés denegat." : "Error carregant el grup." }));
-        setLoadStatus(prev => ({ ...prev, trip: true }));
+        dispatch({ 
+          type: 'TRIP_ERROR', 
+          payload: err?.code === 'permission-denied' ? "⛔ Accés denegat." : "Error carregant el grup." 
+        });
       }
     );
 
     const unsubExpenses = onSnapshot(collection(db, DB_PATHS.getExpensesCollectionPath(tripId)), 
       (snapshot) => {
         const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Expense[];
-        setState(prev => ({ ...prev, expenses: data }));
-        setLoadStatus(prev => ({ ...prev, expenses: true }));
+        dispatch({ type: 'EXPENSES_SUCCESS', payload: data });
       }
     );
 
     const unsubPayments = onSnapshot(collection(db, DB_PATHS.getPaymentsCollectionPath(tripId)), 
       (snapshot) => {
         const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Payment[];
-        setState(prev => ({ ...prev, subPayments: data }));
-        setLoadStatus(prev => ({ ...prev, payments: true }));
+        dispatch({ type: 'PAYMENTS_SUCCESS', payload: data });
       }
     );
 
     const unsubLogs = onSnapshot(collection(db, DB_PATHS.getLogsCollectionPath(tripId)), 
       (snapshot) => {
         const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as LogEntry[];
-        setState(prev => ({ ...prev, subLogs: data }));
+        dispatch({ type: 'LOGS_SUCCESS', payload: data });
       }
     );
 
@@ -101,10 +155,9 @@ export function useTripData(tripId: string | undefined) {
     };
   }, [tripId]);
 
-  // Càlcul derivat de l'estat de càrrega total
   const loading = useMemo(() => {
-    return !loadStatus.trip || !loadStatus.expenses || !loadStatus.payments;
-  }, [loadStatus]);
+    return !state.loadStatus.trip || !state.loadStatus.expenses || !state.loadStatus.payments;
+  }, [state.loadStatus]);
 
   const tripData = useMemo(() => {
     if (!state.rawTripData) return null;

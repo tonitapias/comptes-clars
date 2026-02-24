@@ -181,7 +181,7 @@ export function useTripMutations() {
     }
   }, [showToast, t, expenses, tripData, notifySuccess, evaluateSettledState]);
 
-  // [FASE 2 MILLORA]: Codi ultra-net. El hook ara només actua com a "controlador".
+  // [FASE 1 FIX]: Canviem 'any' per 'unknown' i fem la comprovació tipada
   const leaveTrip = useCallback(async (targetTripId?: string) => {
     if (!requireOnlineForCritical() || !currentUser) return;
     const idToLeave = targetTripId || tripData?.id;
@@ -206,11 +206,11 @@ export function useTripMutations() {
       } else {
         showToast(res.error || t('ERRORS.LEAVE_TRIP_FAILED', "No s'ha pogut sortir del viatge"), 'error');
       }
-    } catch (e: any) {
-      // Ara interceptem la clau i li passem el text de seguretat correcte
-      const errorKey = e.message;
-      if (LEAVE_ERRORS_FALLBACK[errorKey]) {
-        showToast(t(errorKey, LEAVE_ERRORS_FALLBACK[errorKey]), 'error');
+    } catch (e: unknown) {
+      // Ara interceptem l'error de forma segura
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      if (LEAVE_ERRORS_FALLBACK[errorMessage]) {
+        showToast(t(errorMessage, LEAVE_ERRORS_FALLBACK[errorMessage]), 'error');
       } else {
         showToast(parseAppError(e, t), 'error');
       }
