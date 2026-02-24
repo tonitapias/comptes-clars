@@ -6,7 +6,7 @@ import Modal from '../../Modal';
 import Button from '../../Button';
 import HolographicTicket from '../HolographicTicket'; 
 import { Settlement, TripUser, PaymentMethodId } from '../../../types';
-import { useTripState } from '../../../context/TripContext'; 
+import { useTripMeta } from '../../../context/TripContext'; 
 import { useHapticFeedback } from '../../../hooks/useHapticFeedback';
 import { LITERALS } from '../../../constants/literals';
 
@@ -26,7 +26,7 @@ interface TripSettleModalProps {
 }
 
 const TripSettleModal = React.memo(function TripSettleModal({ isOpen, onClose, settlement, onConfirm }: TripSettleModalProps) {
-  const { tripData } = useTripState(); 
+  const { tripData } = useTripMeta(); 
   const { trigger } = useHapticFeedback();
   const { t } = useTranslation();
   

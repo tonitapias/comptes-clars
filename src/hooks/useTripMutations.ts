@@ -3,7 +3,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { parseAppError } from '../utils/errorHandler';
-import { useTripState, useTripDispatch } from '../context/TripContext';
+import { useTripMeta, useTripExpenses, useTripDispatch } from '../context/TripContext';
 import { ToastType } from '../components/Toast';
 import { calculateBalances, canUserLeaveTrip, getUserBalance } from '../services/billingService'; 
 import { Currency, Settlement, Payment, Balance, unbrand, Expense, PaymentMethodId, TripData } from '../types'; 
@@ -20,7 +20,8 @@ export function useTripMutations() {
   const navigate = useNavigate();
   const { t } = useTranslation(); 
   
-  const { tripData, currentUser, expenses, isOffline } = useTripState();
+  const { tripData, currentUser, isOffline } = useTripMeta();
+  const { expenses } = useTripExpenses();
   const actions = useTripDispatch();
   
   const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);

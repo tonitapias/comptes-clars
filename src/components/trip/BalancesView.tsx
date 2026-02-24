@@ -5,7 +5,7 @@ import DonutChart from '../DonutChart';
 import Avatar from '../Avatar';
 import { Balance, CategoryStat, TripUser, toCents, unbrand } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
-import { useTripState } from '../../context/TripContext'; // <-- CANVI AQUÍ
+import { useTripMeta } from '../../context/TripContext';
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
 
 interface BalancesViewProps {
@@ -15,7 +15,7 @@ interface BalancesViewProps {
 }
 
 export default function BalancesView({ balances, categoryStats, onFilterCategory }: BalancesViewProps) {
-  const { tripData } = useTripState(); // <-- CANVI AQUÍ
+  const { tripData } = useTripMeta();
   const { trigger } = useHapticFeedback();
   
   const userMap = useMemo(() => {

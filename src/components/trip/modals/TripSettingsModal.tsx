@@ -4,7 +4,7 @@ import Modal from '../../Modal';
 import Button from '../../Button';
 import { Currency } from '../../../types';
 import { CURRENCIES } from '../../../utils/constants';
-import { useTripState } from '../../../context/TripContext'; // <-- CANVI
+import { useTripMeta } from '../../../context/TripContext';
 import { useHapticFeedback } from '../../../hooks/useHapticFeedback';
 
 interface TripSettingsModalProps {
@@ -19,7 +19,7 @@ interface TripSettingsModalProps {
 export default function TripSettingsModal({ 
   isOpen, onClose, canChangeCurrency, onUpdate, onDelete, onLeave
 }: TripSettingsModalProps) {
-  const { tripData, currentUser } = useTripState(); // <-- CANVI
+  const { tripData, currentUser } = useTripMeta();
   const { trigger } = useHapticFeedback();
   
   const [name, setName] = useState('');

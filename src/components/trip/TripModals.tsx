@@ -1,6 +1,6 @@
 // src/components/trip/TripModals.tsx
 import React, { Suspense, useCallback, useMemo, useState, useEffect } from 'react';
-import { useTripState } from '../../context/TripContext'; 
+import { useTripMeta, useTripExpenses } from '../../context/TripContext'; 
 import { useTripModals } from '../../hooks/useTripModals';
 import { useTripMutations } from '../../hooks/useTripMutations';
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
@@ -38,7 +38,8 @@ interface TripModalsProps {
 
 const TripModals = React.memo(function TripModals({ modals, mutations, showToast }: TripModalsProps) {
   const { trigger } = useHapticFeedback();
-  const { tripData, expenses } = useTripState();
+  const { tripData } = useTripMeta();
+  const { expenses } = useTripExpenses();
 
   const { 
     confirmAction, closeConfirmAction, closeExpenseModal, 

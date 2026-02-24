@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Clock, PlusCircle, Edit, Trash, UserPlus, CheckCircle2, Settings, Zap } from 'lucide-react';
 import Modal from '../Modal';
 import { LogEntry, TripUser } from '../../types';
-import { useTripState } from '../../context/TripContext';
+import { useTripMeta } from '../../context/TripContext';
 import Avatar from '../Avatar';
 
 interface ActivityModalProps {
@@ -11,7 +11,7 @@ interface ActivityModalProps {
 }
 
 export default function ActivityModal({ isOpen, onClose }: ActivityModalProps) {
-  const { tripData } = useTripState();
+  const { tripData } = useTripMeta();
   const logs = tripData?.logs || [];
   const users = tripData?.users || [];
 

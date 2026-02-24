@@ -4,7 +4,7 @@ import { Search, Receipt, ArrowRightLeft, Paperclip, Loader2, Calendar, X, Slide
 import { CATEGORIES } from '../../utils/constants';
 import { Expense, CategoryId, TripUser, Currency } from '../../types';
 import { formatCurrency, formatDateDisplay } from '../../utils/formatters';
-import { useTripState } from '../../context/TripContext'; 
+import { useTripMeta } from '../../context/TripContext'; 
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
 
 interface ExpensesListProps {
@@ -18,6 +18,12 @@ interface ExpensesListProps {
 }
 
 const PAGE_SIZE = 20;
+
+// [FASE 1 FIX]: Mapa precalculat estàtic fora del cicle de React
+// Evita reserves de memòria i injeccions innecessàries en cada render
+const STATIC_CATEGORY_MAP = new Map<CategoryId | string, typeof CATEGORIES[0]>(
+  CATEGORIES.map(c => [c.id, c])
+);
 
 const ExpenseSkeleton = () => (
   <div className="flex gap-4 p-4 animate-pulse">
@@ -141,14 +147,11 @@ export default function ExpensesList({
   onEdit,
   isSearching
 }: ExpensesListProps) {
-  const { tripData } = useTripState(); 
+  const { tripData } = useTripMeta(); 
   const { trigger } = useHapticFeedback();
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const observerTarget = useRef<HTMLDivElement>(null);
 
-  // [MILLORA ARQUITECTURA]: Estabilitzem les dependències profundes
-  // Utilitzem JSON.stringify per crear una firma inmutable dels usuaris i els pagaments.
-  // Això evita re-renders complets si el document 'tripData' s'actualitza per camps no relacionats (com els logs).
   const usersSignature = JSON.stringify(tripData?.users || []);
   
   const userMap = useMemo(() => {
@@ -161,12 +164,6 @@ export default function ExpensesList({
   }, [usersSignature]); 
 
   const getUserName = useCallback((id: string) => userMap[id]?.name || 'Desconegut', [userMap]);
-
-  const categoryMap = useMemo(() => {
-    const map = new Map<CategoryId | string, typeof CATEGORIES[0]>();
-    CATEGORIES.forEach(c => map.set(c.id, c));
-    return map;
-  }, []);
 
   const paymentsSignature = JSON.stringify(tripData?.payments || []);
 
@@ -198,10 +195,9 @@ export default function ExpensesList({
         return true;
     });
 
+    // [FASE 1 FIX]: Substituït new Date().getTime() per comparació directa de Strings ISO. Més ràpid per a arrays llargs.
     return [...expenses, ...filteredPayments].sort((a, b) => {
-        const dateA = new Date(a.date).getTime();
-        const dateB = new Date(b.date).getTime();
-        if (dateA !== dateB) return dateB - dateA;
+        if (a.date !== b.date) return b.date.localeCompare(a.date);
         return String(b.id).localeCompare(String(a.id));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -319,7 +315,8 @@ export default function ExpensesList({
         ) : (
             <ul className="space-y-4 relative z-10">
               {visibleExpenses.map((expense, index) => {
-                  const category = categoryMap.get(expense.category) || CATEGORIES[0];
+                  // [FASE 1 FIX]: Utilitzem el mapa estàtic fora de memòria
+                  const category = STATIC_CATEGORY_MAP.get(expense.category) || CATEGORIES[0];
                   const isTransfer = expense.category === 'transfer';
                   const payerName = getUserName(expense.payer);
                   const colorBase = category.color.split('-')[1];

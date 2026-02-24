@@ -12,7 +12,7 @@ import BalancesView from '../components/trip/BalancesView';
 import SettlementsView from '../components/trip/SettlementsView';
 import TripModals from '../components/trip/TripModals'; 
 
-import { TripProvider, useTripState } from '../context/TripContext'; 
+import { TripProvider, useTripMeta, useTripExpenses } from '../context/TripContext'; 
 import { useTripCalculations } from '../hooks/useTripCalculations';
 import { useTripModals } from '../hooks/useTripModals';
 import { useTripFilters } from '../hooks/useTripFilters';
@@ -37,7 +37,8 @@ export default function TripPageWrapper({ user }: TripPageProps) {
 }
 
 function TripView() {
-  const { tripData, expenses, loading, error, currentUser, isMember, isOffline } = useTripState(); 
+  const { tripData, loading, error, currentUser, isMember, isOffline } = useTripMeta();
+  const { expenses } = useTripExpenses(); 
 
   const modals = useTripModals();
   const filters = useTripFilters();

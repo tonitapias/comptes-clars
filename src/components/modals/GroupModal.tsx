@@ -5,7 +5,7 @@ import Modal from '../Modal';
 import Avatar from '../Avatar'; 
 import { TripUser } from '../../types';
 import { ToastType } from '../Toast';
-import { useTripState, useTripDispatch } from '../../context/TripContext'; // <-- CANVI
+import { useTripMeta, useTripDispatch } from '../../context/TripContext';
 import { TripService } from '../../services/tripService';
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
 
@@ -17,7 +17,7 @@ interface GroupModalProps {
 }
 
 export default function GroupModal({ isOpen, onClose, showToast, initialTab = 'members' }: GroupModalProps) {
-  const { tripData, currentUser } = useTripState(); // <-- CANVI
+  const { tripData, currentUser } = useTripMeta();
   const actions = useTripDispatch(); // <-- CANVI
   const { trigger } = useHapticFeedback();
 

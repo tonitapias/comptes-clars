@@ -2,7 +2,7 @@ import { ArrowRight, CheckCircle2, ShieldCheck, Wallet, ArrowRightLeft } from 'l
 import Avatar from '../Avatar';
 import Button from '../Button';
 import { Settlement, TripUser } from '../../types';
-import { useTripState } from '../../context/TripContext'; // <-- CANVI
+import { useTripMeta } from '../../context/TripContext';
 import { formatCurrency } from '../../utils/formatters';
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
 
@@ -12,7 +12,7 @@ interface SettlementsViewProps {
 }
 
 export default function SettlementsView({ settlements, onSettle }: SettlementsViewProps) {
-  const { tripData } = useTripState(); // <-- CANVI
+  const { tripData } = useTripMeta();
   const { trigger } = useHapticFeedback();
 
   if (!tripData) return null;

@@ -6,10 +6,11 @@ import { useTripMigration } from '../hooks/useTripMigration';
 import { useTripActions } from '../hooks/useTripActions';
 import { TripData, Expense } from '../types'; 
 
-interface TripState {
+// --- 1. DEFINICIÓ DELS NOUS ESTATS SEPARATS ---
+
+interface TripMetaState {
   tripId: string | undefined;
   tripData: TripData | null;
-  expenses: Expense[];
   loading: boolean;
   error: string | null;
   currentUser: User | null;
@@ -17,9 +18,16 @@ interface TripState {
   isOffline: boolean; 
 }
 
+interface TripExpensesState {
+  expenses: Expense[];
+}
+
 type TripDispatch = ReturnType<typeof useTripActions>;
 
-const TripStateContext = createContext<TripState | undefined>(undefined);
+// --- 2. CREACIÓ DELS CONTEXTOS ---
+
+const TripMetaContext = createContext<TripMetaState | undefined>(undefined);
+const TripExpensesContext = createContext<TripExpensesState | undefined>(undefined);
 const TripDispatchContext = createContext<TripDispatch | undefined>(undefined);
 
 interface TripProviderProps {
@@ -37,32 +45,30 @@ export function TripProvider({ children, tripId, currentUser }: TripProviderProp
   const { tripData, expenses, loading, error, isOffline } = useTripData(tripId);
   const actions = useTripActions(tripId);
   
-  // [MILLORA RISC ZERO]: Memoitzem el càlcul de isMember per evitar avaluacions constants
-  // si es dispara un render per canvis en 'isOffline' o 'loading'.
   const isMember = useMemo(() => {
     return !!(currentUser && tripData?.memberUids?.includes(currentUser.uid));
   }, [currentUser, tripData?.memberUids]);
 
-  // [CTO FIX]: Hem eliminat el useEffect() que calculava i actualitzava l'estat isSettled.
-  // L'actualització de l'estat de saldat es farà de forma transaccional només quan 
-  // es facin mutacions reals (afegir/esborrar/editar despeses) per protegir Firestore 
-  // de lectures/escriptures innecessàries i evitar condicions de carrera.
+  // [FASE 2 FIX]: Dades estructurals del viatge (muten poc)
+  const metaValue = useMemo<TripMetaState>(() => ({
+    tripId, tripData, loading, error, currentUser, isMember, isOffline
+  }), [tripId, tripData, loading, error, currentUser, isMember, isOffline]);
 
-  // [NEXT STEPS - ARQUITECTURA]: Si l'app creix molt, aquest useMemo serà un coll d'ampolla.
-  // Es recomanaria migrar a Zustand o Jotai per evitar que els canvis a 'expenses' 
-  // provoquin re-renders a components que només llegeixen 'tripData.name', per exemple.
-  const stateValue = useMemo<TripState>(() => ({
-    tripId, tripData, expenses, loading, error, currentUser, isMember, isOffline
-  }), [tripId, tripData, expenses, loading, error, currentUser, isMember, isOffline]);
+  // [FASE 2 FIX]: Dades de despeses (muten sovint quan s'afegeix/edita/esborra)
+  const expensesValue = useMemo<TripExpensesState>(() => ({
+    expenses
+  }), [expenses]);
 
   const dispatchValue = useMemo<TripDispatch>(() => actions, [actions]);
 
   return (
     <TripDispatchContext.Provider value={dispatchValue}>
-      <TripStateContext.Provider value={stateValue}>
-        <TripMigrator tripId={tripId} tripData={tripData} />
-        {children}
-      </TripStateContext.Provider>
+      <TripMetaContext.Provider value={metaValue}>
+        <TripExpensesContext.Provider value={expensesValue}>
+          <TripMigrator tripId={tripId} tripData={tripData} />
+          {children}
+        </TripExpensesContext.Provider>
+      </TripMetaContext.Provider>
     </TripDispatchContext.Provider>
   );
 }
@@ -71,10 +77,18 @@ export function TripProvider({ children, tripId, currentUser }: TripProviderProp
 // HOOKS CONSUMIDORS OPTIMITZATS
 // ============================================================================
 
-export function useTripState() {
-  const context = useContext(TripStateContext);
+export function useTripMeta() {
+  const context = useContext(TripMetaContext);
   if (context === undefined) {
-    throw new Error('useTripState must be used within a TripProvider');
+    throw new Error('useTripMeta must be used within a TripProvider');
+  }
+  return context;
+}
+
+export function useTripExpenses() {
+  const context = useContext(TripExpensesContext);
+  if (context === undefined) {
+    throw new Error('useTripExpenses must be used within a TripProvider');
   }
   return context;
 }
