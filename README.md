@@ -1,9 +1,14 @@
+Aquí tens el codi brut (Raw) preparat perquè el puguis copiar i enganxar directament al teu fitxer `README.md` sense problemes de format.
+
+**Recorda utilitzar el botó de "Copy code" (o "Copiar codi")** que apareix a la cantonada superior dreta d'aquest bloc fosc per assegurar-te que no es perd cap símbol:
+
+```markdown
 # 💸 Comptes Clars
 
 **Comptes Clars** és una aplicació web progressiva (PWA) moderna dissenyada per gestionar i dividir despeses de viatges i grups de manera justa i sense complicacions. Permet fer un seguiment de qui ha pagat què i calcula automàticament els deutes per liquidar els comptes de la manera més eficient possible.
 
-![Estat del projecte](https://img.shields.io/badge/Estat-En%20Producció-green)
-![Llicència](https://img.shields.io/badge/Llicència-MIT-blue)
+![Estat del projecte](https://img.shields.io/badge/Estat-En%20Producci%C3%B3-green)
+![Llicència](https://img.shields.io/badge/Llic%C3%A8ncia-MIT-blue)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
 ![Firebase](https://img.shields.io/badge/Firebase-Supported-FFCA28?logo=firebase&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178C6?logo=typescript&logoColor=white)
@@ -41,7 +46,7 @@ L'aplicació ha estat dissenyada amb el rendiment i l'escalabilitat al centre:
 
 ## 📱 Estructura del Projecte
 
-```bash
+```text
 src/
 ├── components/      # Components de UI pur (Botons, Avatars, Toasts...)
 │   ├── modals/      # Finestres modals (Crear despesa, Ajustos...)
@@ -54,60 +59,82 @@ src/
 ├── types/           # Definicions de TypeScript i Branded Types
 ├── utils/           # Formatadors, exports PDF i gestió d'errors
 └── App.tsx          # Enrutament i Layout principal
-🚀 Instal·lació i Desenvolupament en Local
+
+```
+
+## 🚀 Instal·lació i Desenvolupament en Local
+
 Segueix aquests passos per executar el projecte a la teva màquina:
 
-1. Clonar el repositori
-Bash
+### 1. Clonar el repositori
+
+```bash
 git clone [https://github.com/tonitapias/comptes-clars.git](https://github.com/tonitapias/comptes-clars.git)
 cd comptes-clars
-2. Instal·lar dependències
-Bash
+
+```
+
+### 2. Instal·lar dependències
+
+```bash
 npm install
-3. Configurar Firebase
-Crea un projecte a Firebase Console.
 
-Habilita Firestore Database i Authentication (Mètodes: Google i Anònim).
+```
 
-Crea un fitxer .env a l'arrel del projecte amb les teves credencials web:
+### 3. Configurar Firebase
 
-Fragment de codi
+1. Crea un projecte a [Firebase Console](https://console.firebase.google.com/).
+2. Habilita **Firestore Database** i **Authentication** (Mètodes: Google i Anònim).
+3. Crea un fitxer `.env` a l'arrel del projecte amb les teves credencials web:
+
+```env
 VITE_FIREBASE_API_KEY=la_teva_api_key
 VITE_FIREBASE_AUTH_DOMAIN=el_teu_projecte.firebaseapp.com
 VITE_FIREBASE_PROJECT_ID=el_teu_projecte_id
 VITE_FIREBASE_STORAGE_BUCKET=el_teu_projecte.appspot.com
 VITE_FIREBASE_MESSAGING_SENDER_ID=el_teu_sender_id
 VITE_FIREBASE_APP_ID=el_teu_app_id
-4. Executar l'entorn de desenvolupament
-Bash
+
+```
+
+### 4. Executar l'entorn de desenvolupament
+
+```bash
 npm run dev
-📦 Desplegament
-El projecte està preparat per a entorns de producció com Vercel o Netlify.
 
-Vercel (Recomanat)
-El fitxer vercel.json ja està configurat per gestionar l'enrutament de la SPA i injectar les capçaleres de seguretat (COOP/COEP) necessàries perquè l'autenticació amb Google funcioni correctament en dispositius mòbils.
+```
 
-Instal·la la CLI de Vercel: npm i -g vercel
+## 📦 Desplegament
 
-Executa el desplegament:
+El projecte està preparat per a entorns de producció com **Vercel** o **Netlify**.
 
-Bash
+### Vercel (Recomanat)
+
+El fitxer `vercel.json` ja està configurat per gestionar l'enrutament de la SPA i injectar les **capçaleres de seguretat (COOP/COEP)** necessàries perquè l'autenticació amb Google funcioni correctament en dispositius mòbils.
+
+1. Instal·la la CLI de Vercel: `npm i -g vercel`
+2. Executa el desplegament:
+
+```bash
 vercel --prod
-🤝 Contribució
+
+```
+
+## 🤝 Contribució
+
 Les contribucions són totalment benvingudes! Si vols millorar l'app o solucionar un bug:
 
-Fes un Fork del projecte.
+1. Fes un *Fork* del projecte.
+2. Crea una branca per a la teva funcionalitat (`git checkout -b feature/NovaFuncio`).
+3. Fes *Commit* dels teus canvis (`git commit -m 'feat: Afegeix nova funció'`).
+4. Puja-ho al teu repositori (`git push origin feature/NovaFuncio`).
+5. Obre un *Pull Request* i ho revisarem.
 
-Crea una branca per a la teva funcionalitat (git checkout -b feature/NovaFuncio).
+## 📄 Llicència
 
-Fes Commit dels teus canvis (git commit -m 'feat: Afegeix nova funció').
+Aquest projecte es distribueix sota la llicència **MIT**. Consulta el fitxer `LICENSE` per a més detalls.
 
-Puja-ho al teu repositori (git push origin feature/NovaFuncio).
-
-Obre un Pull Request i ho revisarem.
-
-📄 Llicència
-Aquest projecte es distribueix sota la llicència MIT. Consulta el fitxer LICENSE per a més detalls.
+---
 
 <div align="center">
 <p>
@@ -117,3 +144,7 @@ Fet amb ❤️ per <a href="https://www.google.com/search?q=https://github.com/t
 Comptes Clars © 2025
 </p>
 </div>
+
+```
+
+```
