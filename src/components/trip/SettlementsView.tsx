@@ -5,6 +5,7 @@ import { Settlement, TripUser } from '../../types';
 import { useTripMeta } from '../../context/TripContext';
 import { formatCurrency } from '../../utils/formatters';
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
+import { PiggyBankSecret } from './PiggyBankSecret'; // <-- IMPORTEM L'EASTER EGG
 
 interface SettlementsViewProps {
   settlements: Settlement[];
@@ -30,7 +31,10 @@ export default function SettlementsView({ settlements, onSettle }: SettlementsVi
             </div>
         </div>
         <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-3 tracking-tight">Tot Quadrat</h3>
-        <p className="text-slate-500 dark:text-slate-400 max-w-xs leading-relaxed font-medium">El grup està en pau. <br/>No hi ha deutes pendents.</p>
+        <p className="text-slate-500 dark:text-slate-400 max-w-xs leading-relaxed font-medium mb-8">El grup està en pau. <br/>No hi ha deutes pendents.</p>
+        
+        {/* 🐣 EASTER EGG INJECTAT AQUÍ */}
+        <PiggyBankSecret isSettled={true} />
       </div>
     );
   }
