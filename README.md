@@ -1,8 +1,3 @@
-Aquí tens el codi brut (Raw) preparat perquè el puguis copiar i enganxar directament al teu fitxer `README.md` sense problemes de format.
-
-**Recorda utilitzar el botó de "Copy code" (o "Copiar codi")** que apareix a la cantonada superior dreta d'aquest bloc fosc per assegurar-te que no es perd cap símbol:
-
-```markdown
 # 💸 Comptes Clars
 
 **Comptes Clars** és una aplicació web progressiva (PWA) moderna dissenyada per gestionar i dividir despeses de viatges i grups de manera justa i sense complicacions. Permet fer un seguiment de qui ha pagat què i calcula automàticament els deutes per liquidar els comptes de la manera més eficient possible.
