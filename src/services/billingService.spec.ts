@@ -61,7 +61,6 @@ describe('Billing Service (Core Logic)', () => {
       expect(balances.find(b => b.userId === 'u3')?.amount).toBe(0); 
     });
 
-    // --- NOUS TESTS (Auditoria Risc Zero) ---
     it('should calculate exact splits correctly and absorb remainders', () => {
       const expenses = [
         {
@@ -98,6 +97,36 @@ describe('Billing Service (Core Logic)', () => {
       const receiverAmounts = balances.filter(b => b.userId !== 'u1').map(b => b.amount); 
       expect(receiverAmounts.every(a => a === 333 || a === 334)).toBe(true);
     });
+
+    // --- NOUS TESTS DE BALANÇOS (Moguts aquí perquè tinguin sentit semàntic) ---
+    it('should correctly accumulate balances from multiple expenses', () => {
+      const expenses = [
+        mockExpense('e1', 3000, 'u1', ['u1', 'u2', 'u3']), // u1 paga 30€ (Tots 3)
+        mockExpense('e2', 6000, 'u2', ['u1', 'u2']),       // u2 paga 60€ (Només u1 i u2)
+      ];
+      const balances = calculateBalances(expenses, users);
+      
+      // u1: paga 30, gasta 10 (e1) + gasta 30 (e2) = -10€ (-1000 cents)
+      expect(balances.find(b => b.userId === 'u1')?.amount).toBe(-1000);
+      // u2: paga 60, gasta 10 (e1) + gasta 30 (e2) = +20€ (+2000 cents)
+      expect(balances.find(b => b.userId === 'u2')?.amount).toBe(2000);
+      // u3: gasta 10 (e1) = -10€ (-1000 cents)
+      expect(balances.find(b => b.userId === 'u3')?.amount).toBe(-1000);
+    });
+
+    it('should handle a payer who is not involved in the expense', () => {
+      const expenses = [mockExpense('e3', 2000, 'u1', ['u2', 'u3'])]; // u1 paga, però només u2 i u3 participen
+      const balances = calculateBalances(expenses, users);
+      
+      expect(balances.find(b => b.userId === 'u1')?.amount).toBe(2000);  // u1 rep el 100%
+      expect(balances.find(b => b.userId === 'u2')?.amount).toBe(-1000); // u2 paga la meitat
+      expect(balances.find(b => b.userId === 'u3')?.amount).toBe(-1000); // u3 paga la meitat
+    });
+
+    it('should return 0 balances when there are no expenses', () => {
+      const balances = calculateBalances([], users);
+      expect(balances.every(b => b.amount === 0)).toBe(true);
+    });
   });
 
   // ==========================================================
@@ -118,6 +147,30 @@ describe('Billing Service (Core Logic)', () => {
         expect.objectContaining({ from: 'u2', to: 'u1', amount: 1000 }),
         expect.objectContaining({ from: 'u3', to: 'u1', amount: 1000 })
       ]));
+    });
+
+    it('should return empty array if all balances are exactly 0', () => {
+      const balances = [
+        { userId: 'u1', amount: toCents(0) },
+        { userId: 'u2', amount: toCents(0) },
+      ];
+      const settlements = calculateSettlements(balances);
+      expect(settlements).toHaveLength(0);
+    });
+
+    it('should handle micro-cents remnants without infinite loops', () => {
+      // A vegades, depenent dels arrodoniments, pot quedar +1 cèntim orfe
+      const balances = [
+        { userId: 'u1', amount: toCents(1000) },
+        { userId: 'u2', amount: toCents(-500) },
+        { userId: 'u3', amount: toCents(-499) } 
+      ];
+      
+      const settlements = calculateSettlements(balances);
+      expect(settlements).toHaveLength(2);
+      // Ens assegurem que les liquidacions sumen exactament els deutes negatius (999)
+      const totalSettled = settlements.reduce((acc, s) => acc + (s.amount as number), 0);
+      expect(totalSettled).toBe(999);
     });
 
     it('should handle complex chain debts', () => {
