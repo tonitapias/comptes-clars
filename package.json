@@ -45,5 +45,11 @@
   "overrides": {
     "ajv": "^8.17.1",
     "minimatch": "^10.2.1"
+  },
+  "allowScripts": {
+    "@firebase/util@1.13.0": true,
+    "core-js@3.48.0": true,
+    "esbuild@0.28.2": true,
+    "protobufjs@7.6.5": true
   }
 }
