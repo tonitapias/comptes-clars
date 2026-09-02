@@ -51,6 +51,14 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      # L'emulador de Firestore (dins de firebase-tools) exigeix JDK 21+;
+      # el runner d'ubuntu-latest no en porta un prou modern per defecte.
+      - name: ☕ Configurar Java (emulador de Firestore)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
       - name: 📦 Instal·lar dependències
         run: npm ci
 
