@@ -271,7 +271,7 @@ export default function LandingPage({ user }: LandingPageProps) {
                 </button>
              </div>
            ) : (
-             <Button variant="secondary" onClick={() => setIsAuthModalOpen(true)}>
+             <Button variant="secondary" onClick={() => setIsAuthModalOpen(true)} className="h-11 px-5">
                 Iniciar sessió
              </Button>
            )}
@@ -314,7 +314,7 @@ export default function LandingPage({ user }: LandingPageProps) {
                                     value={inputValue}
                                     onChange={(e) => setInputValue(e.target.value)}
                                 />
-                                <Button type="submit" variant="secondary" disabled={!inputValue} aria-label="Continuar">
+                                <Button type="submit" variant="secondary" disabled={!inputValue} aria-label="Continuar" className="w-14 shrink-0 px-0">
                                     <ArrowRight size={20}/>
                                 </Button>
                             </form>
@@ -327,17 +327,17 @@ export default function LandingPage({ user }: LandingPageProps) {
                         <h2 className="text-2xl md:text-3xl font-black text-content-body tracking-tight">{greeting}, <span className="text-primary">{userName}.</span></h2>
                         <div className="flex gap-3">
                              {actionState === 'idle' ? (
-                                <Button onClick={() => setActionState('creating')} icon={Plus}>
+                                <Button onClick={() => setActionState('creating')} icon={Plus} className="h-11 px-5">
                                     Nou projecte
                                 </Button>
                              ) : (
-                                <Button variant="secondary" onClick={() => { setActionState('idle'); setInputValue(''); }}>
+                                <Button variant="secondary" onClick={() => { setActionState('idle'); setInputValue(''); }} className="h-11 px-5">
                                     Cancel·lar
                                 </Button>
                              )}
 
                              {actionState === 'idle' && (
-                                <Button variant="secondary" icon={KeyRound} onClick={() => setActionState('joining')}>
+                                <Button variant="secondary" icon={KeyRound} onClick={() => setActionState('joining')} className="h-11 px-5">
                                     Tinc codi
                                 </Button>
                              )}
@@ -426,6 +426,7 @@ export default function LandingPage({ user }: LandingPageProps) {
                 <Button
                     variant="secondary"
                     fullWidth
+                    className="h-12"
                     onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
                 >
                     Cancel·la
@@ -433,6 +434,7 @@ export default function LandingPage({ user }: LandingPageProps) {
                 <Button
                     variant="danger"
                     fullWidth
+                    className="h-12"
                     loading={isLeaving}
                     onClick={confirmLeaveTrip}
                 >
