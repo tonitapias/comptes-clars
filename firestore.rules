@@ -11,13 +11,34 @@ service cloud.firestore {
       function isTripMemberBefore() {
         return isAuthenticated() && request.auth.uid in resource.data.memberUids;
       }
-      
+
+      // Un usuari NO membre només pot escriure per unir-se: l'escriptura s'ha de
+      // limitar a `users`/`memberUids` i ha d'incloure el seu propi uid al resultat.
+      // Sense això, qualsevol autenticat podia reescriure qualsevol altre camp
+      // (nom, isDeleted, ownerId...) d'un viatge que no era seu.
+      function isSelfJoin() {
+        return isAuthenticated()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['users', 'memberUids'])
+          && request.auth.uid in request.resource.data.memberUids;
+      }
+
+      // Propietari: `ownerId` si existeix; pels viatges anteriors a aquest camp,
+      // el primer membre històric (mateix criteri que useTripMutations.ts:isUserOwner).
+      function isTripOwner() {
+        return isAuthenticated() && (
+          resource.data.ownerId == request.auth.uid ||
+          (!('ownerId' in resource.data) && resource.data.memberUids[0] == request.auth.uid)
+        );
+      }
+
       // REGLES DEL DOCUMENT PRINCIPAL
       allow create: if isAuthenticated();
+      // [PENDENT]: oberta a qualsevol autenticat perquè joinTripViaLink necessita
+      // llegir `users` abans de ser membre (per detectar reincorporacions per email).
+      // Tancar-ho del tot vol dir moure aquesta comprovació a una Cloud Function.
       allow read: if isAuthenticated();
-      allow update: if isTripMemberBefore() ||
-        (isAuthenticated() && request.auth.uid in request.resource.data.memberUids);
-      allow delete: if isTripMemberBefore();
+      allow update: if isTripMemberBefore() || isSelfJoin();
+      allow delete: if isTripOwner();
 
       // [FIX DEFINITIU]: Comprovem si l'usuari és membre ARA MATEIX (get) 
       // o si ho serà DESPRÉS de l'operació (getAfter). 
