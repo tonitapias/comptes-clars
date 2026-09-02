@@ -3,6 +3,7 @@ import { FolderGit2, LogOut, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { TripData } from '../../types';
 import Avatar from '../Avatar';
+import { formatDate } from '../../utils/formatters';
 
 interface TripCardProps {
     trip: TripData;
@@ -13,7 +14,7 @@ interface TripCardProps {
 
 export default function TripCard({ trip, currentUser, onNavigate, onLeave }: TripCardProps) {
     const currentUserInfo = trip.users?.find(u => u.linkedUid === currentUser.uid);
-    const dateStr = trip.createdAt ? new Date(trip.createdAt).toLocaleDateString() : '---';
+    const dateStr = trip.createdAt ? formatDate(trip.createdAt) : '---';
     
     return (
         <div 
