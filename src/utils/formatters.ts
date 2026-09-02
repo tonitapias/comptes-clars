@@ -32,9 +32,7 @@ const getFormatter = (locale: string, currencyCode: string): Intl.NumberFormat =
 export const formatMoney = (amount: MoneyCents | null | undefined, currency: Currency | undefined): string => {
   // 1. Sanitització d'entrada: Si no hi ha import, mostrem 0.
   if (amount === null || amount === undefined || isNaN(amount)) {
-    if (amount !== toCents(0)) {
-      return formatMoney(toCents(0), currency);
-    }
+    return formatMoney(toCents(0), currency);
   }
 
   // 2. Valors per defecte segurs (Safe Defaults)
@@ -74,9 +72,23 @@ export const formatDate = (dateString: string): string => {
       day: 'numeric', 
       month: 'short'
     });
-  } catch (e) {
+  } catch {
     return '';
   }
 };
 
 export const formatDateDisplay = formatDate;
+
+/**
+ * Compara si una data ISO cau el mateix dia natural que `reference`.
+ * Comparació directa de Y/M/D: no depèn de com es formati la data per pantalla.
+ */
+export const isSameCalendarDay = (isoDate: string, reference: Date): boolean => {
+  if (!isoDate) return false;
+  const d = new Date(isoDate);
+  if (isNaN(d.getTime())) return false;
+
+  return d.getFullYear() === reference.getFullYear()
+    && d.getMonth() === reference.getMonth()
+    && d.getDate() === reference.getDate();
+};

@@ -78,40 +78,50 @@ export const TripUserSchema = z.object({
   isDeleted: z.boolean().optional()
 });
 
-export const ExpenseSchema = z.object({
+// Forma base de l'objecte (sense les regles creuades de sota), perquè `updateExpense`
+// pugui validar actualitzacions parcials amb `.partial()` — els `.refine()` de Zod
+// no exposen aquest mètode un cop encadenats.
+const ExpenseObjectSchema = z.object({
   title: z.string().trim().min(1, "El títol és obligatori").max(50, "Títol massa llarg (màx 50)"),
-  
+
   amount: MoneyAmountSchema,
-  
+
   payer: z.string().trim().min(1, "El pagador és obligatori"),
   category: z.enum(CATEGORY_IDS),
-  
+
   involved: z.array(z.string())
     .min(1, "Hi ha d'haver almenys una persona involucrada")
     .refine((items) => new Set(items).size === items.length, {
       message: "No es poden repetir persones a la mateixa despesa"
     }),
-  
+
   date: z.string().refine((val) => !isNaN(Date.parse(val)), {
     message: "La data no és vàlida"
   }),
-  
+
   splitType: z.enum(SPLIT_TYPE_VALUES).optional(),
-  
+
   splitDetails: z.record(
-    z.string(), 
+    z.string(),
     z.preprocess(
       currencyInputToCents,
       z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
     )
   ).optional(),
-  
+
   receiptUrl: z.string().url("L'enllaç de la imatge no és vàlid").optional().nullable(),
-  
+
   originalAmount: z.number().positive().optional(),
   originalCurrency: z.enum(CURRENCY_CODES).optional(),
   exchangeRate: z.number().positive().optional()
-})
+});
+
+// Validació lleugera per a actualitzacions parcials (TripService.updateExpense):
+// comprova tipus/rangs de qualsevol camp present, sense les regles creuades
+// (exact/shares) que necessiten l'objecte sencer per tenir sentit.
+export const ExpensePartialSchema = ExpenseObjectSchema.partial();
+
+export const ExpenseSchema = ExpenseObjectSchema
 // REGLES DE NEGOCI
 
 // Mode EXACT

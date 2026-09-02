@@ -7,6 +7,7 @@ import { Balance, CategoryStat, TripUser, toCents, unbrand } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
 import { useTripMeta } from '../../context/TripContext';
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
+import { BUSINESS_RULES } from '../../config/businessRules';
 
 interface BalancesViewProps {
   balances: Balance[];
@@ -26,22 +27,26 @@ export default function BalancesView({ balances, categoryStats, onFilterCategory
     }, {} as Record<string, TripUser>);
   }, [tripData?.users]);
 
-  if (!tripData) return null;
-  const { currency } = tripData;
-
+  // [FIX regles-dels-hooks]: aquests dos useMemo han d'anar abans de qualsevol
+  // "return" condicional (vegeu més avall) perquè l'ordre de hooks no depengui
+  // de si tripData ja ha carregat.
   const sortedBalances = useMemo(() => {
     return [...balances].sort((a, b) => {
         const valA = unbrand(a.amount);
         const valB = unbrand(b.amount);
-        if (Math.abs(valA) < 1 && Math.abs(valB) >= 1) return 1;
-        if (Math.abs(valA) >= 1 && Math.abs(valB) < 1) return -1;
+        const margin = BUSINESS_RULES.SETTLED_TOLERANCE_MARGIN;
+        if (Math.abs(valA) < margin && Math.abs(valB) >= margin) return 1;
+        if (Math.abs(valA) >= margin && Math.abs(valB) < margin) return -1;
         return valA - valB;
     });
   }, [balances]);
 
-  const totalExpense = useMemo(() => 
+  const totalExpense = useMemo(() =>
     toCents(categoryStats.reduce((acc, curr) => acc + unbrand(curr.amount), 0)),
   [categoryStats]);
+
+  if (!tripData) return null;
+  const { currency } = tripData;
 
   return (
     <div className="space-y-8 animate-fade-in pb-32 pt-2 px-1">
@@ -137,7 +142,7 @@ export default function BalancesView({ balances, categoryStats, onFilterCategory
                 {sortedBalances.map((balance, idx) => {
                     const amountVal = unbrand(balance.amount);
                     const isPositive = amountVal > 0;
-                    const isZero = Math.abs(amountVal) < 1;
+                    const isZero = Math.abs(amountVal) < BUSINESS_RULES.SETTLED_TOLERANCE_MARGIN;
                     const user = userMap[balance.userId];
                     const userName = user?.name || 'Usuari';
                     

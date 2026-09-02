@@ -61,7 +61,6 @@ function TripView() {
   useEffect(() => {
     if (isOffline) {
       if (!loading) {
-        // @ts-ignore
         showToast('Sense connexió a Internet. Mode lectura.', 'warning', Infinity);
         wasOffline.current = true;
       }
@@ -149,7 +148,7 @@ function TripView() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100 transition-colors duration-500">
-      {toast && <Toast message={toast.msg} type={toast.type} duration={(toast as any).duration} onClose={clearToast} />}
+      {toast && <Toast message={toast.msg} type={toast.type} duration={toast.duration} onClose={clearToast} />}
       
       <TripHeader 
         displayedTotal={displayedTotal} totalGroupSpending={totalGroupSpending} userBalance={userBalance} 

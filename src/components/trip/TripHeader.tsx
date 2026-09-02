@@ -1,5 +1,5 @@
 // src/components/trip/TripHeader.tsx
-import { Settings, Users, Share2, FileText, History, ArrowLeft, Sun, Moon, TrendingUp, TrendingDown } from 'lucide-react';
+import { Settings, Users, Share2, FileText, History, ArrowLeft, Sun, Moon, TrendingUp, TrendingDown, LucideIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useTripMeta } from '../../context/TripContext';
 import { useTheme } from '../../hooks/useTheme';
@@ -54,8 +54,8 @@ export default function TripHeader({
     onClick, 
     colorClass 
   }: { 
-    icon: any, 
-    label: string, 
+    icon: LucideIcon,
+    label: string,
     onClick: () => void, 
     colorClass: string 
   }) => (

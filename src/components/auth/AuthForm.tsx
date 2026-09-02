@@ -2,15 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { 
   Loader2, Mail, Lock, Eye, EyeOff, CheckCircle, AlertCircle 
 } from 'lucide-react';
-import { 
-  GoogleAuthProvider, 
-  signInWithPopup, 
+import {
+  GoogleAuthProvider,
+  signInWithPopup,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   updateProfile,
   sendPasswordResetEmail
 } from 'firebase/auth';
-import { auth } from '../../config/firebase'; 
+import { FirebaseError } from 'firebase/app';
+import { auth } from '../../config/firebase';
 
 type AuthMode = 'initial' | 'login-email' | 'signup-email';
 type ErrorField = 'none' | 'email' | 'password' | 'both';
@@ -41,12 +42,16 @@ export default function AuthForm({ onClose, initialMode = 'initial' }: AuthFormP
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Netejar errors quan l'usuari escriu
+  // Netejar errors quan l'usuari escriu. `authError` NO ha de ser dependència:
+  // just després de mostrar-se (triggerError) encara no ha canviat cap camp, i
+  // si l'afegíem aquí l'efecte es tornaria a disparar a l'instant i s'esborraria
+  // l'error tot just acabat de mostrar.
   useEffect(() => {
     if (authError) {
         setAuthError('');
         setErrorField('none');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email, password, confirmPassword]);
 
   // Trigger animació shake
@@ -64,10 +69,11 @@ export default function AuthForm({ onClose, initialMode = 'initial' }: AuthFormP
     try { 
       await signInWithPopup(auth, new GoogleAuthProvider());
       onClose();
-    } catch (e: any) { 
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : '';
       if (!auth.currentUser) {
         // No mostrem error si l'usuari tanca el popup voluntàriament
-        if (!e.message?.includes('closed-by-user')) {
+        if (!message.includes('closed-by-user')) {
              triggerError('No s\'ha pogut iniciar amb Google', 'none');
         }
       } else {
@@ -94,14 +100,15 @@ export default function AuthForm({ onClose, initialMode = 'initial' }: AuthFormP
         await signInWithEmailAndPassword(auth, email, password);
       }
       onClose();
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Mapping d'errors de Firebase a camps visuals
-      if (err.code === 'auth/email-already-in-use') triggerError('Aquest correu ja està registrat', 'email');
-      else if (err.code === 'auth/invalid-email') triggerError('Format de correu incorrecte', 'email');
-      else if (err.code === 'auth/user-not-found') triggerError('No existeix cap compte amb aquest correu', 'email');
-      else if (err.code === 'auth/wrong-password') triggerError('Contrasenya incorrecta', 'password');
-      else if (err.code === 'auth/invalid-credential') triggerError('Credencials incorrectes', 'both');
-      else if (err.code === 'auth/weak-password') triggerError('La contrasenya ha de tenir 6 caràcters mínim', 'password');
+      const code = err instanceof FirebaseError ? err.code : '';
+      if (code === 'auth/email-already-in-use') triggerError('Aquest correu ja està registrat', 'email');
+      else if (code === 'auth/invalid-email') triggerError('Format de correu incorrecte', 'email');
+      else if (code === 'auth/user-not-found') triggerError('No existeix cap compte amb aquest correu', 'email');
+      else if (code === 'auth/wrong-password') triggerError('Contrasenya incorrecta', 'password');
+      else if (code === 'auth/invalid-credential') triggerError('Credencials incorrectes', 'both');
+      else if (code === 'auth/weak-password') triggerError('La contrasenya ha de tenir 6 caràcters mínim', 'password');
       else triggerError('Error d\'accés. Revisa les dades.', 'both');
     }
   };
@@ -119,11 +126,12 @@ export default function AuthForm({ onClose, initialMode = 'initial' }: AuthFormP
     try {
         await sendPasswordResetEmail(auth, email);
         setResetSent(true);
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error(error);
-        if (error.code === 'auth/user-not-found') {
+        const code = error instanceof FirebaseError ? error.code : '';
+        if (code === 'auth/user-not-found') {
             triggerError("No hi ha cap compte amb aquest correu.", 'email');
-        } else if (error.code === 'auth/invalid-email') {
+        } else if (code === 'auth/invalid-email') {
             triggerError("El format del correu no és vàlid.", 'email');
         } else {
             triggerError("No s'ha pogut enviar el correu.", 'none');

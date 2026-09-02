@@ -3,6 +3,19 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
+  // Els tests de firestore.rules viuen a firestore-tests/ i necessiten l'emulador
+  // en marxa (vegeu `npm run test:rules`). Els excloem de `npm run test` perquè
+  // aquest ha de poder córrer ràpid i sense dependències externes (CI inclòs).
+  test: {
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/cypress/**',
+      '**/.{idea,git,cache,output,temp}/**',
+      '**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*',
+      'firestore-tests/**',
+    ],
+  },
   plugins: [
     react(),
     VitePWA({

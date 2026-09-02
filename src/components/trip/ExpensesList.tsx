@@ -3,7 +3,7 @@ import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import { Search, Receipt, ArrowRightLeft, Paperclip, Loader2, Calendar, X, SlidersHorizontal, ArrowDownRight } from 'lucide-react'; 
 import { CATEGORIES } from '../../utils/constants';
 import { Expense, CategoryId, TripUser, Currency, } from '../../types';
-import { formatCurrency, formatDateDisplay } from '../../utils/formatters';
+import { formatCurrency, formatDateDisplay, isSameCalendarDay } from '../../utils/formatters';
 import { useTripMeta } from '../../context/TripContext'; 
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
 
@@ -165,21 +165,19 @@ export default function ExpensesList({
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const observerTarget = useRef<HTMLDivElement>(null);
 
-  const tripUsers = tripData?.users || [];
-  
   const userMap = useMemo(() => {
+    const tripUsers = tripData?.users || [];
     if (!tripUsers.length) return {};
     return tripUsers.reduce((acc, user) => {
       acc[user.id] = user;
       return acc;
     }, {} as Record<string, TripUser>);
-  }, [tripUsers]);
-   
+  }, [tripData?.users]);
+
   const getUserName = useCallback((id: string) => userMap[id]?.name || 'Desconegut', [userMap]);
 
-  const tripPayments = tripData?.payments || [];
-
 const mergedExpenses = useMemo(() => {
+  const tripPayments = tripData?.payments || [];
   const mappedPayments: Expense[] = tripPayments.map(p => {
       const methodLabel = p.method === 'bizum' ? 'Bizum' : p.method === 'transfer' ? 'Transferència' : p.method === 'card' ? 'Targeta' : 'Efectiu';
       return {
@@ -210,7 +208,7 @@ const mergedExpenses = useMemo(() => {
       if (a.date !== b.date) return b.date.localeCompare(a.date);
       return String(b.id).localeCompare(String(a.id));
   });
-}, [expenses, tripPayments, searchQuery, filterCategory, getUserName]);
+}, [expenses, tripData?.payments, searchQuery, filterCategory, getUserName]);
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
@@ -330,8 +328,8 @@ const mergedExpenses = useMemo(() => {
                   const colorBase = category.color.split('-')[1];
 
                   const showDateHeader = index === 0 || expense.date !== visibleExpenses[index - 1].date;
-                  const displayDate = formatDateDisplay(expense.date); 
-                  const isToday = displayDate.toLowerCase().includes('avui') || displayDate.toLowerCase().includes('today');
+                  const displayDate = formatDateDisplay(expense.date);
+                  const isToday = isSameCalendarDay(expense.date, new Date());
                   
                   const involvedName = isTransfer && expense.involved[0] ? getUserName(expense.involved[0]) : '';
 

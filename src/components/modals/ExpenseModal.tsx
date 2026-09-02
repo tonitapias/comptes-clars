@@ -102,9 +102,9 @@ export default function ExpenseModal({ isOpen, onClose, initialData, users, curr
   const [uiMode, setUiMode] = useState<string>(formState.splitType);
 
   useEffect(() => {
-    if (formState.splitType === SPLIT_TYPES.SHARES && uiMode !== 'percent' && uiMode !== 'shares') { setUiMode('shares'); } 
+    if (formState.splitType === SPLIT_TYPES.SHARES && uiMode !== 'percent' && uiMode !== 'shares') { setUiMode('shares'); }
     else if (formState.splitType !== SPLIT_TYPES.SHARES) { setUiMode(formState.splitType); }
-  }, [formState.splitType]);
+  }, [formState.splitType, uiMode]);
 
   useEffect(() => { if (!isOpen) setIsDeleting(false); }, [isOpen]);
 

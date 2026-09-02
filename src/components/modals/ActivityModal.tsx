@@ -12,13 +12,12 @@ interface ActivityModalProps {
 
 export default function ActivityModal({ isOpen, onClose }: ActivityModalProps) {
   const { tripData } = useTripMeta();
-  const logs = tripData?.logs || [];
-  const users = tripData?.users || [];
 
-  // [CORRECCIÓ DE L'ERROR]: El log.userId normalment guarda el UID de Firebase (linkedUid), 
+  // [CORRECCIÓ DE L'ERROR]: El log.userId normalment guarda el UID de Firebase (linkedUid),
   // però el user.id és un UUID intern. Creem un mapa que busqui per tots dos per assegurar-nos
   // que sempre trobem l'usuari actualitzat per recuperar el seu nom viu.
   const userMap = useMemo(() => {
+    const users = tripData?.users || [];
     return users.reduce((acc, user) => {
       acc[user.id] = user; // Indexem per ID intern
       if (user.linkedUid) {
@@ -26,13 +25,14 @@ export default function ActivityModal({ isOpen, onClose }: ActivityModalProps) {
       }
       return acc;
     }, {} as Record<string, TripUser>);
-  }, [users]);
+  }, [tripData?.users]);
 
   const sortedLogs = useMemo(() => {
-    return [...logs].sort((a, b) => 
+    const logs = tripData?.logs || [];
+    return [...logs].sort((a, b) =>
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
-  }, [logs]);
+  }, [tripData?.logs]);
 
   // Configuració d'Alt Contrast i Neó
   const getActionConfig = (action: LogEntry['action']) => {

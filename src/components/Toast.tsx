@@ -1,4 +1,4 @@
-import { useEffect, useState, ReactNode } from 'react'; // CORRECCIÓ 1: Eliminem 'React', importem 'ReactNode' per al tipat
+import { useCallback, useEffect, useState, ReactNode } from 'react'; // CORRECCIÓ 1: Eliminem 'React', importem 'ReactNode' per al tipat
 import { CheckCircle2, AlertCircle, X, Info, AlertTriangle } from 'lucide-react'; // [RISC ZERO]: Importem AlertTriangle
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning'; // [RISC ZERO]: Afegim la nova variant 'warning'
@@ -59,13 +59,15 @@ export function useToast() {
   // [RISC ZERO]: Afegim "duration" a l'estat per poder customitzar-ho a cada crida
   const [toastConfig, setToastConfig] = useState<{ message: string; type: ToastType; duration?: number } | null>(null);
 
-  const showToast = (message: string, type: ToastType = 'info', duration?: number) => {
+  // useCallback amb referència estable: així els components que la posen a un
+  // array de dependències de useEffect no acaben re-executant l'efecte a cada render.
+  const showToast = useCallback((message: string, type: ToastType = 'info', duration?: number) => {
     setToastConfig({ message, type, duration });
-  };
+  }, []);
 
-  const closeToast = () => {
+  const closeToast = useCallback(() => {
     setToastConfig(null);
-  };
+  }, []);
 
   const toast = toastConfig ? (
     <Toast

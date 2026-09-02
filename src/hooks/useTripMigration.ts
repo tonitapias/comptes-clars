@@ -96,14 +96,14 @@ export function useTripMigration(tripId: string | undefined, tripData: TripData 
             const batch = writeBatch(db);
 
             // 2.1 Copiem els logs a la subcol·lecció
-            oldLogs.forEach((log: any) => {
+            oldLogs.forEach((log: { id?: string; [key: string]: unknown }) => {
               if (!log.id) log.id = crypto.randomUUID(); // Fallback per a dades molt antigues
               const logRef = doc(db, DB_PATHS.getLogsCollectionPath(tripId), log.id);
               batch.set(logRef, log);
             });
 
             // 2.2 Copiem els pagaments a la subcol·lecció
-            oldPayments.forEach((payment: any) => {
+            oldPayments.forEach((payment: { id?: string; [key: string]: unknown }) => {
               if (!payment.id) payment.id = crypto.randomUUID();
               const payRef = doc(db, DB_PATHS.getPaymentsCollectionPath(tripId), payment.id);
               batch.set(payRef, payment);

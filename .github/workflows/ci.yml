@@ -25,6 +25,9 @@ jobs:
       - name: 📦 Instal·lar dependències
         run: npm ci
 
+      - name: 🧹 Lint
+        run: npm run lint
+
       - name: 🕵️‍♂️ Comprovar TypeScript (Sense compilar)
         run: npx tsc --noEmit
 
@@ -33,3 +36,23 @@ jobs:
 
       - name: 🧪 Executar Tests Unitaris
         run: npm run test -- --run
+
+  rules:
+    name: Regles de Firestore
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Descarregar el codi
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 📦 Instal·lar dependències
+        run: npm ci
+
+      - name: 🔒 Tests de firestore.rules (emulador local)
+        run: npm run test:rules

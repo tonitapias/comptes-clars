@@ -94,12 +94,23 @@ export function useExpenseForm({ initialData, users, onSubmit, showToast }: UseE
       setIsSubmitting(true);
 
       try {
+        const isEqualSplit = formState.splitType === (SPLIT_TYPES.EQUAL as SplitType);
+
+        // En mode Exacte/Per parts, qui deu diners de veritat el determinen les
+        // entrades positives de splitDetails, no el selector d'"involucrats"
+        // (que es desactiva fora del mode Igual). Sincronitzem els dos abans de
+        // desar perquè `involved` no es quedi apuntant a gent sense cap participació.
+        const positiveDetails = isEqualSplit
+          ? formState.splitDetails
+          : Object.fromEntries(
+              Object.entries(formState.splitDetails).filter(([, v]) => parseFloat((v || '0').replace(',', '.')) > 0)
+            );
+
         const rawData = {
           ...formState,
           id: initialData?.id,
-          splitDetails: formState.splitType === (SPLIT_TYPES.EQUAL as SplitType)
-            ? undefined 
-            : formState.splitDetails
+          involved: isEqualSplit ? formState.involved : Object.keys(positiveDetails),
+          splitDetails: isEqualSplit ? undefined : positiveDetails
         };
 
         const validatedData = ExpenseSchema.parse(rawData);
