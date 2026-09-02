@@ -22,7 +22,9 @@ const LEAVE_ERRORS_FALLBACK: Record<string, string> = {
 // LÒGICA DE NEGOCI PURA (Desacoblada de React - Fàcilment Testejable)
 // ============================================================================
 
-const isUserOwner = (tripData: TripData, userId: string): boolean => {
+// Exportada perquè és l'ÚNICA definició de "qui és el propietari" a tota
+// l'app — LandingPage.tsx la reutilitza en comptes de reimplementar-la.
+export const isUserOwner = (tripData: TripData, userId: string): boolean => {
   return tripData.ownerId === userId || tripData.memberUids?.[0] === userId;
 };
 
@@ -67,8 +69,7 @@ async function validateAndPrepareLeave(
 
   return {
     internalUserId: myUser ? myUser.id : currentUserUid,
-    myBalanceAmount,
-    isLinked: !!myUser
+    myBalanceAmount
   };
 }
 
@@ -84,10 +85,10 @@ export function useTripMutations() {
   const { expenses } = useTripExpenses();
   const actions = useTripDispatch();
   
-  const [toast, setToast] = useState<{ msg: string; type: ToastType } | null>(null);
+  const [toast, setToast] = useState<{ msg: string; type: ToastType; duration?: number } | null>(null);
 
   // --- Helpers de UI ---
-  const showToast = useCallback((msg: string, type: ToastType = 'success') => setToast({ msg, type }), []);
+  const showToast = useCallback((msg: string, type: ToastType = 'success', duration?: number) => setToast({ msg, type, duration }), []);
   const clearToast = useCallback(() => setToast(null), []);
 
   const notifySuccess = useCallback((msg: string) => {
@@ -189,12 +190,12 @@ export function useTripMutations() {
 
     try {
       // 1. Demanem les instruccions a la funció pura de domini
-      const { internalUserId, myBalanceAmount, isLinked } = await validateAndPrepareLeave(
+      const { internalUserId, myBalanceAmount } = await validateAndPrepareLeave(
         idToLeave, currentUser.uid, tripData, expenses
       );
 
       // 2. Executem l'acció real
-      const res = await actions.leaveTrip(internalUserId, myBalanceAmount, isLinked, currentUser.uid);
+      const res = await actions.leaveTrip(internalUserId, myBalanceAmount);
 
       // 3. Responem a la UI
       if (res.success) {
@@ -217,6 +218,32 @@ export function useTripMutations() {
     }
   }, [actions, currentUser, tripData, expenses, navigate, showToast, t, requireOnlineForCritical]); 
   
+  // Un membre n'expulsa un ALTRE (p. ex. un convidat afegit per error). A
+  // diferència de `leaveTrip`, no hi ha "usuari actual" a validar: comprovem
+  // el saldo del membre EXPULSAT abans d'escriure res.
+  const removeMember = useCallback(async (targetUserId: string, targetUserName: string) => {
+    if (!requireOnlineForCritical() || !tripData) return false;
+
+    const balances = calculateBalances(expenses, tripData.users, tripData.payments || []);
+    if (!canUserLeaveTrip(targetUserId, balances, BUSINESS_RULES.MAX_LEAVE_BALANCE_MARGIN)) {
+      showToast(t('ERRORS.CANNOT_REMOVE_DEBTS', LITERALS.ERRORS.CANNOT_REMOVE_DEBTS), 'error');
+      return false;
+    }
+
+    try {
+      const res = await actions.removeMember(targetUserId);
+      if (res.success) {
+        notifySuccess(`${targetUserName} ${t('ACTIONS.REMOVE_MEMBER_SUCCESS', LITERALS.ACTIONS.REMOVE_MEMBER_SUCCESS)}`);
+        return true;
+      }
+      showToast(res.error || t('ERRORS.UNEXPECTED', LITERALS.ERRORS.UNEXPECTED), 'error');
+      return false;
+    } catch (e: unknown) {
+      showToast(parseAppError(e, t), 'error');
+      return false;
+    }
+  }, [actions, tripData, expenses, showToast, t, notifySuccess, requireOnlineForCritical]);
+
   const joinTrip = useCallback(async () => {
      if (!requireOnlineForCritical() || !currentUser) return;
      try {
@@ -244,8 +271,8 @@ export function useTripMutations() {
   }, [actions, navigate, showToast, t, tripData, currentUser, requireOnlineForCritical]); 
 
   const memoizedMutations = useMemo(() => ({
-    updateTripSettings, settleDebt, deleteExpense, deletePayment, leaveTrip, joinTrip, deleteTrip
-  }), [updateTripSettings, settleDebt, deleteExpense, deletePayment, leaveTrip, joinTrip, deleteTrip]);
+    updateTripSettings, settleDebt, deleteExpense, deletePayment, leaveTrip, removeMember, joinTrip, deleteTrip
+  }), [updateTripSettings, settleDebt, deleteExpense, deletePayment, leaveTrip, removeMember, joinTrip, deleteTrip]);
 
   return { toast, showToast, clearToast, mutations: memoizedMutations };
 }

@@ -8,7 +8,7 @@ import { User } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
 import { DB_PATHS, TRIP_DOC_PREFIX } from '../config/dbPaths';
 import { Expense, TripData, Settlement, TripUser, LogEntry, Currency, Payment } from '../types';
-import { ExpenseSchema } from '../utils/validation';
+import { ExpenseSchema, ExpensePartialSchema } from '../utils/validation';
 
 const tripConverter: FirestoreDataConverter<TripData> = {
   toFirestore: (trip: TripData) => {
@@ -166,6 +166,8 @@ export const TripService = {
   },
 
   updateExpense: async (tripId: string, expenseId: string, expense: Partial<Expense>): Promise<void> => {
+    ExpensePartialSchema.parse(expense);
+
     let detail = '';
     if (expense.amount) {
         detail = ` (nou import: ${(expense.amount / 100).toFixed(2).replace('.', ',')} €)`;
@@ -235,23 +237,23 @@ export const TripService = {
 
   deletePayment: async (tripId: string, paymentId: string, currentPayments: Payment[]): Promise<void> => {
     const paymentToDelete = currentPayments.find(p => p.id === paymentId);
-    
+
     let amountDetail = '';
     if (paymentToDelete) {
        amountDetail = ` de ${(paymentToDelete.amount / 100).toFixed(2).replace('.', ',')} €`;
     }
-    
+
     const log = createLogEntry(`ha anul·lat una liquidació${amountDetail}`, 'delete');
 
     const batch = writeBatch(db);
-    
+
+    // Els pagaments viuen a la subcol·lecció (vegeu useTripMigration.ts, que buida
+    // expressament el camp `payments` del document principal). No el tornem a
+    // escriure aquí: fer-ho desfaria aquella neteja a cada liquidació anul·lada.
     batch.delete(doc(getPaymentsCol(tripId), paymentId));
-    
-    const newPayments = currentPayments.filter(p => p.id !== paymentId);
-    batch.update(getTripRef(tripId), { payments: newPayments });
-    
+
     batch.set(doc(getLogsCol(tripId), log.id), log);
-    
+
     await batch.commit();
   },
 
@@ -361,6 +363,33 @@ export const TripService = {
       if (error instanceof Error) throw new Error(error.message); 
       throw new Error("ERRORS.LEAVE_TRIP_FAILED");
     }
+  },
+
+  // Expulsa un ALTRE membre del grup (a diferència de `leaveTrip`, que és sempre
+  // sobre l'usuari autenticat que executa l'acció).
+  removeMember: async (tripId: string, targetUserId: string): Promise<void> => {
+    const tripRef = getTripRef(tripId);
+    const tripSnap = await getDoc(tripRef);
+    if (!tripSnap.exists()) throw new Error("ERRORS.TRIP_NOT_FOUND");
+
+    const tripData = tripSnap.data();
+    const target = tripData.users.find(u => u.id === targetUserId);
+    if (!target) throw new Error("ERRORS.USER_NOT_FOUND");
+
+    const updatedUsers = tripData.users.map(u =>
+      u.id === targetUserId ? { ...u, linkedUid: null, isAuth: false } : u
+    );
+    const updatedMemberUids = target.linkedUid
+      ? (tripData.memberUids || []).filter(uid => uid !== target.linkedUid)
+      : (tripData.memberUids || []);
+
+    const log = createLogEntry(`ha eliminat a ${target.name} del grup`, 'settings');
+
+    const batch = writeBatch(db);
+    batch.update(tripRef, { users: updatedUsers, memberUids: updatedMemberUids });
+    batch.set(doc(getLogsCol(tripId), log.id), log);
+
+    await batch.commit();
   },
 
   linkUserToAccount: async (tripId: string, tripUserId: string, user: User): Promise<void> => {

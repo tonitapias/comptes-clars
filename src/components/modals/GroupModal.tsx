@@ -5,7 +5,7 @@ import Modal from '../Modal';
 import Avatar from '../Avatar'; 
 import { TripUser } from '../../types';
 import { ToastType } from '../Toast';
-import { useTripMeta, useTripDispatch } from '../../context/TripContext';
+import { useTripMeta } from '../../context/TripContext';
 import { TripService } from '../../services/tripService';
 import { useHapticFeedback } from '../../hooks/useHapticFeedback';
 
@@ -14,11 +14,11 @@ interface GroupModalProps {
   onClose: () => void;
   showToast: (msg: string, type?: ToastType) => void;
   initialTab?: 'members' | 'share';
+  removeMember: (targetUserId: string, targetUserName: string) => Promise<boolean>;
 }
 
-export default function GroupModal({ isOpen, onClose, showToast, initialTab = 'members' }: GroupModalProps) {
+export default function GroupModal({ isOpen, onClose, showToast, initialTab = 'members', removeMember }: GroupModalProps) {
   const { tripData, currentUser } = useTripMeta();
-  const actions = useTripDispatch(); // <-- CANVI
   const { trigger } = useHapticFeedback();
 
   const [activeTab, setActiveTab] = useState<'members' | 'share'>(initialTab);
@@ -28,15 +28,18 @@ export default function GroupModal({ isOpen, onClose, showToast, initialTab = 'm
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [tempName, setTempName] = useState('');
 
-  if (!tripData) return null;
-  const shareUrl = `${window.location.origin}/?join=${tripData.id}`;
-
+  // [FIX regles-dels-hooks]: aquest useEffect ha d'anar SEMPRE abans de qualsevol
+  // "return" condicional — un return anterior el saltava mentre tripData encara
+  // carregava, trencant l'ordre de hooks entre renders.
   useEffect(() => {
     if (isOpen) {
         setActiveTab(initialTab);
-        setEditingUserId(null); 
+        setEditingUserId(null);
     }
   }, [isOpen, initialTab]);
+
+  if (!tripData) return null;
+  const shareUrl = `${window.location.origin}/?join=${tripData.id}`;
 
   const handleCopyCode = () => {
     trigger('success');
@@ -55,12 +58,10 @@ export default function GroupModal({ isOpen, onClose, showToast, initialTab = 'm
   };
 
   const handleRemoveUser = async (userId: string, userName: string) => {
-    trigger('medium'); 
+    trigger('medium');
     if (!window.confirm(`Segur que vols eliminar a ${userName} del grup?`)) return;
     setLoadingAction(userId);
-    const res = await actions.leaveTrip(userId, 0, false); 
-    if (res.success) showToast(`${userName} eliminat`, 'success');
-    else showToast(res.error || "Error", 'error');
+    await removeMember(userId, userName);
     setLoadingAction(null);
   };
 
@@ -73,7 +74,7 @@ export default function GroupModal({ isOpen, onClose, showToast, initialTab = 'm
     try {
         await TripService.linkUserToAccount(tripData.id, tripUserId, currentUser);
         showToast("Perfil vinculat!", 'success');
-    } catch (error) {
+    } catch {
         showToast("Error en vincular", 'error');
     } finally {
         setLoadingAction(null);
@@ -88,7 +89,7 @@ export default function GroupModal({ isOpen, onClose, showToast, initialTab = 'm
         await TripService.updateTripUserName(tripData.id, editingUserId, tempName.trim());
         showToast("Nom actualitzat", 'success');
         setEditingUserId(null);
-    } catch (error) {
+    } catch {
         showToast("Error al canviar el nom", 'error');
     } finally {
         setLoadingAction(null);

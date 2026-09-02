@@ -49,7 +49,7 @@ const TripModals = React.memo(function TripModals({ modals, mutations, showToast
   } = modals;
 
   // [FASE 2 FIX]: Afegim deletePayment a la desestructuració
-  const { deleteExpense, deletePayment, settleDebt, updateTripSettings, leaveTrip, deleteTrip } = mutations;
+  const { deleteExpense, deletePayment, settleDebt, updateTripSettings, leaveTrip, removeMember, deleteTrip } = mutations;
 
   const canChangeCurrency = useMemo(() => expenses?.length === 0, [expenses?.length]);
   
@@ -109,7 +109,7 @@ const TripModals = React.memo(function TripModals({ modals, mutations, showToast
       </LazyModal>
 
       <LazyModal isOpen={isGroupModalOpen}>
-        <GroupModal isOpen={isGroupModalOpen} onClose={() => setGroupModalOpen(false)} showToast={showToast} initialTab={groupModalTab} />
+        <GroupModal isOpen={isGroupModalOpen} onClose={() => setGroupModalOpen(false)} showToast={showToast} initialTab={groupModalTab} removeMember={removeMember} />
       </LazyModal>
 
       <LazyModal isOpen={isActivityOpen}>

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next'; 
 import { TripService } from '../services/tripService';
-import { Settlement, Expense, Currency, TripData, unbrand } from '../types'; 
+import { Settlement, Expense, Currency, TripData } from '../types';
 import { User } from 'firebase/auth';
 import { parseAppError } from '../utils/errorHandler'; 
 import { BUSINESS_RULES } from '../config/businessRules'; // [NOU] Importem les regles de negoci
@@ -65,26 +65,26 @@ export function useTripActions(tripId: string | undefined) {
          await TripService.deleteTrip(tripId!);
       }),
 
-    joinTrip: (user: User) => 
+    joinTrip: (user: User) =>
       execute(() => TripService.joinTripViaLink(tripId!, user)),
-    
-    leaveTrip: async (userId: string, _currentBalance: number, isAuthUser: boolean, userUid?: string) => {
-        return execute(async () => {
-            if (isAuthUser && userUid) {
-               // Desempaquetem el valor amb seguretat
-               const numericBalance = typeof unbrand === 'function' ? unbrand(_currentBalance as any) : Number(_currentBalance);
-               
-               // [FIX CRÍTIC]: Utilitzem la constant centralitzada per avaluar la tolerància
-               if (Math.abs(numericBalance) > BUSINESS_RULES.MAX_LEAVE_BALANCE_MARGIN) {
-                 const tipusDeute = numericBalance > 0 ? "tens diners per recuperar" : "tens deutes pendents";
-                 throw new Error(`No pots sortir del grup: ${tipusDeute}. Primer has de liquidar el teu saldo (Balanç actual: ${(numericBalance/100).toFixed(2)}€).`);
-               }
 
-               await TripService.leaveTrip(tripId!, userId);
-            } else {
-               throw new Error("No tens permisos per realitzar aquesta acció.");
+    // Sortida voluntària de l'usuari autenticat que executa l'acció.
+    leaveTrip: (userId: string, currentBalanceCents: number) => {
+        return execute(async () => {
+            if (Math.abs(currentBalanceCents) > BUSINESS_RULES.MAX_LEAVE_BALANCE_MARGIN) {
+               const tipusDeute = currentBalanceCents > 0 ? "tens diners per recuperar" : "tens deutes pendents";
+               throw new Error(`No pots sortir del grup: ${tipusDeute}. Primer has de liquidar el teu saldo (Balanç actual: ${(currentBalanceCents/100).toFixed(2)}€).`);
             }
+
+            await TripService.leaveTrip(tripId!, userId);
         });
-    }
+    },
+
+    // Un membre n'expulsa un ALTRE (acció diferent de `leaveTrip`: aquí l'uid a
+    // treure de `memberUids` és el del membre expulsat, no el de qui executa
+    // l'acció). El component crida `canUserLeaveTrip` abans de trucar això
+    // perquè el missatge de "encara et deu diners" surti sense arribar a Firestore.
+    removeMember: (targetUserId: string) =>
+      execute(() => TripService.removeMember(tripId!, targetUserId))
   };
 }

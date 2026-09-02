@@ -11,7 +11,7 @@ import { signOut, User } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { TripService } from '../services/tripService';
 import { CURRENCIES } from '../utils/constants';
-import { TripData, TripUser, unbrand } from '../types'; // [FIX]: Importem unbrand
+import { TripData, TripUser } from '../types';
 import Modal from '../components/Modal';
 import Button from '../components/Button';
 import { useToast } from '../components/Toast';
@@ -22,7 +22,9 @@ import TripCard from '../components/landing/TripCard';
 import AuthForm from '../components/auth/AuthForm';
 
 // UTILITATS PER AL CÀLCUL DEL BALANÇ (MANTENIR RISC ZERO)
-import { calculateBalances } from '../services/billingService';
+import { calculateBalances, canUserLeaveTrip } from '../services/billingService';
+import { isUserOwner } from '../hooks/useTripMutations';
+import { BUSINESS_RULES } from '../config/businessRules';
 
 // --- TIPUS ---
 type ActionState = 'idle' | 'creating' | 'joining';
@@ -96,7 +98,7 @@ export default function LandingPage({ user }: LandingPageProps) {
       }
     }
     fetchMyTrips();
-  }, [user]);
+  }, [user, showToast]);
 
   // Unió automàtica via link
   useEffect(() => {
@@ -120,7 +122,7 @@ export default function LandingPage({ user }: LandingPageProps) {
       }
     };
     handleAutoJoin();
-  }, [user, inviteCode, navigate, setSearchParams]);
+  }, [user, inviteCode, navigate, setSearchParams, showToast]);
 
   const handleJoinManual = (e: React.FormEvent) => {
     e.preventDefault();
@@ -143,7 +145,7 @@ export default function LandingPage({ user }: LandingPageProps) {
             await TripService.joinTripViaLink(inputValue.trim(), user);
             showToast("T'has unit al grup!", "success");
             navigate(`/trip/${inputValue.trim()}`);
-        } catch (err) { 
+        } catch {
             showToast("Codi de projecte invàlid o no trobat", "error");
         } finally { setIsSubmitting(false); }
     } else if (actionState === 'creating' && user) {
@@ -199,8 +201,8 @@ export default function LandingPage({ user }: LandingPageProps) {
     try {
         const targetTrip = myTrips.find(t => t.id === confirmModal.tripId);
         if (targetTrip) {
-            
-            const isOwner = targetTrip.ownerId === user.uid;
+
+            const isOwner = isUserOwner(targetTrip, user.uid);
             const activeUsers = targetTrip.users.filter(u => !u.isDeleted).length;
 
             if (isOwner && activeUsers <= 1) {
@@ -212,22 +214,21 @@ export default function LandingPage({ user }: LandingPageProps) {
 
             const realExpenses = await TripService.getTripExpenses(confirmModal.tripId);
             const realPayments = await TripService.getTripPayments(confirmModal.tripId);
-            
+
             // [FIX ARQUITECTURA]: Fusionem i DEDUPLIQUEM els pagaments respectant el seu ID.
             // Això evita que les liquidacions recents es comptin el doble durant el càlcul de sortida.
             const rawPayments = [...(targetTrip.payments || []), ...realPayments];
             const allPayments = Array.from(new Map(rawPayments.map(p => [p.id, p])).values());
-            
-            const balances = calculateBalances(realExpenses, targetTrip.users, allPayments);
-            const myBalance = balances.find(b => b.userId === confirmModal.internalUserId)?.amount || 0;
-            
-            const numericBalance = typeof unbrand === 'function' ? unbrand(myBalance as any) : Number(myBalance);
 
-            if (Math.abs(numericBalance) > 10) { 
+            const balances = calculateBalances(realExpenses, targetTrip.users, allPayments);
+
+            // Mateix marge que a dins del viatge (BUSINESS_RULES.MAX_LEAVE_BALANCE_MARGIN):
+            // abans hi havia un "10" clavat aquí que no coincidia amb la resta de l'app.
+            if (!canUserLeaveTrip(confirmModal.internalUserId, balances, BUSINESS_RULES.MAX_LEAVE_BALANCE_MARGIN)) {
                 showToast("No pots sortir d'un viatge si tens deutes pendents o et deuen diners.", "error");
                 setConfirmModal(prev => ({ ...prev, isOpen: false }));
                 setIsLeaving(false);
-                return; 
+                return;
             }
         }
 
