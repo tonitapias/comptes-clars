@@ -16,13 +16,16 @@ import {
 import {
   doc,
   getDoc,
+  getDocs,
   setDoc,
   updateDoc,
   deleteDoc,
   collection,
+  query,
+  where,
   arrayUnion,
 } from 'firebase/firestore';
-import { describe, it, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 
 const PROJECT_ID = 'demo-comptes-clars';
 const APP_ID = 'comptes-clars-v1';
@@ -145,6 +148,34 @@ describe('firestore.rules — document del viatge', () => {
     const db = asAnon();
     await assertFails(getDoc(doc(db, tripPath('trip_t1'))));
     await assertFails(updateDoc(doc(db, tripPath('trip_t1')), { name: 'x' }));
+  });
+
+  it('un no-membre SÍ pot fer `get` per ID (necessari per unir-se via enllaç/codi)', async () => {
+    await assertSucceeds(getDoc(doc(asUser('mallory'), tripPath('trip_t1'))));
+  });
+
+  it('BLOQUEJA llistar TOTS els viatges sense filtrar per `memberUids` propi (l\'enumeració real)', async () => {
+    const db = asUser('mallory');
+    await assertFails(getDocs(collection(db, `artifacts/${APP_ID}/public/data/trips`)));
+  });
+
+  it('BLOQUEJA llistar filtrant per l\'uid d\'ALTRI (no es pot fer "list" amb un uid que no és el propi)', async () => {
+    const db = asUser('mallory');
+    const q = query(
+      collection(db, `artifacts/${APP_ID}/public/data/trips`),
+      where('memberUids', 'array-contains', 'alice')
+    );
+    await assertFails(getDocs(q));
+  });
+
+  it('PERMET llistar només ELS PROPIS viatges (mateixa query que TripService.getUserTrips)', async () => {
+    const db = asUser('alice');
+    const q = query(
+      collection(db, `artifacts/${APP_ID}/public/data/trips`),
+      where('memberUids', 'array-contains', 'alice')
+    );
+    const snap = await assertSucceeds(getDocs(q));
+    expect(snap.docs.map(d => d.id).sort()).toEqual(['trip_legacy', 'trip_t1']);
   });
 
 });

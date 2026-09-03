@@ -33,10 +33,17 @@ service cloud.firestore {
 
       // REGLES DEL DOCUMENT PRINCIPAL
       allow create: if isAuthenticated();
-      // [PENDENT]: oberta a qualsevol autenticat perquè joinTripViaLink necessita
-      // llegir `users` abans de ser membre (per detectar reincorporacions per email).
-      // Tancar-ho del tot vol dir moure aquesta comprovació a una Cloud Function.
-      allow read: if isAuthenticated();
+      // `get` (per ID) es manté obert a qualsevol autenticat: joinTripViaLink necessita
+      // llegir `users` d'un viatge abans de ser-ne membre (per detectar reincorporacions
+      // per email) i el codi/enllaç d'invitació ja fa de "capability" — cal conèixer
+      // l'ID concret per fer-hi un `get`.
+      // `list` és el que cal restringir: sense això, qualsevol autenticat podia fer una
+      // query sense filtre i llistar TOTS els viatges de la base de dades. En exigir
+      // que l'uid autenticat aparegui a `memberUids`, Firestore obliga que qualsevol
+      // query amb `list` inclogui `where('memberUids', 'array-contains', request.auth.uid)`
+      // — exactament el que ja fa TripService.getUserTrips — i rebutja qualsevol altra.
+      allow get: if isAuthenticated();
+      allow list: if isAuthenticated() && request.auth.uid in resource.data.memberUids;
       allow update: if isTripMemberBefore() || isSelfJoin();
       allow delete: if isTripOwner();
 
