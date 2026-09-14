@@ -32,7 +32,7 @@
 * **Lectures Optimitzades:** Subcol·leccions per a despeses, pagaments i registre d'activitat (en lloc d'arrays creixents al document del viatge) i paginació dels *listeners* en temps real.
 * **Type Safety:** Validació d'entrada amb Zod i *branded types* (`MoneyCents`) perquè un import en cèntims no es pugui confondre mai amb un número qualsevol.
 * **Regles de seguretat de Firestore** escopades per pertinença al viatge, amb una suite de tests d'integració pròpia contra l'emulador real (`npm run test:rules`) que s'executa a cada canvi via CI.
-* **Firebase App Check** (reCAPTCHA Enterprise) en producció, per protegir Firestore de tràfic que no vingui de l'app real.
+* **Firebase App Check** (reCAPTCHA v3) en producció, per protegir Firestore de tràfic que no vingui de l'app real.
 * **Monitorització d'errors** en producció amb Sentry.
 
 ## 🛠️ Tecnologies Utilitzades
