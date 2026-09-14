@@ -22,7 +22,17 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'maskable-icon-512x512.png', 'logo.svg'],
       workbox: {
-        globIgnores: ['**/vendor-pdf-*.js', '**/exportPdf-*.js']
+        // exportPdf.ts + jsPDF/jsPDF-autotable: només calen si l'usuari
+        // exporta un PDF. html2canvas/purify.es/index.es (canvg): deps
+        // opcionals de jsPDF per al seu mode .html(), que aquesta app no fa
+        // servir mai (grep confirma zero usos) — no es baixaran MAI en cap
+        // circumstància real, per això s'exclouen igualment del precache.
+        globIgnores: [
+          '**/exportPdf-*.js',
+          '**/html2canvas.esm-*.js',
+          '**/purify.es-*.js',
+          '**/index.es-*.js'
+        ]
       },
       manifest: {
         name: 'Comptes Clars',
@@ -70,15 +80,28 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 1000,
+    // Per defecte Vite afegeix <link rel="modulepreload"> a l'index.html per
+    // a TOTS els chunks arribables des de l'entrada, encara que només s'hi
+    // arribi per import() dinàmic — descarregant-los igualment a cada
+    // càrrega i anul·lant l'estalvi buscat amb l'import dinàmic. L'excloem
+    // explícitament del preload perquè només es baixi quan de debò cal
+    // (exportar PDF).
+    modulePreload: {
+      resolveDependencies: (_filename, deps) => deps.filter((dep) => !dep.includes('vendor-pdf'))
+    },
     rollupOptions: {
       output: {
+        // NOTA: jspdf/jspdf-autotable/html2canvas/dompurify/canvg NO van aquí
+        // a propòsit. Agrupar-los en un manualChunk propi feia que Rollup hi
+        // col·loqués l'utilitat compartida __vitePreload (necessària per a
+        // QUALSEVOL import() dinàmic de l'app, incloent-hi les rutes amb
+        // React.lazy) — l'entrada havia d'importar-la estàticament, forçant
+        // la baixada dels 808 KB a cada càrrega igualment. Sense manualChunk,
+        // Rollup els inclou directament dins del chunk async d'exportPdf.ts
+        // (el seu únic consumidor), que només es baixa en exportar un PDF.
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           'vendor-firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore'],
-          // html2canvas/dompurify/canvg: deps opcionals de jsPDF (mode .html(),
-          // que aquesta app no usa) que altrament acaben en chunks propis amb
-          // nom auto-generat i el PWA els precacheja igualment (vegeu globIgnores).
-          'vendor-pdf': ['jspdf', 'jspdf-autotable', 'html2canvas', 'dompurify', 'canvg'],
           'vendor-ui': ['lucide-react'],
           'vendor-sentry': ['@sentry/react']
         }
