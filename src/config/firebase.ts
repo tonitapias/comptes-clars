@@ -1,6 +1,6 @@
 // src/config/firebase.ts
 import { initializeApp } from "firebase/app";
-import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-check";
+import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import { 
   getAuth, 
   setPersistence, 
@@ -34,8 +34,12 @@ export const app = initializeApp(firebaseConfig);
 try {
   if (typeof window !== "undefined" && import.meta.env.VITE_RECAPTCHA_SITE_KEY) {
     if (import.meta.env.PROD) {
+      // La clau a VITE_RECAPTCHA_SITE_KEY és una clau reCAPTCHA v3 clàssica
+      // (creada a google.com/recaptcha/admin), no una clau reCAPTCHA
+      // Enterprise (consola separada, Google Cloud Console) — usar
+      // ReCaptchaEnterpriseProvider amb aquesta clau donava sempre 403.
       initializeAppCheck(app, {
-        provider: new ReCaptchaEnterpriseProvider(import.meta.env.VITE_RECAPTCHA_SITE_KEY),
+        provider: new ReCaptchaV3Provider(import.meta.env.VITE_RECAPTCHA_SITE_KEY),
         isTokenAutoRefreshEnabled: true
       });
       console.log("🛡️ App Check inicialitzat (Mode Producció).");
