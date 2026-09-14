@@ -113,6 +113,53 @@ describe('firestore.rules — document del viatge', () => {
     }));
   });
 
+  it('PERMET la reincorporació per email: memberUids creix però `users` no canvia', async () => {
+    // Placeholder ja existent per email (linkedUid coincideix amb qui es
+    // reincorpora), tal com fa joinTripViaLink quan `alreadyExists` és cert.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), tripPath('trip_reentry')), {
+        ownerId: 'alice',
+        memberUids: ['alice'],
+        users: [
+          { id: 'u-alice', name: 'Alice', linkedUid: 'alice' },
+          { id: 'u-mallory-placeholder', name: 'Mallory', linkedUid: 'mallory' },
+        ],
+        isDeleted: false,
+      });
+    });
+    await assertSucceeds(updateDoc(doc(asUser('mallory'), tripPath('trip_reentry')), {
+      memberUids: arrayUnion('mallory'),
+    }));
+  });
+
+  it('BLOQUEJA l\'atac: unir-se afegint TAMBÉ l\'uid d\'una víctima a memberUids', async () => {
+    const db = asUser('mallory');
+    await assertFails(updateDoc(doc(db, tripPath('trip_t1')), {
+      users: arrayUnion({ id: 'u-mallory', name: 'Mallory', linkedUid: 'mallory' }),
+      memberUids: arrayUnion('mallory', 'victim-uid'),
+    }));
+  });
+
+  it('BLOQUEJA l\'atac: unir-se injectant una entrada a `users` que NO és la pròpia', async () => {
+    const db = asUser('mallory');
+    await assertFails(updateDoc(doc(db, tripPath('trip_t1')), {
+      users: arrayUnion({ id: 'u-fake', name: 'Algú altre', linkedUid: 'victim-uid' }),
+      memberUids: arrayUnion('mallory'),
+    }));
+  });
+
+  it('BLOQUEJA l\'atac: unir-se mutant una entrada existent de `users` en lloc d\'afegir-ne una de nova', async () => {
+    const db = asUser('mallory');
+    await assertFails(updateDoc(doc(db, tripPath('trip_t1')), {
+      users: [
+        { id: 'u-alice', name: 'Alice PWNED', linkedUid: 'alice' },
+        { id: 'u-bob', name: 'Bob', linkedUid: 'bob' },
+        { id: 'u-mallory', name: 'Mallory', linkedUid: 'mallory' },
+      ],
+      memberUids: arrayUnion('mallory'),
+    }));
+  });
+
   it('PERMET que un membre existent editi qualsevol altre camp (configuració normal)', async () => {
     const db = asUser('alice');
     await assertSucceeds(updateDoc(doc(db, tripPath('trip_t1')), {

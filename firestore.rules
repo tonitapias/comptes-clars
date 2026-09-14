@@ -16,10 +16,44 @@ service cloud.firestore {
       // limitar a `users`/`memberUids` i ha d'incloure el seu propi uid al resultat.
       // Sense això, qualsevol autenticat podia reescriure qualsevol altre camp
       // (nom, isDeleted, ownerId...) d'un viatge que no era seu.
+      //
+      // [FIX SEGURETAT]: només comprovar "el meu uid hi és present" no bastava
+      // — un client fent una crida Firestore directa (saltant-se la UI) podia
+      // afegir a memberUids l'uid d'una tercera persona (no només el propi),
+      // o injectar entrades arbitràries a `users`, sempre que el seu propi uid
+      // també hi fos. Ara es valida que memberUids només creix amb EXACTAMENT
+      // el propi uid (res s'elimina ni s'afegeix d'altri), i que `users` o bé
+      // no canvia (reincorporació per email: joinTripViaLink ja tenia una
+      // entrada placeholder amb el mateix email/linkedUid) o bé creix amb
+      // EXACTAMENT una entrada nova enllaçada al propi uid, sense tocar cap
+      // entrada existent — coincidint amb els dos únics camins reals de
+      // joinTripViaLink a tripService.ts.
       function isSelfJoin() {
+        let oldData = resource.data;
+        let newData = request.resource.data;
+        let uid = request.auth.uid;
+
+        let memberUidsOk =
+          newData.memberUids.hasAll(oldData.memberUids) &&
+          newData.memberUids.size() <= oldData.memberUids.size() + 1 &&
+          uid in newData.memberUids;
+
+        // removeAll() dona els elements de `users` que no eren a l'antic
+        // `users` — independent de la posició (a diferència de mirar
+        // l'últim element, que només seria correcte si sempre s'usés
+        // arrayUnion i mai un update() amb l'array reordenat a mà).
+        let addedUsers = newData.users.removeAll(oldData.users);
+        let usersOk = newData.users == oldData.users || (
+          newData.users.size() == oldData.users.size() + 1 &&
+          newData.users.hasAll(oldData.users) &&
+          addedUsers.size() == 1 &&
+          addedUsers[0].linkedUid == uid
+        );
+
         return isAuthenticated()
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['users', 'memberUids'])
-          && request.auth.uid in request.resource.data.memberUids;
+          && newData.diff(oldData).affectedKeys().hasOnly(['users', 'memberUids'])
+          && memberUidsOk
+          && usersOk;
       }
 
       // Propietari: `ownerId` si existeix; pels viatges anteriors a aquest camp,
