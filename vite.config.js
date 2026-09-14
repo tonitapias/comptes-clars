@@ -21,6 +21,9 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'maskable-icon-512x512.png', 'logo.svg'],
+      workbox: {
+        globIgnores: ['**/vendor-pdf-*.js', '**/exportPdf-*.js']
+      },
       manifest: {
         name: 'Comptes Clars',
         short_name: 'Comptes',
@@ -72,8 +75,12 @@ export default defineConfig({
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           'vendor-firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore'],
-          'vendor-pdf': ['jspdf', 'jspdf-autotable'],
-          'vendor-ui': ['lucide-react']
+          // html2canvas/dompurify/canvg: deps opcionals de jsPDF (mode .html(),
+          // que aquesta app no usa) que altrament acaben en chunks propis amb
+          // nom auto-generat i el PWA els precacheja igualment (vegeu globIgnores).
+          'vendor-pdf': ['jspdf', 'jspdf-autotable', 'html2canvas', 'dompurify', 'canvg'],
+          'vendor-ui': ['lucide-react'],
+          'vendor-sentry': ['@sentry/react']
         }
       }
     }

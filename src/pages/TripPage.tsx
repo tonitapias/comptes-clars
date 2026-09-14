@@ -17,7 +17,6 @@ import { useTripCalculations } from '../hooks/useTripCalculations';
 import { useTripModals } from '../hooks/useTripModals';
 import { useTripFilters } from '../hooks/useTripFilters';
 import { useTripMutations } from '../hooks/useTripMutations';
-import { generatePDF } from '../utils/exportPdf';
 import { CURRENCIES } from '../utils/constants';
 import { CategoryId, unbrand } from '../types';
 
@@ -92,9 +91,11 @@ function TripView() {
   const handleAddExpense = () => modals.openExpenseModal(null);
   const handleReturnHome = () => { window.location.href = '/'; };
   
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (!tripData) return;
     const { currency = CURRENCIES[0] } = tripData;
+    // Import dinàmic: jsPDF només es descarrega quan l'usuari exporta de debò.
+    const { generatePDF } = await import('../utils/exportPdf');
     // Fixem que li passem `tripData.payments` just abans de `balances`
     generatePDF(tripData.name, expenses, tripData.payments || [], balances, settlements, tripData.users, currency.symbol);
   };
